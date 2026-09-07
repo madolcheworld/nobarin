@@ -342,63 +342,122 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                     ),
                   ),
 
-                  // 2. Center Play / Pause button (strictly bounded to center, prominent container)
+                  // 2. Center Controls: Seek -10s, Play/Pause, Seek +10s (YouTube Style)
                   if (canControl)
                     Positioned.fill(
                       child: Center(
-                        child: Container(
-                          width: isFs ? 80 : 62,
-                          height: isFs ? 80 : 62,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.black.withValues(alpha: 0.65),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              width: 2.0,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primaryNeon.withValues(
-                                  alpha: 0.45,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Seek -10s
+                            Material(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: const CircleBorder(),
+                              clipBehavior: Clip.hardEdge,
+                              child: IconButton(
+                                iconSize: isFs ? 36 : 28,
+                                padding: EdgeInsets.all(isFs ? 10 : 8),
+                                icon: const Icon(
+                                  Icons.replay_10_rounded,
+                                  color: Colors.white,
                                 ),
-                                blurRadius: 18,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                blurRadius: 10,
-                              ),
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            shape: const CircleBorder(),
-                            clipBehavior: Clip.hardEdge,
-                            child: IconButton(
-                              iconSize: isFs ? 52 : 40,
-                              padding: EdgeInsets.zero,
-                              icon: Icon(
-                                widget.player.isPlaying
-                                    ? Icons.pause_circle_filled_rounded
-                                    : Icons.play_circle_filled_rounded,
-                                color: Colors.white,
-                              ),
-                              onPressed: () {
-                                if (widget.player.isPlaying) {
-                                  widget.syncController.requestPause();
-                                } else {
-                                  widget.syncController.requestPlay();
+                                tooltip: 'Mundur 10 detik',
+                                onPressed: () {
+                                  final target = (widget.player.position - 10)
+                                      .clamp(0.0, widget.player.duration);
+                                  widget.syncController.requestSeek(target);
                                   _startHideTimerIfNeeded(
-                                    duration: const Duration(
-                                      milliseconds: 1000,
-                                    ),
+                                    duration: const Duration(milliseconds: 1800),
                                     reset: true,
-                                    assumePlaying: true,
                                   );
-                                }
-                              },
+                                },
+                              ),
                             ),
-                          ),
+                            SizedBox(width: isFs ? 32 : 20),
+
+                            // Center Play / Pause button
+                            Container(
+                              width: isFs ? 80 : 62,
+                              height: isFs ? 80 : 62,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black.withValues(alpha: 0.65),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  width: 2.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primaryNeon.withValues(
+                                      alpha: 0.45,
+                                    ),
+                                    blurRadius: 18,
+                                    spreadRadius: 2,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                shape: const CircleBorder(),
+                                clipBehavior: Clip.hardEdge,
+                                child: IconButton(
+                                  iconSize: isFs ? 52 : 40,
+                                  padding: EdgeInsets.zero,
+                                  icon: Icon(
+                                    widget.player.isPlaying
+                                        ? Icons.pause_circle_filled_rounded
+                                        : Icons.play_circle_filled_rounded,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: () {
+                                    if (widget.player.isPlaying) {
+                                      widget.syncController.requestPause();
+                                    } else {
+                                      widget.syncController.requestPlay();
+                                      _startHideTimerIfNeeded(
+                                        duration: const Duration(
+                                          milliseconds: 1000,
+                                        ),
+                                        reset: true,
+                                        assumePlaying: true,
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: isFs ? 32 : 20),
+
+                            // Seek +10s
+                            Material(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: const CircleBorder(),
+                              clipBehavior: Clip.hardEdge,
+                              child: IconButton(
+                                iconSize: isFs ? 36 : 28,
+                                padding: EdgeInsets.all(isFs ? 10 : 8),
+                                icon: const Icon(
+                                  Icons.forward_10_rounded,
+                                  color: Colors.white,
+                                ),
+                                tooltip: 'Maju 10 detik',
+                                onPressed: () {
+                                  final target = (widget.player.position + 10)
+                                      .clamp(0.0, widget.player.duration);
+                                  widget.syncController.requestSeek(target);
+                                  _startHideTimerIfNeeded(
+                                    duration: const Duration(milliseconds: 1800),
+                                    reset: true,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

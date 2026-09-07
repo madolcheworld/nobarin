@@ -437,5 +437,40 @@ void main() {
 
       expect(playerController.isMuted, isFalse);
     });
+
+    testWidgets('renders center replay and forward 10s seek buttons and triggers seek',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify YouTube style center seek buttons are present
+      expect(find.byIcon(Icons.replay_10_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.forward_10_rounded), findsOneWidget);
+
+      // Tap forward 10s
+      await tester.tap(find.byIcon(Icons.forward_10_rounded));
+      await tester.pumpAndSettle();
+
+      // Tap rewind 10s
+      await tester.tap(find.byIcon(Icons.replay_10_rounded));
+      await tester.pumpAndSettle();
+    });
   });
 }

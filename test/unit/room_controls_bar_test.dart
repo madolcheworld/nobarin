@@ -87,7 +87,7 @@ void main() {
     });
 
     testWidgets(
-        'renders play/pause and seek controls in RoomControlsBar when media is loaded',
+        'renders Ganti Video in RoomControlsBar without duplicate playback controls when media is loaded',
         (tester) async {
       await playerController.loadMedia(
         'direct_url',
@@ -114,51 +114,17 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify play button is rendered in RoomControlsBar when paused
-      expect(find.byIcon(Icons.play_circle_filled_rounded), findsOneWidget);
-
-      // Verify seek controls and "Ganti Video" are rendered
-      expect(find.byIcon(Icons.replay_10_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.forward_10_rounded), findsOneWidget);
+      // Per Option 2 (YouTube style), playback controls are centered on video overlay,
+      // not duplicated in RoomControlsBar
+      expect(find.byIcon(Icons.play_circle_filled_rounded), findsNothing);
+      expect(find.byIcon(Icons.replay_10_rounded), findsNothing);
+      expect(find.byIcon(Icons.forward_10_rounded), findsNothing);
       expect(find.text('Ganti Video'), findsOneWidget);
 
       // Test tapping Ganti Video
       await tester.tap(find.text('Ganti Video'));
       await tester.pumpAndSettle();
       expect(pickerCalled, isTrue);
-    });
-
-    testWidgets(
-        'seek buttons trigger seek requests on syncController',
-        (tester) async {
-      await playerController.loadMedia(
-        'direct_url',
-        'https://example.com/test.mp4',
-        autoPlay: false,
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RoomControlsBar(
-              syncController: syncController,
-              player: playerController,
-              roomController: roomController,
-              onOpenMediaPicker: () {},
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      // Tapping Seek forward
-      await tester.tap(find.byIcon(Icons.forward_10_rounded));
-      await tester.pumpAndSettle();
-
-      // Tapping Seek backward
-      await tester.tap(find.byIcon(Icons.replay_10_rounded));
-      await tester.pumpAndSettle();
     });
 
     testWidgets('renders Antrean button and triggers onOpenQueue', (tester) async {

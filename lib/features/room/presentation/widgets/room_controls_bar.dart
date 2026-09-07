@@ -69,117 +69,33 @@ class RoomControlsBar extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Playback Controls (if permitted)
-                      if (canControl) ...[
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (hasMedia) ...[
-                              // Seek -10s
-                              IconButton(
-                                icon: const Icon(Icons.replay_10_rounded, size: 22),
-                                tooltip: 'Mundur 10 detik',
-                                padding: const EdgeInsets.all(6),
-                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-                                onPressed: () {
-                                  final target =
-                                      (player.position - 10).clamp(0.0, player.duration);
-                                  syncController.requestSeek(target);
-                                },
-                              ),
-                              const SizedBox(width: 4),
-
-                              // Play / Pause button
-                              Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryNeon.withValues(alpha: 0.18),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primaryNeon.withValues(alpha: 0.6),
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryNeon.withValues(alpha: 0.25),
-                                      blurRadius: 8,
-                                      spreadRadius: 1,
-                                    ),
-                                  ],
-                                ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  shape: const CircleBorder(),
-                                  clipBehavior: Clip.hardEdge,
-                                  child: IconButton(
-                                    icon: Icon(
-                                      player.isPlaying
-                                          ? Icons.pause_circle_filled_rounded
-                                          : Icons.play_circle_filled_rounded,
-                                      size: 28,
-                                      color: AppColors.primaryNeon,
-                                    ),
-                                    tooltip: player.isPlaying ? 'Jeda' : 'Putar',
-                                    padding: const EdgeInsets.all(6),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 44,
-                                      minHeight: 44,
-                                    ),
-                                    onPressed: () {
-                                      if (player.isPlaying) {
-                                        syncController.requestPause();
-                                      } else {
-                                        syncController.requestPlay();
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-
-                              // Seek +10s
-                              IconButton(
-                                icon: const Icon(Icons.forward_10_rounded, size: 22),
-                                tooltip: 'Maju 10 detik',
-                                padding: const EdgeInsets.all(6),
-                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-                                onPressed: () {
-                                  final target =
-                                      (player.position + 10).clamp(0.0, player.duration);
-                                  syncController.requestSeek(target);
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-
-                            // Change / Select Media button
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.surfaceElevated,
-                                foregroundColor: AppColors.secondaryNeon,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: const BorderSide(color: AppColors.border),
-                                ),
-                              ),
-                              onPressed: onOpenMediaPicker,
-                              icon: Icon(
-                                hasMedia
-                                    ? Icons.video_library_outlined
-                                    : Icons.add_link_rounded,
-                                size: 15,
-                              ),
-                              label: Text(
-                                hasMedia ? 'Ganti Video' : 'Pilih Video',
-                                style: const TextStyle(fontSize: 12),
-                              ),
+                      // Left: Change / Select Media button (or Host Only indicator if !canControl)
+                      if (canControl)
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.surfaceElevated,
+                            foregroundColor: AppColors.secondaryNeon,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: const BorderSide(color: AppColors.border),
                             ),
-                          ],
-                        ),
-                      ] else ...[
+                          ),
+                          onPressed: onOpenMediaPicker,
+                          icon: Icon(
+                            hasMedia
+                                ? Icons.video_library_outlined
+                                : Icons.add_link_rounded,
+                            size: 15,
+                          ),
+                          label: Text(
+                            hasMedia ? 'Ganti Video' : 'Pilih Video',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        )
+                      else ...[
                         Container(
                           padding:
                               const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

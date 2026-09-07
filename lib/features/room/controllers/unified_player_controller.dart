@@ -250,7 +250,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           showVideoAnnotations: false,
           mute: startMuted,
           enableCaption: false,
-          pointerEvents: PointerEvents.initial,
+          pointerEvents: PointerEvents.none,
           enableKeyboard: false,
         ),
       );
