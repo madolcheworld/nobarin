@@ -146,5 +146,54 @@ void main() {
       expect(pipService.isInPipModeNotifier.value, isFalse);
       expect(listenerNotified, isTrue);
     });
+
+    test('updatePlaybackState invokes channel with isPlaying boolean', () async {
+      await pipService.updatePlaybackState(true);
+      expect(log, hasLength(1));
+      expect(log.first.method, 'updatePlaybackState');
+      expect(log.first.arguments, {'isPlaying': true});
+
+      await pipService.updatePlaybackState(false);
+      expect(log, hasLength(2));
+      expect(log.last.method, 'updatePlaybackState');
+      expect(log.last.arguments, {'isPlaying': false});
+    });
+
+    test('native callback onPipAction updates pipActionNotifier', () async {
+      String? receivedAction;
+      pipService.pipActionNotifier.addListener(() {
+        receivedAction = pipService.pipActionNotifier.value;
+      });
+
+      // Simulate native callback sending 'play'
+      final playByteData = const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('onPipAction', 'play'),
+      );
+
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channelName,
+        playByteData,
+        (ByteData? data) {},
+      );
+
+      expect(receivedAction, 'play');
+      expect(pipService.pipActionNotifier.value, 'play');
+
+      // Simulate native callback sending 'pause'
+      final pauseByteData = const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('onPipAction', 'pause'),
+      );
+
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channelName,
+        pauseByteData,
+        (ByteData? data) {},
+      );
+
+      expect(receivedAction, 'pause');
+      expect(pipService.pipActionNotifier.value, 'pause');
+    });
   });
 }

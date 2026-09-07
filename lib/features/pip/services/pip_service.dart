@@ -9,6 +9,7 @@ class PipService {
 
   final MethodChannel _channel;
   final ValueNotifier<bool> isInPipModeNotifier;
+  final ValueNotifier<String?> pipActionNotifier;
   final bool _isAndroid;
 
   bool get isInPipMode => isInPipModeNotifier.value;
@@ -16,7 +17,8 @@ class PipService {
   PipService._()
       : _channel = const MethodChannel('watch_party/pip'),
         _isAndroid = !kIsWeb && Platform.isAndroid,
-        isInPipModeNotifier = ValueNotifier<bool>(false) {
+        isInPipModeNotifier = ValueNotifier<bool>(false),
+        pipActionNotifier = ValueNotifier<String?>(null) {
     _initMethodCallHandler();
   }
 
@@ -25,7 +27,8 @@ class PipService {
   PipService.withChannel(MethodChannel channel, {bool isAndroid = true})
       : _channel = channel,
         _isAndroid = isAndroid,
-        isInPipModeNotifier = ValueNotifier<bool>(false) {
+        isInPipModeNotifier = ValueNotifier<bool>(false),
+        pipActionNotifier = ValueNotifier<String?>(null) {
     _initMethodCallHandler();
   }
 
@@ -40,6 +43,13 @@ class PipService {
         if (isInPipModeNotifier.value != inPip) {
           isInPipModeNotifier.value = inPip;
           debugPrint('[PipService] onPipModeChanged: $inPip');
+        }
+        return null;
+      case 'onPipAction':
+        final action = call.arguments as String?;
+        if (action != null) {
+          pipActionNotifier.value = action;
+          debugPrint('[PipService] onPipAction: $action');
         }
         return null;
       default:
@@ -94,7 +104,20 @@ class PipService {
     }
   }
 
+  /// Synchronizes the current media playback state (playing vs paused)
+  /// with the native Android Picture-in-Picture action controls.
+  Future<void> updatePlaybackState(bool isPlaying) async {
+    if (!_isAndroid) return;
+
+    try {
+      await _channel.invokeMethod('updatePlaybackState', {'isPlaying': isPlaying});
+    } catch (e) {
+      debugPrint('[PipService] updatePlaybackState error: $e');
+    }
+  }
+
   void dispose() {
     isInPipModeNotifier.dispose();
+    pipActionNotifier.dispose();
   }
 }

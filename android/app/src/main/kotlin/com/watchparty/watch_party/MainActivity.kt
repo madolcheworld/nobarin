@@ -1,9 +1,17 @@
 package com.watchparty.watch_party
 
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Bundle
 import android.util.Rational
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -11,8 +19,56 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "watch_party/pip"
+    private val ACTION_MEDIA_CONTROL = "com.watchparty.watch_party.MEDIA_CONTROL"
+    private val EXTRA_CONTROL_TYPE = "control_type"
+    private val CONTROL_TYPE_PLAY = 1
+    private val CONTROL_TYPE_PAUSE = 2
+
     private var methodChannel: MethodChannel? = null
     private var isAutoEnterPipEnabled = false
+    private var isPlayingState = false
+    private var mediaReceiver: BroadcastReceiver? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        registerMediaReceiver()
+    }
+
+    private fun registerMediaReceiver() {
+        if (mediaReceiver == null) {
+            mediaReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent == null || intent.action != ACTION_MEDIA_CONTROL) return
+                    val controlType = intent.getIntExtra(EXTRA_CONTROL_TYPE, 0)
+                    if (controlType == CONTROL_TYPE_PLAY) {
+                        methodChannel?.invokeMethod("onPipAction", "play")
+                        updatePipParams(true)
+                    } else if (controlType == CONTROL_TYPE_PAUSE) {
+                        methodChannel?.invokeMethod("onPipAction", "pause")
+                        updatePipParams(false)
+                    }
+                }
+            }
+            val filter = IntentFilter(ACTION_MEDIA_CONTROL)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(mediaReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(mediaReceiver, filter)
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: Exception) {
+                // Ignore
+            }
+            mediaReceiver = null
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -36,9 +92,56 @@ class MainActivity : FlutterActivity() {
                     updateAutoPipParams(enabled)
                     result.success(true)
                 }
+                "updatePlaybackState" -> {
+                    val isPlaying = call.argument<Boolean>("isPlaying") ?: false
+                    isPlayingState = isPlaying
+                    updatePipParams(isPlaying)
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun buildPipParams(numerator: Int = 16, denominator: Int = 9): PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            val num = numerator.coerceAtLeast(1)
+            val den = denominator.coerceAtLeast(1)
+            val rational = Rational(num, den)
+            val builder = PictureInPictureParams.Builder().setAspectRatio(rational)
+
+            val actions = ArrayList<RemoteAction>()
+            val iconResId = if (isPlayingState) {
+                android.R.drawable.ic_media_pause
+            } else {
+                android.R.drawable.ic_media_play
+            }
+            val title = if (isPlayingState) "Pause" else "Play"
+            val controlType = if (isPlayingState) CONTROL_TYPE_PAUSE else CONTROL_TYPE_PLAY
+
+            val intent = Intent(ACTION_MEDIA_CONTROL).apply {
+                putExtra(EXTRA_CONTROL_TYPE, controlType)
+                setPackage(packageName)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getBroadcast(this, controlType, intent, flags)
+            val icon = Icon.createWithResource(this, iconResId)
+            val action = RemoteAction(icon, title, title, pendingIntent)
+            actions.add(action)
+            builder.setActions(actions)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(isAutoEnterPipEnabled)
+            }
+            return builder.build()
+        }
+        return null
     }
 
     private fun enterPipMode(numerator: Int, denominator: Int): Boolean {
@@ -46,11 +149,13 @@ class MainActivity : FlutterActivity() {
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
         ) {
             return try {
-                val num = numerator.coerceAtLeast(1)
-                val den = denominator.coerceAtLeast(1)
-                val rational = Rational(num, den)
-                val builder = PictureInPictureParams.Builder().setAspectRatio(rational)
-                enterPictureInPictureMode(builder.build())
+                val params = buildPipParams(numerator, denominator)
+                if (params != null) {
+                    enterPictureInPictureMode(params)
+                } else {
+                    enterPictureInPictureMode()
+                    true
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
@@ -59,19 +164,24 @@ class MainActivity : FlutterActivity() {
         return false
     }
 
-    private fun updateAutoPipParams(enabled: Boolean) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+    private fun updatePipParams(isPlaying: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
         ) {
+            isPlayingState = isPlaying
             try {
-                val builder = PictureInPictureParams.Builder()
-                    .setAutoEnterEnabled(enabled)
-                    .setAspectRatio(Rational(16, 9))
-                setPictureInPictureParams(builder.build())
+                val params = buildPipParams()
+                if (params != null) {
+                    setPictureInPictureParams(params)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+    }
+
+    private fun updateAutoPipParams(enabled: Boolean) {
+        updatePipParams(isPlayingState)
     }
 
     override fun onUserLeaveHint() {

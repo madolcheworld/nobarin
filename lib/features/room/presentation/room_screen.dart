@@ -50,6 +50,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   bool _hasInitializedHostState = false;
   bool _hasSentJoinMessage = false;
 
+  final GlobalKey _playerKey = GlobalKey();
+  final GlobalKey _screenShareKey = GlobalKey();
+
   late final UnifiedPlayerController _player;
   SyncController? _syncController;
   RoomController? _roomController;
@@ -64,16 +67,31 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     _player = UnifiedPlayerController();
     _player.addListener(_onPlayerStateChanged);
     PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
+    PipService.instance.pipActionNotifier.addListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(true);
     _fetchAndInitializeRoom();
   }
 
   void _onPlayerStateChanged() {
+    PipService.instance.updatePlaybackState(_player.isPlaying);
     if (mounted) setState(() {});
   }
 
+  void _onPipActionReceived() {
+    final action = PipService.instance.pipActionNotifier.value;
+    if (action == 'play') {
+      _player.play();
+    } else if (action == 'pause') {
+      _player.pause();
+    }
+  }
+
   void _onPipModeChanged() {
-    if (!PipService.instance.isInPipMode) {
+    if (PipService.instance.isInPipMode) {
+      if (_player.isPlaying) {
+        _player.play();
+      }
+    } else {
       _player.exitFullscreen();
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -419,6 +437,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     }
 
     PipService.instance.isInPipModeNotifier.removeListener(_onPipModeChanged);
+    PipService.instance.pipActionNotifier.removeListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(false);
     _roomController?.dispose();
     _chatController?.dispose();
@@ -692,6 +711,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
             aspectRatio: 16 / 9,
             child: _screenShareController?.isScreenSharingActive == true
                 ? ScreenShareView(
+                    key: _screenShareKey,
                     controller: _screenShareController!,
                     isHost: _roomController?.isHost ?? false,
                     onExit: () {},
@@ -699,6 +719,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   )
                 : (_syncController != null
                     ? UnifiedPlayerView(
+                        key: _playerKey,
                         player: _player,
                         syncController: _syncController!,
                         onOpenMediaPicker: () {},
@@ -727,6 +748,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
             fit: StackFit.expand,
             children: [
               UnifiedPlayerView(
+                key: _playerKey,
                 player: _player,
                 syncController: _syncController!,
                 onOpenMediaPicker: _openMediaPicker,
@@ -842,6 +864,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                             children: [
                               if (_screenShareController?.isScreenSharingActive == true)
                                 ScreenShareView(
+                                  key: _screenShareKey,
                                   controller: _screenShareController!,
                                   isHost: _roomController?.isHost ?? false,
                                   onExit: _handleExitRoom,
@@ -849,6 +872,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                                 )
                               else
                                 UnifiedPlayerView(
+                                  key: _playerKey,
                                   player: _player,
                                   syncController: _syncController!,
                                   onOpenMediaPicker: _openMediaPicker,
@@ -919,6 +943,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   children: [
                     if (_screenShareController?.isScreenSharingActive == true)
                       ScreenShareView(
+                        key: _screenShareKey,
                         controller: _screenShareController!,
                         isHost: _roomController?.isHost ?? false,
                         onExit: _handleExitRoom,
@@ -926,6 +951,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                       )
                     else
                       UnifiedPlayerView(
+                        key: _playerKey,
                         player: _player,
                         syncController: _syncController!,
                         onOpenMediaPicker: _openMediaPicker,
