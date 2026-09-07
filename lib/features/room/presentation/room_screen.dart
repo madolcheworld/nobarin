@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,8 @@ import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
 import '../../lobby/presentation/lobby_controller.dart';
+import '../../pip/presentation/pip_button.dart';
+import '../../pip/services/pip_service.dart';
 import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
 import '../../screenshare/presentation/widgets/screen_share_view.dart';
 import '../../voice/controllers/webrtc_voice_controller.dart';
@@ -60,10 +63,26 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     super.initState();
     _player = UnifiedPlayerController();
     _player.addListener(_onPlayerStateChanged);
+    PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
+    PipService.instance.setAutoEnterPip(true);
     _fetchAndInitializeRoom();
   }
 
   void _onPlayerStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onPipModeChanged() {
+    if (!PipService.instance.isInPipMode) {
+      _player.exitFullscreen();
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+      });
+    }
     if (mounted) setState(() {});
   }
 
@@ -399,6 +418,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       }
     }
 
+    PipService.instance.isInPipModeNotifier.removeListener(_onPipModeChanged);
+    PipService.instance.setAutoEnterPip(false);
     _roomController?.dispose();
     _chatController?.dispose();
     _voiceController?.dispose();
@@ -660,6 +681,37 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final bool isMobileYouTube = !kIsWeb && _player.mediaType == 'youtube';
     final bool isFullscreen = _player.isFullscreen;
+    final bool isInPip = PipService.instance.isInPipMode;
+
+    // Picture-in-Picture (PiP) Mode: Render only the video/screen-share in 16:9 aspect ratio
+    if (isInPip) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: _screenShareController?.isScreenSharingActive == true
+                ? ScreenShareView(
+                    controller: _screenShareController!,
+                    isHost: _roomController?.isHost ?? false,
+                    onExit: () {},
+                    roomTitle: currentRoom.title,
+                  )
+                : (_syncController != null
+                    ? UnifiedPlayerView(
+                        player: _player,
+                        syncController: _syncController!,
+                        onOpenMediaPicker: () {},
+                        onExit: () {},
+                        title: currentRoom.title,
+                        showTopBar: false,
+                        isPipMode: true,
+                      )
+                    : const SizedBox.shrink()),
+          ),
+        ),
+      );
+    }
 
     // For non-mobile-YouTube (e.g. MediaKit native or Web video), render dedicated fullscreen view
     if (isFullscreen && !isMobileYouTube) {
@@ -758,6 +810,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
             ],
           ),
           actions: [
+            PipButton(
+              onBeforeEnter: () {
+                if (_player.isFullscreen) {
+                  _player.exitFullscreen();
+                }
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.exit_to_app_rounded),
               tooltip: 'Keluar dari Room',

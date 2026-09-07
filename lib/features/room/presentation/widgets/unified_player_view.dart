@@ -19,6 +19,7 @@ class UnifiedPlayerView extends StatefulWidget {
   final VoidCallback? onExit;
   final String? title;
   final bool showTopBar;
+  final bool isPipMode;
 
   const UnifiedPlayerView({
     super.key,
@@ -28,6 +29,7 @@ class UnifiedPlayerView extends StatefulWidget {
     this.onExit,
     this.title,
     this.showTopBar = true,
+    this.isPipMode = false,
   });
 
   @override
@@ -144,7 +146,11 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             aspectRatio: 16 / 9,
             gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
             enableFullScreenOnVerticalDrag: false,
+            autoFullScreen: false,
             controlsBuilder: (context, isFullscreen) {
+              if (widget.isPipMode) {
+                return const SizedBox.shrink();
+              }
               if (errorMsg != null) {
                 return _buildErrorOverlay(
                   context,
@@ -176,7 +182,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               Center(child: playerWidget),
 
               // Non-controller lock indicator badge
-              if (hasMedia && !canControl && errorMsg == null)
+              if (hasMedia && !canControl && errorMsg == null && !widget.isPipMode)
                 Positioned(
                   top: 12,
                   left: 12,
@@ -217,7 +223,8 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               // Drift / Speed adjustment indicator
               if (hasMedia &&
                   widget.player.playbackSpeed != 1.0 &&
-                  errorMsg == null)
+                  errorMsg == null &&
+                  !widget.isPipMode)
                 Positioned(
                   top: 12,
                   right: 12,
@@ -253,7 +260,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                 ),
 
               // Controls Overlay for media (for non-mobile-YouTube; mobile YouTube renders via controlsBuilder in OverlayPortal)
-              if (hasMedia && !isMobileYouTube && errorMsg == null)
+              if (hasMedia && !isMobileYouTube && errorMsg == null && !widget.isPipMode)
                 Positioned.fill(
                   child: _buildControlsOverlay(context, isFullscreen: isFs),
                 ),

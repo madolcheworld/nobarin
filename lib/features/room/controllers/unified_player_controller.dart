@@ -250,7 +250,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           showVideoAnnotations: false,
           mute: startMuted,
           enableCaption: false,
-          pointerEvents: PointerEvents.none,
+          pointerEvents: PointerEvents.initial,
           enableKeyboard: false,
         ),
       );
@@ -390,6 +390,18 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_mediaType == 'youtube') {
         if (kIsWeb && _isMuted) {
           await _ytController?.mute();
+        }
+        final state = _ytController?.value.playerState;
+        final videoId = _ytController?.key ?? extractYouTubeVideoId(_mediaUrl);
+        if (videoId != null &&
+            (state == PlayerState.cued ||
+                state == PlayerState.unStarted ||
+                state == PlayerState.unknown ||
+                state == PlayerState.paused)) {
+          await _ytController?.loadVideoById(
+            videoId: videoId,
+            startSeconds: _position > 0 ? _position : null,
+          );
         }
         try {
           await _ytController?.playVideo();
@@ -537,10 +549,6 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   Future<void> exitFullscreen() async {
-    final bool ytFullscreen =
-        _ytController?.value.fullScreenOption.enabled == true;
-    if (!_isFullscreen && !ytFullscreen) return;
-
     _isFullscreen = false;
     notifyListeners();
 
