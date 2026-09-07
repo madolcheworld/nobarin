@@ -90,7 +90,7 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Gabung dengan Kode',
+                          'Gabung Room',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -99,7 +99,7 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Masukkan 6-karakter kode room',
+                          'Masukkan kode untuk bergabung',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,

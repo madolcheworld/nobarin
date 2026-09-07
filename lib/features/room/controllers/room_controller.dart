@@ -52,6 +52,7 @@ class RoomController extends ChangeNotifier {
   static const Duration _initialHostDiscoveryTimeout = Duration(seconds: 15);
 
   void Function(String reason)? onRoomClosed;
+  void Function(String? newHostId, String? newHostName)? onHostChanged;
 
   String? _detectedHostId;
   String? _detectedHostName;
@@ -123,15 +124,39 @@ class RoomController extends ChangeNotifier {
     if (supabase == null) return;
 
     if (!isHost) {
-      _initialHostDiscoveryTimer = Timer(_initialHostDiscoveryTimeout, () {
+      _initialHostDiscoveryTimer = Timer(_initialHostDiscoveryTimeout, () async {
         if (!_hasSeenHost && !_state.isRoomClosed) {
-          const reason = 'Host tidak ditemukan atau telah keluar dari room.';
-          _state = _state.copyWith(
-            isRoomClosed: true,
-            closedReason: reason,
-          );
-          notifyListeners();
-          onRoomClosed?.call(reason);
+          final participants = _state.participants.toList();
+          if (participants.isNotEmpty) {
+            participants.sort((a, b) => a.id.compareTo(b.id));
+            final nextHost = participants.first;
+            debugPrint(
+                '[RoomController] Initial host not seen. Electing next host: ${nextHost.username}');
+            if (_currentUser.id == nextHost.id ||
+                _currentUser.username == nextHost.username) {
+              await promoteToHost(nextHost);
+            } else {
+              _detectedHostId = nextHost.id;
+              _detectedHostName = nextHost.username;
+              _hasSeenHost = true;
+              _state = _state.copyWith(
+                room: _state.room.copyWith(
+                  hostId: nextHost.id,
+                  hostName: nextHost.username,
+                ),
+              );
+              notifyListeners();
+              onHostChanged?.call(nextHost.id, nextHost.username);
+            }
+          } else {
+            const reason = 'Host tidak ditemukan atau telah keluar dari room.';
+            _state = _state.copyWith(
+              isRoomClosed: true,
+              closedReason: reason,
+            );
+            notifyListeners();
+            onRoomClosed?.call(reason);
+          }
         }
       });
     }
@@ -144,6 +169,58 @@ class RoomController extends ChangeNotifier {
           key: _currentUser.id,
           enabled: true,
         ),
+      );
+
+      _presenceChannel!.onBroadcast(
+        event: 'HOST_CHANGED',
+        callback: (payload) {
+          final data = (payload['payload'] is Map)
+              ? Map<String, dynamic>.from(payload['payload'] as Map)
+              : payload;
+          final roomId = data['room_id'] as String?;
+          final roomCode = data['code'] as String?;
+          if (roomId == _state.room.id ||
+              (roomCode != null && roomCode == _state.room.code)) {
+            final newHostId = data['new_host_id'] as String?;
+            final newHostName = data['new_host_name'] as String?;
+            if (newHostId != null || newHostName != null) {
+              debugPrint(
+                  '[RoomController] HOST_CHANGED: new host is $newHostName ($newHostId)');
+              _detectedHostId = newHostId;
+              _detectedHostName = newHostName;
+              _hasSeenHost = true;
+              _hostMissingTimer?.cancel();
+              _hostMissingTimer = null;
+              _initialHostDiscoveryTimer?.cancel();
+              _initialHostDiscoveryTimer = null;
+
+              _state = _state.copyWith(
+                room: _state.room.copyWith(
+                  hostId: newHostId ?? _state.room.hostId,
+                  hostName: newHostName ?? _state.room.hostName,
+                ),
+              );
+
+              if (isHost && _presenceChannel != null) {
+                () async {
+                  try {
+                    await _presenceChannel!.track({
+                      'user_id': _currentUser.id,
+                      'username': _currentUser.username,
+                      'avatar_url': _currentUser.avatarUrl,
+                      'is_guest': _currentUser.isGuest,
+                      'is_host': true,
+                      'role': 'host',
+                    });
+                  } catch (_) {}
+                }();
+              }
+
+              notifyListeners();
+              onHostChanged?.call(newHostId, newHostName);
+            }
+          }
+        },
       );
 
       _presenceChannel!.onBroadcast(
@@ -272,19 +349,48 @@ class RoomController extends ChangeNotifier {
             }
           } else if (_hasEstablishedPresence && _hasSeenHost && !_state.isRoomClosed) {
             // Host was previously seen, but is now missing!
-            // Start grace period before closing room to prevent false drops on network jitter.
+            // Start grace period before handover to prevent false drops on network jitter.
             if (_hostMissingTimer == null) {
               debugPrint('[RoomController] Host missing from presence. Starting 10s grace period...');
-              _hostMissingTimer = Timer(_hostGracePeriod, () {
+              _hostMissingTimer = Timer(_hostGracePeriod, () async {
                 _hostMissingTimer = null;
                 if (!_state.isRoomClosed) {
-                  const reason = 'Host telah meninggalkan room. Room ini telah ditutup.';
-                  _state = _state.copyWith(
-                    isRoomClosed: true,
-                    closedReason: reason,
-                  );
-                  notifyListeners();
-                  onRoomClosed?.call(reason);
+                  final remaining = uniqueMap.values.where((u) =>
+                      u.id != hostId &&
+                      u.username != hostName &&
+                      u.id != detectedHostId &&
+                      u.username != detectedHostName).toList();
+                  if (remaining.isNotEmpty) {
+                    remaining.sort((a, b) => a.id.compareTo(b.id));
+                    final newHost = remaining.first;
+                    debugPrint(
+                        '[RoomController] Host missing after grace period. Handing over to: ${newHost.username}');
+                    if (_currentUser.id == newHost.id ||
+                        _currentUser.username == newHost.username) {
+                      await promoteToHost(newHost);
+                    } else {
+                      _detectedHostId = newHost.id;
+                      _detectedHostName = newHost.username;
+                      _hasSeenHost = true;
+                      _state = _state.copyWith(
+                        room: _state.room.copyWith(
+                          hostId: newHost.id,
+                          hostName: newHost.username,
+                        ),
+                      );
+                      notifyListeners();
+                      onHostChanged?.call(newHost.id, newHost.username);
+                    }
+                  } else {
+                    const reason =
+                        'Host telah meninggalkan room dan tidak ada peserta lain.';
+                    _state = _state.copyWith(
+                      isRoomClosed: true,
+                      closedReason: reason,
+                    );
+                    notifyListeners();
+                    onRoomClosed?.call(reason);
+                  }
                 }
               });
             }
@@ -315,6 +421,136 @@ class RoomController extends ChangeNotifier {
       });
     } catch (e) {
       debugPrint('[RoomController] Error setting up presence: $e');
+    }
+  }
+
+  /// Promotes a participant to be the new host of this room.
+  /// Updates local state, Supabase database, sends broadcast to all clients,
+  /// and announces it in chat if [chatController] is provided.
+  Future<void> promoteToHost(UserProfile newHost, {dynamic chatController}) async {
+    debugPrint('[RoomController] Promoting ${newHost.username} (${newHost.id}) to host...');
+    _detectedHostId = newHost.id;
+    _detectedHostName = newHost.username;
+    _hasSeenHost = true;
+    _hostMissingTimer?.cancel();
+    _hostMissingTimer = null;
+    _initialHostDiscoveryTimer?.cancel();
+    _initialHostDiscoveryTimer = null;
+
+    final prevHostName = _state.room.hostName;
+
+    _state = _state.copyWith(
+      room: _state.room.copyWith(
+        hostId: newHost.id,
+        hostName: newHost.username,
+      ),
+    );
+
+    // Update in Supabase database
+    if (supabase != null && !_state.room.id.startsWith('demo-')) {
+      try {
+        final isUuid = _isValidUuid(_state.room.id);
+        if (isUuid) {
+          await supabase!
+              .from('rooms')
+              .update({
+                'host_id': newHost.id,
+                'host_name': newHost.username,
+              })
+              .eq('id', _state.room.id)
+              .timeout(const Duration(seconds: 3));
+        } else if (_state.room.code.isNotEmpty) {
+          await supabase!
+              .from('rooms')
+              .update({
+                'host_id': newHost.id,
+                'host_name': newHost.username,
+              })
+              .eq('code', _state.room.code)
+              .timeout(const Duration(seconds: 3));
+        }
+      } catch (e) {
+        debugPrint('[RoomController] Error updating host in Supabase: $e');
+      }
+    }
+
+    // Broadcast HOST_CHANGED to all participants
+    if (_presenceChannel != null && supabase != null) {
+      try {
+        await _presenceChannel!.sendBroadcastMessage(
+          event: 'HOST_CHANGED',
+          payload: {
+            'room_id': _state.room.id,
+            'code': _state.room.code,
+            'new_host_id': newHost.id,
+            'new_host_name': newHost.username,
+            'previous_host': prevHostName,
+          },
+        );
+      } catch (e) {
+        debugPrint('[RoomController] Error broadcasting HOST_CHANGED: $e');
+      }
+    }
+
+    // If currentUser is the newly promoted host, update presence role to host
+    if (isHost && _presenceChannel != null) {
+      try {
+        await _presenceChannel!.track({
+          'user_id': _currentUser.id,
+          'username': _currentUser.username,
+          'avatar_url': _currentUser.avatarUrl,
+          'is_guest': _currentUser.isGuest,
+          'is_host': true,
+          'role': 'host',
+        });
+      } catch (_) {}
+    }
+
+    // Optional chat notification
+    if (chatController != null) {
+      try {
+        await chatController.sendSystemMessage(
+          '👑 ${newHost.username} sekarang menjadi Host room ini!',
+        );
+      } catch (_) {}
+    }
+
+    notifyListeners();
+    onHostChanged?.call(newHost.id, newHost.username);
+  }
+
+  /// Transfers host role to [nextHost] and cleans up current user's presence so they can leave gracefully
+  /// without closing/deleting the room.
+  Future<void> transferHostAndLeave({
+    required UserProfile nextHost,
+    dynamic chatController,
+  }) async {
+    _hostMissingTimer?.cancel();
+    _hostMissingTimer = null;
+    _initialHostDiscoveryTimer?.cancel();
+    _initialHostDiscoveryTimer = null;
+
+    // Send system message that old host is leaving and handing over
+    if (chatController != null) {
+      try {
+        await chatController.sendSystemMessage(
+          '${_currentUser.username} (Host) keluar. 👑 ${nextHost.username} sekarang menjadi Host!',
+        );
+      } catch (_) {}
+    }
+
+    // Promote nextHost and notify all participants
+    await promoteToHost(nextHost);
+
+    // Untrack presence and clean up channel for leaving user
+    if (_presenceChannel != null && supabase != null) {
+      try {
+        await _presenceChannel!.untrack();
+        supabase!.removeChannel(_presenceChannel!);
+        _presenceChannel = null;
+      } catch (e) {
+        debugPrint('[RoomController] Error untracking presence on leave: $e');
+      }
     }
   }
 

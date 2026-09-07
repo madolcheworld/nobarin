@@ -93,20 +93,42 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
             children: [
               // Message List
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[index];
-                    if (msg.isSystem) {
-                      return _buildSystemMessage(msg);
-                    }
-                    final bool isMe = msg.userId == currentUserId;
-                    return _buildMessageBubble(msg, isMe);
-                  },
-                ),
+                child: messages.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 32,
+                              color: AppColors.textMuted.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Belum ada pesan',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          if (msg.isSystem) {
+                            return _buildSystemMessage(msg);
+                          }
+                          final bool isMe = msg.userId == currentUserId;
+                          return _buildMessageBubble(msg, isMe);
+                        },
+                      ),
               ),
 
               // Quick Reactions Row
@@ -161,7 +183,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                         controller: _inputController,
                         style: const TextStyle(fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: 'Tulis pesan chat...',
+                          hintText: 'Tulis pesan...',
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 10),
                           border: OutlineInputBorder(

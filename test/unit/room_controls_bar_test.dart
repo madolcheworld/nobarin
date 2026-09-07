@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:watch_party/features/auth/domain/user_profile.dart';
+import 'package:watch_party/features/room/controllers/queue_controller.dart';
 import 'package:watch_party/features/room/controllers/room_controller.dart';
 import 'package:watch_party/features/room/controllers/sync_controller.dart';
 import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
@@ -86,7 +87,7 @@ void main() {
     });
 
     testWidgets(
-        'does NOT render any duplicate play or pause button in RoomControlsBar when media is loaded',
+        'renders play/pause and seek controls in RoomControlsBar when media is loaded',
         (tester) async {
       await playerController.loadMedia(
         'direct_url',
@@ -113,13 +114,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify no play or pause buttons are rendered in RoomControlsBar
-      expect(find.byIcon(Icons.play_circle_rounded), findsNothing);
-      expect(find.byIcon(Icons.play_circle_filled_rounded), findsNothing);
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-      expect(find.byIcon(Icons.play_arrow), findsNothing);
-      expect(find.byIcon(Icons.pause_rounded), findsNothing);
-      expect(find.byIcon(Icons.pause_circle_rounded), findsNothing);
+      // Verify play button is rendered in RoomControlsBar when paused
+      expect(find.byIcon(Icons.play_circle_filled_rounded), findsOneWidget);
 
       // Verify seek controls and "Ganti Video" are rendered
       expect(find.byIcon(Icons.replay_10_rounded), findsOneWidget);
@@ -163,6 +159,45 @@ void main() {
       // Tapping Seek backward
       await tester.tap(find.byIcon(Icons.replay_10_rounded));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('renders Antrean button and triggers onOpenQueue', (tester) async {
+      final queueController = QueueController(
+        roomId: baseRoom.id,
+        currentUser: testHost,
+        syncController: syncController,
+        isHostProvider: () => true,
+      );
+
+      bool queueOpened = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              queueController: queueController,
+              onOpenMediaPicker: () {},
+              onOpenQueue: () {
+                queueOpened = true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Antrean'), findsOneWidget);
+      expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
+
+      await tester.tap(find.text('Antrean'));
+      await tester.pumpAndSettle();
+      expect(queueOpened, isTrue);
+
+      queueController.dispose();
     });
   });
 }

@@ -25,18 +25,17 @@ class VoiceControlBar extends StatelessWidget {
               statusText = 'Berbicara...';
               statusColor = AppColors.accentGreen;
             } else {
-              statusText = isMuted ? 'Mic Mati' : 'Mic Aktif (P2P)';
+              statusText = isMuted ? 'Mic Mati' : 'Mic Aktif';
               statusColor =
                   isMuted ? AppColors.textSecondary : AppColors.accentGreen;
             }
             break;
           case VoiceStatus.connecting:
-            statusText = 'Menghubungkan WebRTC...';
+            statusText = 'Menghubungkan...';
             statusColor = AppColors.accentYellow;
             break;
           case VoiceStatus.unconfigured:
-            statusText =
-                isMuted ? 'Voice Chat (Lokal)' : 'Voice Aktif (Lokal)';
+            statusText = isMuted ? 'Voice Siap' : 'Voice Aktif';
             statusColor =
                 isMuted ? AppColors.textMuted : AppColors.secondaryNeon;
             break;
@@ -161,8 +160,8 @@ class VoiceControlBar extends StatelessWidget {
               // Deafen Toggle Button
               Tooltip(
                 message: isDeafened
-                    ? 'Batal Tuli: Dengar suara teman'
-                    : 'Tuli: Matikan suara semua teman',
+                    ? 'Batal Bungkam: Dengar audio teman'
+                    : 'Bungkam Suara Teman',
                 child: IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.all(4),
@@ -186,7 +185,7 @@ class VoiceControlBar extends StatelessWidget {
               // Audio Ducking Switch
               Tooltip(
                 message:
-                    'Audio Ducking: Otomatis mengecilkan video saat ada teman berbicara',
+                    'Audio Ducking: Kecilkan video saat ada yang berbicara',
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

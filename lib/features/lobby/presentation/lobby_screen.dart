@@ -6,7 +6,10 @@ import '../../auth/presentation/auth_controller.dart';
 import 'lobby_controller.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/join_code_dialog.dart';
+import 'widgets/media_source_dialog.dart';
 import 'widgets/room_card.dart';
+import 'screens/youtube_picker_screen.dart';
+import '../data/models/youtube_video_model.dart';
 import '../../room/models/room_model.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -26,10 +29,28 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Future<void> _openCreateRoomDialog() async {
-    final room = await showDialog<RoomModel>(
-      context: context,
-      builder: (_) => const CreateRoomDialog(),
-    );
+    final sourceType = await MediaSourceDialog.show(context);
+    if (sourceType == null || !mounted) return;
+
+    RoomModel? room;
+
+    if (sourceType == MediaSourceType.youtube) {
+      final video = await Navigator.of(context).push<YouTubeVideo>(
+        MaterialPageRoute(builder: (_) => const YouTubePickerScreen()),
+      );
+      if (video == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialYouTubeVideo: video,
+      );
+    } else if (sourceType == MediaSourceType.directUrl) {
+      room = await CreateRoomDialog.show(
+        context,
+        initialMediaType: 'direct_url',
+      );
+    }
+
     if (room != null && mounted) {
       await context.push('/room/${room.code}', extra: room);
       if (mounted) {
@@ -95,9 +116,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         backgroundColor: AppColors.surfaceElevated,
-                        title: const Text('Keluar dari Akun?'),
+                        title: const Text('Keluar Akun?'),
                         content: Text(
-                          'Kamu sedang masuk sebagai ${user.username} ${user.avatarUrl}.\nApakah kamu yakin ingin keluar dan berganti profil?',
+                          'Yakin ingin keluar dari akun ${user.username}?',
                         ),
                         actions: [
                           TextButton(
@@ -202,7 +223,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                               icon: const Icon(Icons.add_rounded,
                                   color: Colors.white),
                               label: const Text(
-                                'Buat Room Baru',
+                                'Buat Room',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
@@ -227,7 +248,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             icon: const Icon(Icons.pin_rounded,
                                 color: AppColors.secondaryNeon),
                             label: const Text(
-                              'Gabung via Kode',
+                              'Gabung Kode',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -241,7 +262,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Cari room berdasarkan judul, host, atau kode...',
+                        hintText: 'Cari room atau kode...',
                         prefixIcon: const Icon(
                           Icons.search_rounded,
                           color: AppColors.textSecondary,
@@ -271,7 +292,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     Row(
                       children: [
                         const Text(
-                          'Ruang Publik Aktif',
+                          'Room Publik',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -370,7 +391,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Jadilah yang pertama membuat room untuk menonton bareng teman-teman!',
+                              'Buat room pertama dan tonton bersama teman!',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
@@ -381,7 +402,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             ElevatedButton.icon(
                               onPressed: _openCreateRoomDialog,
                               icon: const Icon(Icons.add_rounded),
-                              label: const Text('Buat Room Sekarang'),
+                              label: const Text('Buat Room'),
                             ),
                           ],
                         ),

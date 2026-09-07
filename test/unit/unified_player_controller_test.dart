@@ -216,5 +216,38 @@ void main() {
       await controller.toggleMute();
       expect(controller.isMuted, isFalse);
     });
+
+    test('enterFullscreen, exitFullscreen, and toggleFullscreen update state and notify listeners', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      expect(controller.isFullscreen, isFalse);
+
+      int notifyCount = 0;
+      controller.addListener(() {
+        notifyCount++;
+      });
+
+      await controller.enterFullscreen();
+      expect(controller.isFullscreen, isTrue);
+      expect(notifyCount, greaterThanOrEqualTo(1));
+
+      // Re-entering fullscreen when already in fullscreen does nothing
+      final prevCount = notifyCount;
+      await controller.enterFullscreen();
+      expect(controller.isFullscreen, isTrue);
+      expect(notifyCount, equals(prevCount));
+
+      await controller.exitFullscreen();
+      expect(controller.isFullscreen, isFalse);
+      expect(notifyCount, greaterThan(prevCount));
+
+      // Toggle fullscreen
+      await controller.toggleFullscreen();
+      expect(controller.isFullscreen, isTrue);
+
+      await controller.toggleFullscreen();
+      expect(controller.isFullscreen, isFalse);
+    });
   });
 }

@@ -157,6 +157,194 @@ void main() {
       expect(exitCalled, isFalse);
     });
 
+    testWidgets(
+        'can toggle controls overlay visibility even when paused with smooth AnimatedOpacity',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              title: 'Watch Party Movie',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // AnimatedOpacity should exist and initially be visible (opacity 1.0)
+      final animatedOpacityFinder = find.byType(AnimatedOpacity);
+      expect(animatedOpacityFinder, findsOneWidget);
+      AnimatedOpacity animatedOpacity =
+          tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+
+      // Tap on background gradient area (away from center play button) to toggle controls while paused
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pump(); // Start animation
+      await tester.pump(const Duration(milliseconds: 300)); // Complete fade out
+
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(0.0));
+
+      // Tap again on the player surface to show controls
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pump(); // Start animation
+      await tester.pump(const Duration(milliseconds: 300)); // Complete fade in
+
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+    });
+
+    testWidgets(
+        'auto-hides controls after timer expires while playing even if position updates occur',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              title: 'Auto Hide Test',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      final animatedOpacityFinder = find.byType(AnimatedOpacity);
+      expect(animatedOpacityFinder, findsOneWidget);
+
+      AnimatedOpacity animatedOpacity =
+          tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+
+      // Simulate streaming position updates every 250ms during playback
+      for (int i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+        // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+        playerController.notifyListeners();
+      }
+
+      // Elapsed so far is 1000ms, controls should still be visible
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+
+      // Advance past 1800ms total (1000ms remaining + animation duration)
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pump(const Duration(milliseconds: 300)); // Finish opacity animation
+
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(0.0));
+    });
+
+    testWidgets(
+        'controls remain hidden while paused even when periodic notifyListeners occur',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              title: 'Paused Hide Test',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      final animatedOpacityFinder = find.byType(AnimatedOpacity);
+      expect(animatedOpacityFinder, findsOneWidget);
+
+      // Initially visible
+      AnimatedOpacity animatedOpacity =
+          tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+
+      // Tap background to hide controls while paused
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(0.0));
+
+      // Fire notifications while still paused (e.g. metadata or room events)
+      // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+      playerController.notifyListeners();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Controls MUST remain hidden (not forced open by notification)
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(0.0));
+    });
+
+    testWidgets('quick hide triggers 1s after tapping Play button',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              title: 'Quick Play Hide Test',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      final animatedOpacityFinder = find.byType(AnimatedOpacity);
+
+      // Tap center play button
+      await tester.tap(find.byIcon(Icons.play_circle_filled_rounded));
+      await tester.pump();
+
+      // Controls should still be visible immediately after tap
+      AnimatedOpacity animatedOpacity =
+          tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(1.0));
+
+      // Advance 1000ms + 300ms animation
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Should now be hidden
+      animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
+      expect(animatedOpacity.opacity, equals(0.0));
+    });
+
     testWidgets('renders error overlay when player has an errorMessage',
         (tester) async {
       await playerController.loadMedia(

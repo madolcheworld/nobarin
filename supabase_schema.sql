@@ -110,12 +110,46 @@ create policy "Pengguna dapat mengirim pesan ke room"
 create policy "Semua pengguna dapat menghapus pesan room" 
   on public.room_messages for delete using (auth.role() in ('authenticated', 'anon'));
 
+-- ==============================================================================
+-- 6B. TABEL: ROOM QUEUE (PLAYLIST / ANTREAN VIDEO)
+-- ==============================================================================
+create table if not exists public.room_queue (
+  id uuid default gen_random_uuid() primary key,
+  room_id uuid references public.rooms(id) on delete cascade,
+  media_type text check (media_type in ('youtube', 'direct_url')) not null,
+  media_url text not null,
+  title text not null,
+  thumbnail_url text,
+  added_by_user_id uuid references public.profiles(id) on delete set null,
+  added_by_user_name text not null,
+  order_index integer default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+create index if not exists idx_room_queue_room_id on public.room_queue(room_id, order_index asc);
+
+alter table public.room_queue enable row level security;
+
+create policy "Queue dapat dibaca oleh siapa saja di room" 
+  on public.room_queue for select using (true);
+
+create policy "Semua pengguna dapat menambah ke antrean" 
+  on public.room_queue for insert with check (auth.role() in ('authenticated', 'anon'));
+
+create policy "Pengguna dapat mengupdate atau reorder antrean" 
+  on public.room_queue for update using (auth.role() in ('authenticated', 'anon'));
+
+create policy "Semua pengguna dapat menghapus antrean" 
+  on public.room_queue for delete using (auth.role() in ('authenticated', 'anon'));
+
+alter table public.room_queue replica identity full;
+
 -- 8. AKTIFKAN SUPABASE REALTIME REPLICATION
 -- Mengizinkan tabel didengarkan secara real-time via WebSocket
 begin;
   -- Hapus publikasi jika sudah ada untuk menghindari duplikasi
   drop publication if exists supabase_realtime;
-  create publication supabase_realtime for table public.rooms, public.room_messages, public.room_participants;
+  create publication supabase_realtime for table public.rooms, public.room_messages, public.room_participants, public.room_queue;
 commit;
 
 -- Pastikan payload DELETE berisi data lengkap (replica identity full)
@@ -138,4 +172,11 @@ grant execute on function public.get_server_time() to anon, authenticated;
 -- create policy "Semua pengguna dapat menghapus room" on public.rooms for delete using (auth.role() in ('authenticated', 'anon'));
 -- create policy "Semua pengguna dapat menghapus peserta room" on public.room_participants for delete using (auth.role() in ('authenticated', 'anon'));
 -- create policy "Semua pengguna dapat menghapus pesan room" on public.room_messages for delete using (auth.role() in ('authenticated', 'anon'));
+-- create table if not exists public.room_queue (id uuid default gen_random_uuid() primary key, room_id uuid references public.rooms(id) on delete cascade, media_type text check (media_type in ('youtube', 'direct_url')) not null, media_url text not null, title text not null, thumbnail_url text, added_by_user_id uuid references public.profiles(id) on delete set null, added_by_user_name text not null, order_index integer default 0, created_at timestamp with time zone default timezone('utc'::text, now()));
+-- alter table public.room_queue enable row level security;
+-- create policy "Queue dapat dibaca oleh siapa saja di room" on public.room_queue for select using (true);
+-- create policy "Semua pengguna dapat menambah ke antrean" on public.room_queue for insert with check (auth.role() in ('authenticated', 'anon'));
+-- create policy "Pengguna dapat mengupdate atau reorder antrean" on public.room_queue for update using (auth.role() in ('authenticated', 'anon'));
+-- create policy "Semua pengguna dapat menghapus antrean" on public.room_queue for delete using (auth.role() in ('authenticated', 'anon'));
+-- alter table public.room_queue replica identity full;
 

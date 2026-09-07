@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../../../../core/utils/time_formatter.dart';
@@ -36,12 +38,16 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   bool _showControls = true;
   double? _draggingPosition;
   Timer? _hideControlsTimer;
+  bool _lastIsPlaying = false;
 
   @override
   void initState() {
     super.initState();
+    _lastIsPlaying = widget.player.isPlaying;
     widget.player.addListener(_onPlayerChanged);
-    _startHideTimerIfNeeded();
+    if (widget.player.isPlaying) {
+      _startHideTimerIfNeeded();
+    }
   }
 
   @override
@@ -49,8 +55,11 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.player != widget.player) {
       oldWidget.player.removeListener(_onPlayerChanged);
+      _lastIsPlaying = widget.player.isPlaying;
       widget.player.addListener(_onPlayerChanged);
-      _startHideTimerIfNeeded();
+      if (widget.player.isPlaying) {
+        _startHideTimerIfNeeded();
+      }
     }
   }
 
@@ -62,20 +71,34 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   }
 
   void _onPlayerChanged() {
-    if (widget.player.isPlaying) {
-      _startHideTimerIfNeeded();
-    } else {
-      _hideControlsTimer?.cancel();
-      if (!_showControls && mounted) {
-        setState(() => _showControls = true);
+    final bool currentIsPlaying = widget.player.isPlaying;
+    if (currentIsPlaying != _lastIsPlaying) {
+      _lastIsPlaying = currentIsPlaying;
+      if (currentIsPlaying) {
+        // Playback transitioned to playing: auto-hide after 1.8s (preserves faster timer if already set)
+        _startHideTimerIfNeeded();
+      } else {
+        // Playback transitioned to paused: cancel hide timer and reveal controls
+        _hideControlsTimer?.cancel();
+        if (!_showControls && mounted) {
+          setState(() => _showControls = true);
+        }
       }
     }
   }
 
-  void _startHideTimerIfNeeded() {
+  void _startHideTimerIfNeeded({
+    Duration duration = const Duration(milliseconds: 1800),
+    bool reset = false,
+    bool assumePlaying = false,
+  }) {
+    if (!reset && _hideControlsTimer != null && _hideControlsTimer!.isActive) {
+      return;
+    }
     _hideControlsTimer?.cancel();
-    if (widget.player.isPlaying && _draggingPosition == null) {
-      _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+    final bool playing = assumePlaying || widget.player.isPlaying;
+    if (playing && _draggingPosition == null) {
+      _hideControlsTimer = Timer(duration, () {
         if (mounted && widget.player.isPlaying && _draggingPosition == null) {
           setState(() {
             _showControls = false;
@@ -90,7 +113,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
       _showControls = !_showControls;
     });
     if (_showControls) {
-      _startHideTimerIfNeeded();
+      if (widget.player.isPlaying) {
+        _startHideTimerIfNeeded(reset: true);
+      }
     } else {
       _hideControlsTimer?.cancel();
     }
@@ -112,18 +137,22 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           playerWidget = _buildEmptyPlaceholder();
         } else if (isYouTube && widget.player.ytController != null) {
           playerWidget = YoutubePlayer(
-            key: ValueKey('yt_${widget.player.mediaUrl}_${widget.player.ytController.hashCode}'),
+            key: ValueKey(
+              'yt_${widget.player.mediaUrl}_${widget.player.ytController.hashCode}',
+            ),
             controller: widget.player.ytController!,
             aspectRatio: 16 / 9,
             gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
             enableFullScreenOnVerticalDrag: false,
             controlsBuilder: (context, isFullscreen) {
               if (errorMsg != null) {
-                return _buildErrorOverlay(context, errorMsg, canControl: canControl);
+                return _buildErrorOverlay(
+                  context,
+                  errorMsg,
+                  canControl: canControl,
+                );
               }
-              return isMobileYouTube
-                  ? _buildControlsOverlay(context, isFullscreen: isFullscreen)
-                  : const SizedBox.shrink();
+              return _buildControlsOverlay(context, isFullscreen: isFullscreen);
             },
           );
         } else if (kIsWeb && widget.player.webVideoWidget != null) {
@@ -137,113 +166,125 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           playerWidget = _buildEmptyPlaceholder();
         }
 
-        return AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            color: Colors.black,
-            child: Stack(
-              children: [
-                // Video Content
-                Center(child: playerWidget),
+        final bool isFs = widget.player.isFullscreen;
 
-                // Non-controller lock indicator badge
-                if (hasMedia && !canControl && errorMsg == null)
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppColors.accentYellow.withValues(alpha: 0.5),
-                        ),
+        final Widget videoContainer = Container(
+          color: Colors.black,
+          child: Stack(
+            children: [
+              // Video Content
+              Center(child: playerWidget),
+
+              // Non-controller lock indicator badge
+              if (hasMedia && !canControl && errorMsg == null)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.accentYellow.withValues(alpha: 0.5),
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.lock_outline_rounded,
-                            size: 14,
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_outline_rounded,
+                          size: 14,
+                          color: AppColors.accentYellow,
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          'Host Control Mode',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                             color: AppColors.accentYellow,
                           ),
-                          SizedBox(width: 5),
-                          Text(
-                            'Host Control Mode',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.accentYellow,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
+                ),
 
-                // Drift / Speed adjustment indicator
-                if (hasMedia && widget.player.playbackSpeed != 1.0 && errorMsg == null)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryNeon.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.sync_rounded,
-                              size: 13, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Sync (${widget.player.playbackSpeed}x)',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+              // Drift / Speed adjustment indicator
+              if (hasMedia &&
+                  widget.player.playbackSpeed != 1.0 &&
+                  errorMsg == null)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.sync_rounded,
+                          size: 13,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Sync (${widget.player.playbackSpeed}x)',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
+                ),
 
-                // Controls Overlay for media (on mobile YouTube, controlsBuilder renders inside OverlayPortal)
-                if (hasMedia && !isMobileYouTube && errorMsg == null)
-                  Positioned.fill(
-                    child: _buildControlsOverlay(context, isFullscreen: false),
-                  ),
+              // Controls Overlay for media (for non-mobile-YouTube; mobile YouTube renders via controlsBuilder in OverlayPortal)
+              if (hasMedia && !isMobileYouTube && errorMsg == null)
+                Positioned.fill(
+                  child: _buildControlsOverlay(context, isFullscreen: isFs),
+                ),
 
-                // Error message overlay if playback failed (rendered here for non-mobile-YouTube)
-                if (hasMedia && !isMobileYouTube && errorMsg != null)
-                  Positioned.fill(
-                    child: _buildErrorOverlay(context, errorMsg, canControl: canControl),
+              // Error message overlay if playback failed
+              if (hasMedia && !isMobileYouTube && errorMsg != null)
+                Positioned.fill(
+                  child: _buildErrorOverlay(
+                    context,
+                    errorMsg,
+                    canControl: canControl,
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         );
+
+        if (isFs) {
+          return videoContainer;
+        }
+
+        return AspectRatio(aspectRatio: 16 / 9, child: videoContainer);
       },
     );
   }
 
-  Widget _buildControlsOverlay(BuildContext context,
-      {required bool isFullscreen}) {
-    if (!_showControls) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _toggleControls,
-        child: const SizedBox.expand(),
-      );
-    }
-
-    final bool isYouTube = widget.player.mediaType == 'youtube';
+  Widget _buildControlsOverlay(
+    BuildContext context, {
+    required bool isFullscreen,
+  }) {
+    final bool isFs = isFullscreen || widget.player.isFullscreen;
     final bool canControl = widget.syncController.canControl;
     final double pos = _draggingPosition ?? widget.player.position;
     final double duration = widget.player.duration > 0
@@ -253,362 +294,479 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. Background gradient and tap catcher to toggle controls visibility
+        // 0. Base tap target to toggle controls when hidden
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _toggleControls,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.7),
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.85),
-                  ],
-                ),
-              ),
-            ),
+            child: const SizedBox.expand(),
           ),
         ),
 
-        // 2. Center Play / Pause button (strictly bounded to center, does not overlap top bar)
-        if (canControl)
-          Positioned.fill(
-            child: Center(
-              child: Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                clipBehavior: Clip.hardEdge,
-                child: IconButton(
-                  iconSize: isFullscreen ? 56 : 46,
-                  padding: const EdgeInsets.all(8),
-                  icon: Icon(
-                    widget.player.isPlaying
-                        ? Icons.pause_circle_filled_rounded
-                        : Icons.play_circle_filled_rounded,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    if (widget.player.isPlaying) {
-                      widget.syncController.requestPause();
-                    } else {
-                      widget.syncController.requestPlay();
-                      _startHideTimerIfNeeded();
-                    }
-                  },
-                ),
-              ),
-            ),
-          ),
-
-        // 3. Top bar: Title + Fullscreen button + Back button
-        if (isFullscreen || widget.showTopBar)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              top: isFullscreen,
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    // Back button
-                    Material(
-                      color: Colors.transparent,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded,
-                            color: Colors.white, size: 22),
-                        tooltip: (kIsWeb ? FullscreenHelper.isFullscreen : isFullscreen)
-                            ? 'Keluar Fullscreen'
-                            : 'Kembali',
-                        onPressed: () {
-                          if (kIsWeb && FullscreenHelper.isFullscreen) {
-                            FullscreenHelper.exitFullscreen();
-                            setState(() {});
-                          } else if (!kIsWeb && isFullscreen && isYouTube) {
-                            widget.player.ytController?.exitFullScreen();
-                          } else {
-                            widget.onExit?.call();
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    if (widget.title != null)
-                      Expanded(
-                        child: Text(
-                          widget.title!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(color: Colors.black, blurRadius: 4),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      )
-                    else
-                      const Spacer(),
-                    const SizedBox(width: 4),
-                    // Explicit Exit Room button
-                    if (widget.onExit != null)
-                      Material(
-                        color: Colors.transparent,
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          icon: const Icon(Icons.exit_to_app_rounded,
-                              color: Colors.white, size: 22),
-                          tooltip: 'Keluar dari Room',
-                          onPressed: () {
-                            if (kIsWeb && FullscreenHelper.isFullscreen) {
-                              FullscreenHelper.exitFullscreen();
-                            } else if (!kIsWeb && isFullscreen && isYouTube) {
-                              widget.player.ytController?.exitFullScreen();
-                            }
-                            widget.onExit?.call();
-                          },
-                        ),
-                      ),
-                    // Fullscreen toggle button
-                    Material(
-                      color: Colors.transparent,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        icon: Icon(
-                          (kIsWeb ? FullscreenHelper.isFullscreen : isFullscreen)
-                            ? Icons.fullscreen_exit_rounded
-                            : Icons.fullscreen_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                        tooltip:
-                            (kIsWeb ? FullscreenHelper.isFullscreen : isFullscreen)
-                                ? 'Keluar Fullscreen'
-                                : 'Layar Penuh',
-                        onPressed: () {
-                          if (kIsWeb) {
-                            FullscreenHelper.toggleFullscreen();
-                            setState(() {});
-                          } else if (isYouTube && widget.player.ytController != null) {
-                            if (isFullscreen) {
-                              widget.player.ytController?.exitFullScreen();
-                            } else {
-                              widget.player.ytController?.enterFullScreen();
-                            }
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-        else
-          // When top bar is suppressed (screen already has AppBar), provide fullscreen toggle at top-right
-          Positioned(
-            top: 4,
-            right: 4,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              child: IconButton(
-                icon: Icon(
-                  (kIsWeb ? FullscreenHelper.isFullscreen : isFullscreen)
-                      ? Icons.fullscreen_exit_rounded
-                      : Icons.fullscreen_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                tooltip: (kIsWeb ? FullscreenHelper.isFullscreen : isFullscreen)
-                    ? 'Keluar Fullscreen'
-                    : 'Layar Penuh',
-                onPressed: () {
-                  if (kIsWeb) {
-                    FullscreenHelper.toggleFullscreen();
-                    setState(() {});
-                  } else if (isYouTube && widget.player.ytController != null) {
-                    if (isFullscreen) {
-                      widget.player.ytController?.exitFullScreen();
-                    } else {
-                      widget.player.ytController?.enterFullScreen();
-                    }
-                  }
-                },
-              ),
-            ),
-          ),
-
-        // 4. Bottom Timeline & Controls Bar (positioned strictly at bottom)
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            top: false,
-            bottom: isFullscreen,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        // 1. Smooth animated overlay with interactive controls
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !_showControls,
+            child: AnimatedOpacity(
+              opacity: _showControls ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  // Slider
-                  if (duration > 0) ...[
-                    if (canControl)
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 5),
-                        ),
-                        child: Slider(
-                          value: pos.clamp(0.0, duration),
-                          min: 0.0,
-                          max: duration,
-                          onChanged: (val) {
-                            _hideControlsTimer?.cancel();
-                            setState(() {
-                              _draggingPosition = val;
-                            });
-                          },
-                          onChangeEnd: (val) {
-                            _draggingPosition = null;
-                            widget.syncController.requestSeek(val);
-                            _startHideTimerIfNeeded();
-                          },
-                        ),
-                      )
-                    else
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: (pos / duration).clamp(0.0, 1.0),
-                          backgroundColor: AppColors.border,
-                          color: AppColors.primaryNeon,
-                          minHeight: 3,
+                  // 1. Background gradient and tap catcher to toggle controls visibility
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _toggleControls,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.7),
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.85),
+                            ],
+                          ),
                         ),
                       ),
-                  ] else ...[
-                    const SizedBox(height: 6),
-                  ],
+                    ),
+                  ),
 
-                  const SizedBox(height: 2),
-
-                  // Time Label & Quick Actions
-                  Row(
-                    children: [
-                      if (duration <= 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                  // 2. Center Play / Pause button (strictly bounded to center, prominent container)
+                  if (canControl)
+                    Positioned.fill(
+                      child: Center(
+                        child: Container(
+                          width: isFs ? 80 : 62,
+                          height: isFs ? 80 : 62,
                           decoration: BoxDecoration(
-                            color: AppColors.accentRed,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.circle,
-                                  color: Colors.white, size: 7),
-                              SizedBox(width: 4),
-                              Text(
-                                'LIVE',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
+                            shape: BoxShape.circle,
+                            color: Colors.black.withValues(alpha: 0.65),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              width: 2.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryNeon.withValues(
+                                  alpha: 0.45,
                                 ),
+                                blurRadius: 18,
+                                spreadRadius: 2,
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                blurRadius: 10,
                               ),
                             ],
                           ),
-                        )
-                      else
-                        Text(
-                          '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      const Spacer(),
-                      // Muted autoplay hint pill if browser started video muted
-                      if (widget.player.isPlaying && widget.player.isMuted)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: InkWell(
-                            onTap: () => widget.player.toggleMute(),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentYellow
-                                    .withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: AppColors.accentYellow
-                                      .withValues(alpha: 0.6),
-                                ),
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(),
+                            clipBehavior: Clip.hardEdge,
+                            child: IconButton(
+                              iconSize: isFs ? 52 : 40,
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                widget.player.isPlaying
+                                    ? Icons.pause_circle_filled_rounded
+                                    : Icons.play_circle_filled_rounded,
+                                color: Colors.white,
                               ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.volume_off_rounded,
-                                      size: 13,
-                                      color: AppColors.accentYellow),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Bunyikan Suara',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.accentYellow,
-                                      fontWeight: FontWeight.bold,
+                              onPressed: () {
+                                if (widget.player.isPlaying) {
+                                  widget.syncController.requestPause();
+                                } else {
+                                  widget.syncController.requestPlay();
+                                  _startHideTimerIfNeeded(
+                                    duration: const Duration(
+                                      milliseconds: 1000,
                                     ),
-                                  ),
-                                ],
-                              ),
+                                    reset: true,
+                                    assumePlaying: true,
+                                  );
+                                }
+                              },
                             ),
                           ),
                         ),
-                      Material(
+                      ),
+                    ),
+
+                  // 3. Top bar: Title + Fullscreen button + Back button
+                  if (isFs || widget.showTopBar)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: SafeArea(
+                        top: isFs,
+                        bottom: false,
+                        left: isFs,
+                        right: isFs,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isFs ? 12 : 8,
+                            vertical: isFs ? 6 : 4,
+                          ),
+                          child: Row(
+                            children: [
+                              // Back button
+                              Material(
+                                color: Colors.transparent,
+                                shape: const CircleBorder(),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.arrow_back_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                  tooltip:
+                                      (kIsWeb
+                                          ? FullscreenHelper.isFullscreen
+                                          : isFs)
+                                      ? 'Keluar Fullscreen'
+                                      : 'Kembali',
+                                  onPressed: () {
+                                    if (isFs) {
+                                      widget.player.exitFullscreen();
+                                    } else {
+                                      widget.onExit?.call();
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              if (widget.title != null)
+                                Expanded(
+                                  child: Text(
+                                    widget.title!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                )
+                              else
+                                const Spacer(),
+                              const SizedBox(width: 4),
+                              // Explicit Exit Room button
+                              if (widget.onExit != null)
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.exit_to_app_rounded,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                                    tooltip: 'Keluar dari Room',
+                                    onPressed: () {
+                                      if (isFs) {
+                                        widget.player.exitFullscreen();
+                                      }
+                                      widget.onExit?.call();
+                                    },
+                                  ),
+                                ),
+                              // Fullscreen toggle button
+                              Material(
+                                color: Colors.transparent,
+                                shape: const CircleBorder(),
+                                child: IconButton(
+                                  icon: Icon(
+                                    (kIsWeb
+                                            ? FullscreenHelper.isFullscreen
+                                            : isFs)
+                                        ? Icons.fullscreen_exit_rounded
+                                        : Icons.fullscreen_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  tooltip:
+                                      (kIsWeb
+                                          ? FullscreenHelper.isFullscreen
+                                          : isFs)
+                                      ? 'Keluar Fullscreen'
+                                      : 'Layar Penuh',
+                                  onPressed: () {
+                                    widget.player.toggleFullscreen();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    // When top bar is suppressed (screen already has AppBar), provide fullscreen toggle at top-right
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Material(
                         color: Colors.transparent,
                         shape: const CircleBorder(),
                         child: IconButton(
                           icon: Icon(
-                            widget.player.isMuted
-                                ? Icons.volume_off_rounded
-                                : Icons.volume_up_rounded,
-                            size: 20,
+                            (kIsWeb ? FullscreenHelper.isFullscreen : isFs)
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded,
                             color: Colors.white,
+                            size: 24,
                           ),
-                          onPressed: () => widget.player.toggleMute(),
+                          tooltip:
+                              (kIsWeb ? FullscreenHelper.isFullscreen : isFs)
+                              ? 'Keluar Fullscreen'
+                              : 'Layar Penuh',
+                          onPressed: () {
+                            widget.player.toggleFullscreen();
+                          },
                         ),
                       ),
-                      if (canControl)
-                        Material(
-                          color: Colors.transparent,
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.video_collection_outlined,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                            onPressed: widget.onOpenMediaPicker,
-                          ),
+                    ),
+
+                  // 4. Bottom Timeline & Controls Bar (positioned strictly at bottom)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      top: false,
+                      bottom: isFs,
+                      left: isFs,
+                      right: isFs,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          isFs ? 16 : 12,
+                          0,
+                          isFs ? 16 : 12,
+                          isFs ? 8 : 2,
                         ),
-                    ],
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 1. Time Label & Quick Actions Row
+                            Row(
+                              children: [
+                                if (duration <= 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentRed,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.circle,
+                                          color: Colors.white,
+                                          size: 7,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'LIVE',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                const Spacer(),
+                                // Muted autoplay hint pill if browser started video muted
+                                if (widget.player.isPlaying &&
+                                    widget.player.isMuted)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: InkWell(
+                                      onTap: () {
+                                        widget.player.toggleMute();
+                                        if (widget.player.isPlaying) {
+                                          _startHideTimerIfNeeded(reset: true);
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.accentYellow
+                                              .withValues(alpha: 0.25),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          border: Border.all(
+                                            color: AppColors.accentYellow
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.volume_off_rounded,
+                                              size: 13,
+                                              color: AppColors.accentYellow,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Bunyikan Suara',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.accentYellow,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      widget.player.isMuted
+                                          ? Icons.volume_off_rounded
+                                          : Icons.volume_up_rounded,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                    padding: const EdgeInsets.all(4),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                    tooltip: widget.player.isMuted
+                                        ? 'Nyalakan Suara'
+                                        : 'Bisukan Suara',
+                                    onPressed: () {
+                                      widget.player.toggleMute();
+                                      if (widget.player.isPlaying) {
+                                        _startHideTimerIfNeeded(reset: true);
+                                      }
+                                    },
+                                  ),
+                                ),
+                                if (canControl) ...[
+                                  const SizedBox(width: 2),
+                                  Material(
+                                    color: Colors.transparent,
+                                    shape: const CircleBorder(),
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.video_collection_outlined,
+                                        size: 18,
+                                        color: Colors.white,
+                                      ),
+                                      padding: const EdgeInsets.all(4),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 28,
+                                        minHeight: 28,
+                                      ),
+                                      tooltip: 'Pilih / Ganti Video',
+                                      onPressed: widget.onOpenMediaPicker,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+
+                            // 2. Timeline Slider / Scrub Bar (positioned at the very bottom edge)
+                            if (duration > 0) ...[
+                              if (canControl)
+                                SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 3,
+                                    thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 5,
+                                    ),
+                                    overlayShape: const RoundSliderOverlayShape(
+                                      overlayRadius: 10,
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    height: 20,
+                                    child: Slider(
+                                      value: pos.clamp(0.0, duration),
+                                      min: 0.0,
+                                      max: duration,
+                                      onChanged: (val) {
+                                        _hideControlsTimer?.cancel();
+                                        setState(() {
+                                          _draggingPosition = val;
+                                        });
+                                      },
+                                      onChangeEnd: (val) {
+                                        _draggingPosition = null;
+                                        widget.syncController.requestSeek(val);
+                                        _startHideTimerIfNeeded(reset: true);
+                                      },
+                                    ),
+                                  ),
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 4,
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(2),
+                                    child: LinearProgressIndicator(
+                                      value: (pos / duration).clamp(0.0, 1.0),
+                                      backgroundColor: AppColors.border,
+                                      color: AppColors.primaryNeon,
+                                      minHeight: 3,
+                                    ),
+                                  ),
+                                ),
+                            ] else ...[
+                              const SizedBox(height: 2),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -619,8 +777,11 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     );
   }
 
-  Widget _buildErrorOverlay(BuildContext context, String errorMsg,
-      {required bool canControl}) {
+  Widget _buildErrorOverlay(
+    BuildContext context,
+    String errorMsg, {
+    required bool canControl,
+  }) {
     return Container(
       color: Colors.black.withValues(alpha: 0.88),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -662,14 +823,20 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                     ),
                     onPressed: () {
                       widget.player.clearError();
                       widget.player.play();
                     },
                     icon: const Icon(Icons.refresh_rounded, size: 14),
-                    label: const Text('Coba Lagi', style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'Coba Lagi',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                   if (canControl) ...[
                     const SizedBox(width: 8),
@@ -677,11 +844,17 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryNeon,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                       ),
                       onPressed: widget.onOpenMediaPicker,
                       icon: const Icon(Icons.video_library_rounded, size: 14),
-                      label: const Text('Pilih Video Lain', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Pilih Video Lain',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 ],

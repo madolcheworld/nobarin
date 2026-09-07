@@ -46,6 +46,7 @@ dependencies:
   youtube_player_iframe: ^6.0.2
   media_kit_libs_video: ^1.0.7
   web: ^1.1.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
+  webview_flutter_platform_interface: any
 flutter:
 
   # The following line ensures that the Material Icons font is

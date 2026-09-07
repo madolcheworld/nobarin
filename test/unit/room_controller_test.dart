@@ -203,5 +203,46 @@ void main() {
       );
       expect(syncImpostor.canControl, isFalse);
     });
+
+    test('promoteToHost transfers host role and updates room model and isHost flag', () async {
+      final guestController = RoomController(
+        initialRoom: testRoom,
+        currentUser: participantUser,
+      );
+      expect(guestController.isHost, isFalse);
+
+      String? notifiedHostId;
+      String? notifiedHostName;
+      guestController.onHostChanged = (id, name) {
+        notifiedHostId = id;
+        notifiedHostName = name;
+      };
+
+      await guestController.promoteToHost(participantUser);
+
+      expect(guestController.isHost, isTrue);
+      expect(guestController.currentRoom.hostId, participantUser.id);
+      expect(guestController.currentRoom.hostName, participantUser.username);
+      expect(notifiedHostId, participantUser.id);
+      expect(notifiedHostName, participantUser.username);
+    });
+
+    test('transferHostAndLeave promotes new host without closing room', () async {
+      final hostController = RoomController(
+        initialRoom: testRoom,
+        currentUser: hostUser,
+      );
+      expect(hostController.isHost, isTrue);
+      expect(hostController.isRoomClosed, isFalse);
+
+      await hostController.transferHostAndLeave(nextHost: participantUser);
+
+      // Room remains open
+      expect(hostController.isRoomClosed, isFalse);
+      expect(hostController.currentRoom.hostId, participantUser.id);
+      expect(hostController.currentRoom.hostName, participantUser.username);
+      // Former host is no longer host
+      expect(hostController.isHost, isFalse);
+    });
   });
 }

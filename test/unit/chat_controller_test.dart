@@ -24,17 +24,14 @@ void main() {
       chatController.dispose();
     });
 
-    test('initializes with a system welcome message', () {
-      expect(chatController.messages.isNotEmpty, isTrue);
-      expect(chatController.messages.first.isSystem, isTrue);
-      expect(chatController.messages.first.content,
-          contains('Selamat datang di Watch Party'));
+    test('initializes with an empty message list for clean UI', () {
+      expect(chatController.messages.isEmpty, isTrue);
     });
 
     test('sendMessage adds text message correctly', () async {
       await chatController.sendMessage('Halo semua!');
 
-      expect(chatController.messages.length, 2);
+      expect(chatController.messages.length, 1);
       final lastMsg = chatController.messages.last;
       expect(lastMsg.content, 'Halo semua!');
       expect(lastMsg.username, testUser.username);

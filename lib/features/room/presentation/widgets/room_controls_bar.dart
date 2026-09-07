@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../controllers/queue_controller.dart';
 import '../../controllers/room_controller.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
@@ -9,24 +10,26 @@ class RoomControlsBar extends StatelessWidget {
   final SyncController syncController;
   final UnifiedPlayerController player;
   final RoomController roomController;
+  final QueueController? queueController;
   final VoidCallback onOpenMediaPicker;
+  final VoidCallback? onOpenQueue;
 
   const RoomControlsBar({
     super.key,
     required this.syncController,
     required this.player,
     required this.roomController,
+    this.queueController,
     required this.onOpenMediaPicker,
+    this.onOpenQueue,
   });
 
   void _copyRoomCode(BuildContext context) {
     Clipboard.setData(ClipboardData(text: roomController.currentRoom.code));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Kode room ${roomController.currentRoom.code} disalin ke clipboard!',
-        ),
-        duration: const Duration(seconds: 2),
+      const SnackBar(
+        content: Text('Kode room disalin!'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -45,7 +48,11 @@ class RoomControlsBar extends StatelessWidget {
         ),
       ),
       child: ListenableBuilder(
-        listenable: Listenable.merge([syncController, player]),
+        listenable: Listenable.merge([
+          syncController,
+          player,
+          ?queueController,
+        ]),
         builder: (context, _) {
           final bool hasMedia = player.mediaUrl.isNotEmpty;
 
@@ -66,10 +73,10 @@ class RoomControlsBar extends StatelessWidget {
                             if (hasMedia) ...[
                               // Seek -10s
                               IconButton(
-                                icon: const Icon(Icons.replay_10_rounded, size: 20),
+                                icon: const Icon(Icons.replay_10_rounded, size: 22),
                                 tooltip: 'Mundur 10 detik',
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(6),
+                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
                                 onPressed: () {
                                   final target =
                                       (player.position - 10).clamp(0.0, player.duration);
@@ -79,40 +86,66 @@ class RoomControlsBar extends StatelessWidget {
                               const SizedBox(width: 4),
 
                               // Play / Pause button
-                              IconButton(
-                                icon: Icon(
-                                  player.isPlaying
-                                      ? Icons.pause_circle_filled_rounded
-                                      : Icons.play_circle_filled_rounded,
-                                  size: 24,
-                                  color: AppColors.primaryNeon,
+                              Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryNeon.withValues(alpha: 0.18),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.primaryNeon.withValues(alpha: 0.6),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primaryNeon.withValues(alpha: 0.25),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
                                 ),
-                                tooltip: player.isPlaying ? 'Jeda' : 'Putar',
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  if (player.isPlaying) {
-                                    syncController.requestPause();
-                                  } else {
-                                    syncController.requestPlay();
-                                  }
-                                },
+                                child: Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  clipBehavior: Clip.hardEdge,
+                                  child: IconButton(
+                                    icon: Icon(
+                                      player.isPlaying
+                                          ? Icons.pause_circle_filled_rounded
+                                          : Icons.play_circle_filled_rounded,
+                                      size: 28,
+                                      color: AppColors.primaryNeon,
+                                    ),
+                                    tooltip: player.isPlaying ? 'Jeda' : 'Putar',
+                                    padding: const EdgeInsets.all(6),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 44,
+                                      minHeight: 44,
+                                    ),
+                                    onPressed: () {
+                                      if (player.isPlaying) {
+                                        syncController.requestPause();
+                                      } else {
+                                        syncController.requestPlay();
+                                      }
+                                    },
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 4),
 
                               // Seek +10s
                               IconButton(
-                                icon: const Icon(Icons.forward_10_rounded, size: 20),
+                                icon: const Icon(Icons.forward_10_rounded, size: 22),
                                 tooltip: 'Maju 10 detik',
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(6),
+                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
                                 onPressed: () {
                                   final target =
                                       (player.position + 10).clamp(0.0, player.duration);
                                   syncController.requestSeek(target);
                                 },
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 8),
                             ],
 
                             // Change / Select Media button
@@ -143,36 +176,34 @@ class RoomControlsBar extends StatelessWidget {
                           ],
                         ),
                       ] else ...[
-                        Flexible(
-                          child: Container(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceElevated,
-                              borderRadius: BorderRadius.circular(8),
+                        Container(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.accentYellow.withValues(alpha: 0.3),
                             ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.lock_rounded,
-                                  size: 14,
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lock_rounded,
+                                size: 14,
+                                color: AppColors.accentYellow,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Mode Host Only',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                   color: AppColors.accentYellow,
                                 ),
-                                SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    'Mode Host (Hanya host yang dapat mengontrol)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -183,33 +214,61 @@ class RoomControlsBar extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                              visualDensity: VisualDensity.compact,
-                              side: const BorderSide(color: AppColors.border),
-                            ),
-                            onPressed: () => _copyRoomCode(context),
-                            icon: const Icon(Icons.share_rounded, size: 13),
-                            label: Text(
-                              roomController.currentRoom.code,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
+                          if (onOpenQueue != null || queueController != null) ...[
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: AppColors.surfaceElevated,
+                                foregroundColor: AppColors.primaryNeon,
+                                side: const BorderSide(color: AppColors.border),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                visualDensity: VisualDensity.compact,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: onOpenQueue,
+                              icon: Badge(
+                                isLabelVisible:
+                                    (queueController?.count ?? 0) > 0,
+                                label: Text(
+                                  '${queueController?.count ?? 0}',
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                backgroundColor: AppColors.primaryNeon,
+                                textColor: Colors.black,
+                                child: const Icon(Icons.queue_music_rounded,
+                                    size: 16),
+                              ),
+                              label: Text(
+                                (queueController?.count ?? 0) > 0
+                                    ? 'Antrean (${queueController?.count})'
+                                    : 'Antrean',
+                                style: const TextStyle(fontSize: 12),
                               ),
                             ),
+                            const SizedBox(width: 4),
+                          ],
+                          IconButton(
+                            icon: const Icon(Icons.share_rounded, size: 18),
+                            tooltip: 'Salin Kode Room',
+                            color: AppColors.secondaryNeon,
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            onPressed: () => _copyRoomCode(context),
                           ),
 
                           // Host Settings: Switch between Host-Only and Collaborative
                           if (isHost) ...[
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 2),
                             PopupMenuButton<String>(
                               icon: const Icon(Icons.settings_outlined, size: 18),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              tooltip: 'Pengaturan Kontrol Room',
+                              tooltip: 'Pengaturan Kontrol',
                               color: AppColors.surfaceElevated,
                               onSelected: (mode) {
                                 roomController.setControlMode(mode);
@@ -218,12 +277,12 @@ class RoomControlsBar extends StatelessWidget {
                                 CheckedPopupMenuItem(
                                   value: 'host_only',
                                   checked: roomController.currentRoom.isHostOnly,
-                                  child: const Text('Mode: Host-Only (👑 Host Saja)'),
+                                  child: const Text('👑 Host Only'),
                                 ),
                                 CheckedPopupMenuItem(
                                   value: 'collaborative',
                                   checked: roomController.currentRoom.isCollaborative,
-                                  child: const Text('Mode: Kolaboratif (🤝 Semua Kontrol)'),
+                                  child: const Text('🤝 Kolaboratif'),
                                 ),
                               ],
                             ),

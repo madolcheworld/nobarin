@@ -12,6 +12,12 @@ void toggleFullscreen() {
   }
 }
 
+void enterFullscreen() {
+  if (web.document.fullscreenElement == null) {
+    web.document.documentElement?.requestFullscreen();
+  }
+}
+
 void exitFullscreen() {
   if (web.document.fullscreenElement != null) {
     web.document.exitFullscreen();

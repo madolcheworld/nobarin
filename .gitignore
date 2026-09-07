@@ -13,3 +13,6 @@ build/
 .idea/
 .vscode/
 *.iml
+
+# Doc
+doc/api/

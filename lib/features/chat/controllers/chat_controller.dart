@@ -42,15 +42,6 @@ class ChatController extends ChangeNotifier {
   }
 
   void _initChat() {
-    // Add welcome system message
-    _messages.add(ChatMessage(
-      id: const Uuid().v4(),
-      roomId: roomId,
-      content: 'Selamat datang di Watch Party! Pesan kamu akan muncul di sini.',
-      type: 'system',
-      createdAt: DateTime.now(),
-    ));
-
     if (supabase == null) return;
 
     try {

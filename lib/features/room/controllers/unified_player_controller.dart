@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
 class UnifiedPlayerController extends ChangeNotifier {
   String _mediaType = 'direct_url'; // 'direct_url' or 'youtube'
   String _mediaUrl = '';
   bool _isPlaying = false;
+  bool _isFullscreen = false;
   double _position = 0.0;
   double _duration = 0.0;
   double _playbackSpeed = 1.0;
@@ -33,10 +36,12 @@ class UnifiedPlayerController extends ChangeNotifier {
   // Callbacks for SyncController
   void Function(double positionSeconds)? onPositionChanged;
   void Function(String state)? onPlaybackStateChanged;
+  void Function()? onPlaybackEnded;
 
   String get mediaType => _mediaType;
   String get mediaUrl => _mediaUrl;
   bool get isPlaying => _isPlaying;
+  bool get isFullscreen => _isFullscreen;
   double get position => _position;
   double get duration => _duration;
   double get playbackSpeed => _playbackSpeed;
@@ -89,6 +94,9 @@ class UnifiedPlayerController extends ChangeNotifier {
             _isPlaying = playing;
             notifyListeners();
             onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+            if (!playing && _duration > 0 && _position >= _duration - 0.5) {
+              onPlaybackEnded?.call();
+            }
           }
         },
         onError: (err) {
@@ -130,6 +138,13 @@ class UnifiedPlayerController extends ChangeNotifier {
           _isPlaying = playing;
           notifyListeners();
           onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+        }
+      }));
+
+      _subscriptions.add(_mkPlayer!.stream.completed.listen((completed) {
+        if (_isDisposed || _mediaType != 'direct_url') return;
+        if (completed) {
+          onPlaybackEnded?.call();
         }
       }));
 
@@ -232,6 +247,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         params: YoutubePlayerParams(
           showControls: false,
           showFullscreenButton: false,
+          showVideoAnnotations: false,
           mute: startMuted,
           enableCaption: false,
           pointerEvents: PointerEvents.none,
@@ -300,6 +316,37 @@ class UnifiedPlayerController extends ChangeNotifier {
           notifyListeners();
           onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
         }
+
+        if (ytState == PlayerState.ended) {
+          onPlaybackEnded?.call();
+        }
+
+        // Synchronize fullscreen state from YouTube player
+        final bool isYtFullscreen = value.fullScreenOption.enabled;
+        if (isYtFullscreen != _isFullscreen) {
+          _isFullscreen = isYtFullscreen;
+          notifyListeners();
+          if (!kIsWeb) {
+            try {
+              if (isYtFullscreen) {
+                SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+                SystemChrome.setPreferredOrientations([
+                  DeviceOrientation.landscapeLeft,
+                  DeviceOrientation.landscapeRight,
+                ]);
+              } else {
+                SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                SystemChrome.setPreferredOrientations([
+                  DeviceOrientation.portraitUp,
+                  DeviceOrientation.portraitDown,
+                ]);
+                Future.delayed(const Duration(milliseconds: 600), () {
+                  SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+                });
+              }
+            } catch (_) {}
+          }
+        }
       }));
     } else {
       // Direct URL
@@ -326,6 +373,8 @@ class UnifiedPlayerController extends ChangeNotifier {
             Duration(milliseconds: (startSeconds * 1000).round()),
           );
         }
+        _isPlaying = autoPlay;
+      } else {
         _isPlaying = autoPlay;
       }
     }
@@ -463,9 +512,76 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
   }
 
+  Future<void> enterFullscreen() async {
+    if (_isFullscreen) return;
+    _isFullscreen = true;
+    notifyListeners();
+
+    if (kIsWeb) {
+      FullscreenHelper.enterFullscreen();
+    } else {
+      try {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      } catch (_) {}
+    }
+
+    if (_mediaType == 'youtube' && _ytController != null) {
+      if (!_ytController!.value.fullScreenOption.enabled) {
+        _ytController!.enterFullScreen();
+      }
+    }
+  }
+
+  Future<void> exitFullscreen() async {
+    final bool ytFullscreen =
+        _ytController?.value.fullScreenOption.enabled == true;
+    if (!_isFullscreen && !ytFullscreen) return;
+
+    _isFullscreen = false;
+    notifyListeners();
+
+    if (kIsWeb) {
+      FullscreenHelper.exitFullscreen();
+    } else {
+      try {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+        Future.delayed(const Duration(milliseconds: 600), () {
+          SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        });
+      } catch (_) {}
+    }
+
+    if (_mediaType == 'youtube' && _ytController != null) {
+      if (_ytController!.value.fullScreenOption.enabled) {
+        _ytController!.exitFullScreen();
+      }
+    }
+  }
+
+  Future<void> toggleFullscreen() async {
+    final bool ytFullscreen =
+        _ytController?.value.fullScreenOption.enabled == true;
+    if (_isFullscreen || ytFullscreen) {
+      await exitFullscreen();
+    } else {
+      await enterFullscreen();
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
+    if (_isFullscreen) {
+      exitFullscreen();
+    }
     for (final sub in _subscriptions) {
       sub.cancel();
     }

@@ -43,7 +43,7 @@ class ParticipantsHeader extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'Peserta (${participants.length}):',
+                'Peserta (${participants.length})',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
