@@ -259,5 +259,250 @@ void main() {
       expect(systemNotice, contains('AliceOldHost (Host) keluar'));
       expect(systemNotice, contains(participantUser.username));
     });
+
+    group('Host Moderation & Co-Host Feature Tests', () {
+      final coHostUser = const UserProfile(
+        id: 'cohost-789',
+        username: 'CharlieCoHost',
+        avatarUrl: '⭐',
+        isGuest: false,
+      );
+
+      final viewerUser = const UserProfile(
+        id: 'viewer-999',
+        username: 'DavidViewer',
+        avatarUrl: '👤',
+        isGuest: true,
+      );
+
+      test('canModerateUser enforces hierarchy (Host > CoHost > Viewer)', () {
+        final hostController = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+        // Host can moderate co-host and viewer, but cannot moderate themselves
+        expect(hostController.canModerateUser(hostUser.id), isFalse);
+        expect(hostController.canModerateUser(coHostUser.id), isTrue);
+        expect(hostController.canModerateUser(viewerUser.id), isTrue);
+
+        final coHostController = RoomController(
+          initialRoom: testRoom,
+          currentUser: coHostUser,
+        );
+        // Promote coHostUser to co-host locally
+        coHostController.handleCoHostUpdated({
+          'target_user_id': coHostUser.id,
+          'is_co_host': true,
+        });
+        expect(coHostController.isCurrentUserCoHost, isTrue);
+
+        // Co-Host can moderate viewers
+        expect(coHostController.canModerateUser(viewerUser.id), isTrue);
+        // Co-Host cannot moderate host
+        expect(coHostController.canModerateUser(hostUser.id), isFalse);
+        // Co-Host cannot moderate themselves or another co-host
+        expect(coHostController.canModerateUser(coHostUser.id), isFalse);
+        coHostController.handleCoHostUpdated({
+          'target_user_id': 'other-cohost',
+          'is_co_host': true,
+        });
+        expect(coHostController.canModerateUser('other-cohost'), isFalse);
+
+        final viewerController = RoomController(
+          initialRoom: testRoom,
+          currentUser: viewerUser,
+        );
+        // Viewer cannot moderate anyone
+        expect(viewerController.canModerateUser(hostUser.id), isFalse);
+        expect(viewerController.canModerateUser(coHostUser.id), isFalse);
+        expect(viewerController.canModerateUser(viewerUser.id), isFalse);
+        expect(viewerController.canModerateUser('anyone'), isFalse);
+      });
+
+      test('toggleCoHost adds and removes co-host role for host only', () async {
+        final hostController = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+
+        expect(hostController.isCoHost(participantUser.id), isFalse);
+
+        await hostController.toggleCoHost(participantUser);
+        expect(hostController.isCoHost(participantUser.id), isTrue);
+        expect(hostController.coHostUserIds.contains(participantUser.id), isTrue);
+
+        await hostController.toggleCoHost(participantUser);
+        expect(hostController.isCoHost(participantUser.id), isFalse);
+        expect(hostController.coHostUserIds.contains(participantUser.id), isFalse);
+
+        // Viewer cannot toggle co-host
+        final viewerController = RoomController(
+          initialRoom: testRoom,
+          currentUser: viewerUser,
+        );
+        await viewerController.toggleCoHost(participantUser);
+        expect(viewerController.isCoHost(participantUser.id), isFalse);
+      });
+
+      test('canControlMedia permits Host and Co-Host in host_only mode, but blocks Viewers', () {
+        final hostController = RoomController(
+          initialRoom: testRoom.copyWith(controlMode: 'host_only'),
+          currentUser: hostUser,
+        );
+        expect(hostController.canControlMedia, isTrue);
+
+        final coHostController = RoomController(
+          initialRoom: testRoom.copyWith(controlMode: 'host_only'),
+          currentUser: coHostUser,
+        );
+        expect(coHostController.canControlMedia, isFalse);
+        coHostController.handleCoHostUpdated({
+          'target_user_id': coHostUser.id,
+          'is_co_host': true,
+        });
+        expect(coHostController.canControlMedia, isTrue);
+
+        final viewerController = RoomController(
+          initialRoom: testRoom.copyWith(controlMode: 'host_only'),
+          currentUser: viewerUser,
+        );
+        expect(viewerController.canControlMedia, isFalse);
+
+        // In collaborative mode, everyone can control
+        final viewerCollabController = RoomController(
+          initialRoom: testRoom.copyWith(controlMode: 'collaborative'),
+          currentUser: viewerUser,
+        );
+        expect(viewerCollabController.canControlMedia, isTrue);
+      });
+
+      test('handleKickParticipant marks room closed and invokes onKicked if target is current user', () {
+        final participantController = RoomController(
+          initialRoom: testRoom,
+          currentUser: participantUser,
+        );
+
+        String? kickedReason;
+        participantController.onKicked = (reason) {
+          kickedReason = reason;
+        };
+
+        participantController.handleKickParticipant({
+          'target_user_id': participantUser.id,
+          'reason': 'Spamming media',
+        });
+
+        expect(participantController.isRoomClosed, isTrue);
+        expect(kickedReason, 'Spamming media');
+      });
+
+      test('handleKickParticipant removes participant and records kicked ID for other participants', () {
+        final hostController = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+
+        String? noticeReceived;
+        hostController.onModerationNotice = (notice) {
+          noticeReceived = notice;
+        };
+
+        hostController.handleKickParticipant({
+          'target_user_id': viewerUser.id,
+          'target_username': viewerUser.username,
+        });
+
+        expect(hostController.kickedUserIds.contains(viewerUser.id), isTrue);
+        expect(noticeReceived, contains(viewerUser.username));
+      });
+
+      test('handleForceMuteParticipant triggers callback on target and notice on others', () {
+        final targetController = RoomController(
+          initialRoom: testRoom,
+          currentUser: viewerUser,
+        );
+
+        bool muteReceived = false;
+        targetController.onForceMuteReceived = () {
+          muteReceived = true;
+        };
+
+        targetController.handleForceMuteParticipant({
+          'target_user_id': viewerUser.id,
+          'target_username': viewerUser.username,
+        });
+
+        expect(muteReceived, isTrue);
+
+        final otherController = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+
+        String? otherNotice;
+        otherController.onModerationNotice = (notice) {
+          otherNotice = notice;
+        };
+
+        otherController.handleForceMuteParticipant({
+          'target_user_id': viewerUser.id,
+          'target_username': viewerUser.username,
+        });
+
+        expect(otherNotice, contains('Mikrofon ${viewerUser.username} telah dimatikan'));
+      });
+
+      test('handleCoHostUpdated adds and removes co-hosts and triggers notices', () {
+        final controller = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+
+        String? noticeReceived;
+        controller.onModerationNotice = (notice) {
+          noticeReceived = notice;
+        };
+
+        // Promotion
+        controller.handleCoHostUpdated({
+          'target_user_id': coHostUser.id,
+          'target_username': coHostUser.username,
+          'is_co_host': true,
+        });
+        expect(controller.isCoHost(coHostUser.id), isTrue);
+        expect(noticeReceived, contains('Co-Host'));
+
+        // Demotion
+        controller.handleCoHostUpdated({
+          'target_user_id': coHostUser.id,
+          'target_username': coHostUser.username,
+          'is_co_host': false,
+        });
+        expect(controller.isCoHost(coHostUser.id), isFalse);
+        expect(noticeReceived, contains('tidak lagi menjadi Co-Host'));
+      });
+
+      test('SyncController allows Co-Host to control media via canControlProvider in host_only mode', () {
+        final player = UnifiedPlayerController();
+
+        bool isCoHost = false;
+        final syncController = SyncController(
+          room: testRoom.copyWith(controlMode: 'host_only'),
+          currentUser: participantUser,
+          player: player,
+          canControlProvider: () => isCoHost,
+        );
+
+        // Initially participant is not co-host
+        expect(syncController.canControl, isFalse);
+
+        // User becomes Co-Host
+        isCoHost = true;
+        expect(syncController.canControl, isTrue);
+
+        syncController.dispose();
+        player.dispose();
+      });
+    });
   });
 }

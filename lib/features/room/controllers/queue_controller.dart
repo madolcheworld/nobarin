@@ -14,6 +14,7 @@ class QueueController extends ChangeNotifier {
   final ChatController? chatController;
   final SupabaseClient? supabase;
   final bool Function()? isHostProvider;
+  final bool Function()? isCoHostProvider;
   final bool Function()? isCollaborativeProvider;
 
   List<QueueItem> _items = [];
@@ -30,13 +31,14 @@ class QueueController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   bool get isHost => isHostProvider?.call() ?? false;
+  bool get isCoHost => isCoHostProvider?.call() ?? false;
   bool get isCollaborative => isCollaborativeProvider?.call() ?? false;
 
   /// Whether current user has permission to manage (reorder, delete) items
-  bool get canManageQueue => isHost || isCollaborative;
+  bool get canManageQueue => isHost || isCoHost || isCollaborative;
 
   /// Whether current user can add items to queue
-  bool get canAddToQueue => isHost || isCollaborative;
+  bool get canAddToQueue => isHost || isCoHost || isCollaborative;
 
   QueueController({
     required this.roomId,
@@ -45,6 +47,7 @@ class QueueController extends ChangeNotifier {
     this.chatController,
     this.supabase,
     this.isHostProvider,
+    this.isCoHostProvider,
     this.isCollaborativeProvider,
   }) {
     _initChannel();

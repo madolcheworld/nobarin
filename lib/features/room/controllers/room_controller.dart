@@ -55,6 +55,12 @@ class RoomController extends ChangeNotifier {
   void Function(String? newHostId, String? newHostName)? onHostChanged;
   void Function(String username)? onParticipantLeft;
   void Function(String message)? onSystemNotice;
+  void Function(String reason)? onKicked;
+  void Function()? onForceMuteReceived;
+  void Function(String message)? onModerationNotice;
+
+  final Set<String> _coHostUserIds = {};
+  final Set<String> _kickedUserIds = {};
 
   Set<String> _knownParticipantKeys = {};
   Map<String, String> _knownParticipantNames = {};
@@ -103,6 +109,48 @@ class RoomController extends ChangeNotifier {
     return false;
   }
   bool get isRoomClosed => _state.isRoomClosed;
+
+  Set<String> get coHostUserIds => Set.unmodifiable(_coHostUserIds);
+  Set<String> get kickedUserIds => Set.unmodifiable(_kickedUserIds);
+
+  bool isCoHost(String userId) => _coHostUserIds.contains(userId);
+
+  bool isUserHost(String userId) {
+    if (_state.room.hostId != null && _state.room.hostId!.isNotEmpty) {
+      return _state.room.hostId == userId;
+    }
+    if (_state.room.hostName != null &&
+        _state.room.hostName!.isNotEmpty &&
+        _state.room.hostName != 'Host') {
+      return _state.room.hostName == userId;
+    }
+    return false;
+  }
+
+  bool get isCurrentUserCoHost =>
+      _coHostUserIds.contains(_currentUser.id) ||
+      _coHostUserIds.contains(_currentUser.username);
+
+  bool get canControlMedia =>
+      isHost || isCurrentUserCoHost || _state.room.isCollaborative;
+
+  bool canModerateUser(String targetUserId) {
+    if (targetUserId == _currentUser.id || targetUserId == _currentUser.username) {
+      return false;
+    }
+    if (isHost) {
+      return true;
+    }
+    if (isCurrentUserCoHost) {
+      final isTargetHost = isUserHost(targetUserId) ||
+          (_state.room.hostName != null &&
+              _state.room.hostName != 'Host' &&
+              _state.room.hostName == targetUserId);
+      final isTargetCoHost = isCoHost(targetUserId);
+      return !isTargetHost && !isTargetCoHost;
+    }
+    return false;
+  }
 
   RoomController({
     required RoomModel initialRoom,
@@ -251,6 +299,36 @@ class RoomController extends ChangeNotifier {
         },
       );
 
+      _presenceChannel!.onBroadcast(
+        event: 'KICK_PARTICIPANT',
+        callback: (payload) {
+          final data = (payload['payload'] is Map)
+              ? Map<String, dynamic>.from(payload['payload'] as Map)
+              : payload;
+          handleKickParticipant(data);
+        },
+      );
+
+      _presenceChannel!.onBroadcast(
+        event: 'FORCE_MUTE_PARTICIPANT',
+        callback: (payload) {
+          final data = (payload['payload'] is Map)
+              ? Map<String, dynamic>.from(payload['payload'] as Map)
+              : payload;
+          handleForceMuteParticipant(data);
+        },
+      );
+
+      _presenceChannel!.onBroadcast(
+        event: 'CO_HOST_UPDATED',
+        callback: (payload) {
+          final data = (payload['payload'] is Map)
+              ? Map<String, dynamic>.from(payload['payload'] as Map)
+              : payload;
+          handleCoHostUpdated(data);
+        },
+      );
+
       void handlePresenceUpdate() {
         final presenceState = _presenceChannel!.presenceState();
         final List<UserProfile> activeUsers = [];
@@ -266,9 +344,13 @@ class RoomController extends ChangeNotifier {
             final userId = payload['user_id'] as String? ?? single.key;
             final username = payload['username'] as String? ?? 'Guest';
             final isUserHost = payload['is_host'] == true || payload['role'] == 'host';
+            final isUserCoHost = payload['is_co_host'] == true || payload['role'] == 'co_host';
             if (isUserHost && username != 'Host') {
               detectedHostId = userId;
               detectedHostName = username;
+            }
+            if (isUserCoHost && userId.isNotEmpty) {
+              _coHostUserIds.add(userId);
             }
             activeUsers.add(UserProfile(
               id: userId,
@@ -282,10 +364,13 @@ class RoomController extends ChangeNotifier {
         _detectedHostId = detectedHostId;
         _detectedHostName = detectedHostName;
 
-        // Always ensure currentUser is included even before presence echo
+        // Always ensure currentUser is included even before presence echo, excluding kicked users
         final uniqueMap = <String, UserProfile>{
-          if (_currentUser.id.isNotEmpty) _currentUser.id: _currentUser,
-          for (var u in activeUsers) (u.id.isNotEmpty ? u.id : u.username): u,
+          if (_currentUser.id.isNotEmpty && !_kickedUserIds.contains(_currentUser.id))
+            _currentUser.id: _currentUser,
+          for (var u in activeUsers)
+            if (!_kickedUserIds.contains(u.id) && !_kickedUserIds.contains(u.username))
+              (u.id.isNotEmpty ? u.id : u.username): u,
         };
 
         debugPrint(
@@ -455,7 +540,8 @@ class RoomController extends ChangeNotifier {
             'avatar_url': _currentUser.avatarUrl,
             'is_guest': _currentUser.isGuest,
             'is_host': isHost,
-            'role': isHost ? 'host' : 'viewer',
+            'is_co_host': isCurrentUserCoHost,
+            'role': isHost ? 'host' : (isCurrentUserCoHost ? 'co_host' : 'viewer'),
           });
           debugPrint('[RoomController] Presence track response: $res');
         }
@@ -713,6 +799,186 @@ class RoomController extends ChangeNotifier {
       closedReason: 'Room telah ditutup oleh Host.',
     );
     notifyListeners();
+  }
+
+  /// Handles incoming KICK_PARTICIPANT broadcast event
+  @visibleForTesting
+  void handleKickParticipant(Map<String, dynamic> data) {
+    final targetId = data['target_user_id'] as String?;
+    final targetName = data['target_username'] as String?;
+    final reason = data['reason'] as String? ?? 'Kamu telah dikeluarkan dari room.';
+
+    if (targetId == _currentUser.id ||
+        (targetName != null && targetName == _currentUser.username)) {
+      _state = _state.copyWith(
+        isRoomClosed: true,
+        closedReason: reason,
+      );
+      notifyListeners();
+      onKicked?.call(reason);
+    } else if (targetId != null || targetName != null) {
+      if (targetId != null) _kickedUserIds.add(targetId);
+      if (targetName != null) _kickedUserIds.add(targetName);
+      final updated = _state.participants
+          .where((p) => p.id != targetId && p.username != targetName)
+          .toList();
+      _state = _state.copyWith(
+        participants: updated,
+        room: _state.room.copyWith(participantCount: updated.length),
+      );
+      notifyListeners();
+      final displayName = targetName ?? 'Peserta';
+      onModerationNotice?.call('$displayName telah dikeluarkan dari room.');
+    }
+  }
+
+  /// Handles incoming FORCE_MUTE_PARTICIPANT broadcast event
+  @visibleForTesting
+  void handleForceMuteParticipant(Map<String, dynamic> data) {
+    final targetId = data['target_user_id'] as String?;
+    final targetName = data['target_username'] as String?;
+
+    if (targetId == _currentUser.id ||
+        (targetName != null && targetName == _currentUser.username)) {
+      onForceMuteReceived?.call();
+    } else {
+      final displayName = targetName ?? 'Peserta';
+      onModerationNotice?.call('Mikrofon $displayName telah dimatikan.');
+    }
+  }
+
+  /// Handles incoming CO_HOST_UPDATED broadcast event
+  @visibleForTesting
+  void handleCoHostUpdated(Map<String, dynamic> data) {
+    final targetId = data['target_user_id'] as String?;
+    final targetName = data['target_username'] as String? ?? 'Peserta';
+    final isCoHostVal = data['is_co_host'] as bool? ?? false;
+
+    if (targetId != null) {
+      if (isCoHostVal) {
+        _coHostUserIds.add(targetId);
+        onModerationNotice?.call('⭐ $targetName sekarang menjadi Co-Host.');
+      } else {
+        _coHostUserIds.remove(targetId);
+        onModerationNotice?.call('👤 $targetName tidak lagi menjadi Co-Host.');
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Kicks a participant from the room (Host or Co-Host only)
+  Future<void> kickParticipant(UserProfile target, {String? reason, dynamic chatController}) async {
+    if (!canModerateUser(target.id) && !canModerateUser(target.username)) return;
+
+    _kickedUserIds.add(target.id);
+    _kickedUserIds.add(target.username);
+    final effectiveReason = reason ?? 'Dikeluarkan dari room oleh ${currentUser.username}.';
+
+    // Broadcast KICK_PARTICIPANT
+    try {
+      if (_presenceChannel != null) {
+        await _presenceChannel!.sendBroadcastMessage(
+          event: 'KICK_PARTICIPANT',
+          payload: {
+            'room_id': _state.room.id,
+            'code': _state.room.code,
+            'target_user_id': target.id,
+            'target_username': target.username,
+            'by_user_id': currentUser.id,
+            'by_username': currentUser.username,
+            'reason': effectiveReason,
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[RoomController] Error broadcasting KICK_PARTICIPANT: $e');
+    }
+
+    final updated = _state.participants
+        .where((p) => p.id != target.id && p.username != target.username)
+        .toList();
+    _state = _state.copyWith(
+      participants: updated,
+      room: _state.room.copyWith(participantCount: updated.length),
+    );
+    notifyListeners();
+
+    try {
+      chatController?.sendSystemMessage(
+        '🚫 ${target.username} dikeluarkan dari room oleh ${currentUser.username}.',
+      );
+    } catch (_) {}
+  }
+
+  /// Force mutes a participant\'s microphone (Host or Co-Host only)
+  Future<void> forceMuteParticipant(UserProfile target, {dynamic chatController}) async {
+    if (!canModerateUser(target.id) && !canModerateUser(target.username)) return;
+
+    try {
+      if (_presenceChannel != null) {
+        await _presenceChannel!.sendBroadcastMessage(
+          event: 'FORCE_MUTE_PARTICIPANT',
+          payload: {
+            'room_id': _state.room.id,
+            'code': _state.room.code,
+            'target_user_id': target.id,
+            'target_username': target.username,
+            'by_user_id': currentUser.id,
+            'by_username': currentUser.username,
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[RoomController] Error broadcasting FORCE_MUTE_PARTICIPANT: $e');
+    }
+
+    try {
+      chatController?.sendSystemMessage(
+        '🔇 Mikrofon ${target.username} dimatikan oleh ${currentUser.username}.',
+      );
+    } catch (_) {}
+  }
+
+  /// Toggles Co-Host role for a participant (Host only)
+  Future<void> toggleCoHost(UserProfile target, {dynamic chatController}) async {
+    if (!isHost) return;
+
+    final isTargetCurrentlyCoHost = isCoHost(target.id);
+    final newCoHostState = !isTargetCurrentlyCoHost;
+
+    if (newCoHostState) {
+      _coHostUserIds.add(target.id);
+    } else {
+      _coHostUserIds.remove(target.id);
+    }
+    notifyListeners();
+
+    try {
+      if (_presenceChannel != null) {
+        await _presenceChannel!.sendBroadcastMessage(
+          event: 'CO_HOST_UPDATED',
+          payload: {
+            'room_id': _state.room.id,
+            'code': _state.room.code,
+            'target_user_id': target.id,
+            'target_username': target.username,
+            'is_co_host': newCoHostState,
+            'by_user_id': currentUser.id,
+            'by_username': currentUser.username,
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[RoomController] Error broadcasting CO_HOST_UPDATED: $e');
+    }
+
+    try {
+      chatController?.sendSystemMessage(
+        newCoHostState
+            ? '⭐ ${target.username} sekarang menjadi Co-Host.'
+            : '👤 ${target.username} tidak lagi menjadi Co-Host.',
+      );
+    } catch (_) {}
   }
 
   @override

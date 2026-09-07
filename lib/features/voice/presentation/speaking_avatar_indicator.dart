@@ -9,6 +9,7 @@ class SpeakingAvatarIndicator extends StatelessWidget {
   final bool isSpeaking;
   final bool isMuted;
   final bool isHost;
+  final bool isCoHost;
   final bool showName;
   final double size;
 
@@ -19,6 +20,7 @@ class SpeakingAvatarIndicator extends StatelessWidget {
     required this.isSpeaking,
     this.isMuted = false,
     this.isHost = false,
+    this.isCoHost = false,
     this.showName = true,
     this.size = 40,
   });
@@ -39,8 +41,10 @@ class SpeakingAvatarIndicator extends StatelessWidget {
             border: Border.all(
               color: isSpeaking
                   ? AppColors.accentGreen
-                  : (isHost ? AppColors.accentYellow : AppColors.border),
-              width: isSpeaking ? 2.5 : (isHost ? 1.8 : 1.2),
+                  : (isHost
+                      ? AppColors.accentYellow
+                      : (isCoHost ? AppColors.secondaryNeon : AppColors.border)),
+              width: isSpeaking ? 2.5 : ((isHost || isCoHost) ? 1.8 : 1.2),
             ),
             boxShadow: isSpeaking
                 ? [
@@ -50,7 +54,15 @@ class SpeakingAvatarIndicator extends StatelessWidget {
                       spreadRadius: 2,
                     ),
                   ]
-                : null,
+                : (isCoHost
+                    ? [
+                        BoxShadow(
+                          color: AppColors.secondaryNeon.withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null),
           ),
           child: Center(
             child: Text(
@@ -60,13 +72,22 @@ class SpeakingAvatarIndicator extends StatelessWidget {
           ),
         ),
 
-        // Crown badge for Room Host
+        // Crown badge for Room Host / Star badge for Co-Host
         if (isHost)
           Positioned(
             top: -6,
             right: -3,
             child: Text(
               '👑',
+              style: TextStyle(fontSize: size * 0.3),
+            ),
+          )
+        else if (isCoHost)
+          Positioned(
+            top: -6,
+            right: -3,
+            child: Text(
+              '⭐',
               style: TextStyle(fontSize: size * 0.3),
             ),
           ),

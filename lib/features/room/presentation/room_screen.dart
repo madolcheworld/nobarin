@@ -121,7 +121,61 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         player: _player,
         supabase: supabase,
         isHostProvider: () => _roomController?.isHost ?? false,
+        canControlProvider: () => _roomController?.canControlMedia ?? false,
       );
+
+      _roomController!.onForceMuteReceived = () {
+        if (!mounted) return;
+        _voiceController?.forceMute();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.mic_off_rounded, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Mikrofon kamu dimatikan oleh Host/Co-Host.'),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.accentYellow,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      };
+
+      _roomController!.onModerationNotice = (notice) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(notice),
+            backgroundColor: AppColors.surfaceElevated,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      };
+
+      _roomController!.onKicked = (reason) {
+        if (!mounted) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.block_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(reason)),
+              ],
+            ),
+            backgroundColor: AppColors.accentRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        ref.read(lobbyControllerProvider.notifier).refreshRooms();
+        context.go('/lobby');
+      };
 
       _roomController!.onRoomClosed = (reason) {
         if (!mounted) return;
@@ -187,6 +241,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         chatController: _chatController,
         supabase: supabase,
         isHostProvider: () => _roomController?.isHost ?? false,
+        isCoHostProvider: () => _roomController?.isCurrentUserCoHost ?? false,
         isCollaborativeProvider: () =>
             _roomController?.currentRoom.isCollaborative ?? false,
       );
@@ -775,6 +830,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                           hostName: currentRoom.hostName,
                           speakingUserIds: speakingIds,
                           mutedUserIds: mutedIds,
+                          coHostUserIds: _roomController?.coHostUserIds ?? {},
+                          roomController: _roomController,
+                          chatController: _chatController,
                         ),
                         Expanded(
                           child: _chatController != null
@@ -843,6 +901,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   hostName: currentRoom.hostName,
                   speakingUserIds: speakingIds,
                   mutedUserIds: mutedIds,
+                  coHostUserIds: _roomController?.coHostUserIds ?? {},
+                  roomController: _roomController,
+                  chatController: _chatController,
                 ),
 
                 // Chat Panel (fills rest of screen)

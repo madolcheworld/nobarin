@@ -69,6 +69,9 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
   Function(RTCPeerConnectionState state)? onConnectionState;
 
   @override
+  Function(RTCIceConnectionState state)? onIceConnectionState;
+
+  @override
   Future<void> setLocalDescription(RTCSessionDescription description) async {
     localDesc = description;
   }

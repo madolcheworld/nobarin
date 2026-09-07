@@ -755,6 +755,11 @@ class WebRtcVoiceController extends ChangeNotifier {
     await toggleMic();
   }
 
+  /// Forces local microphone to mute (e.g. remotely muted by Host/Co-Host)
+  Future<void> forceMute() async {
+    await setMicMuted(true);
+  }
+
   /// Toggles deafen state (mutes all incoming remote voice streams)
   void toggleDeafen() {
     _isDeafened = !_isDeafened;

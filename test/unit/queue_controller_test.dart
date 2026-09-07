@@ -238,5 +238,28 @@ void main() {
       player.onPlaybackEnded?.call();
       expect(endedCalled, isTrue);
     });
+
+    test('isCoHostProvider grants queue controls in host_only mode', () {
+      bool isCoHost = false;
+      final guestQueue = QueueController(
+        roomId: testRoom.id,
+        currentUser: const UserProfile(id: 'guest-1', username: 'Guest1', isGuest: true),
+        syncController: syncController,
+        isHostProvider: () => false,
+        isCollaborativeProvider: () => false,
+        isCoHostProvider: () => isCoHost,
+      );
+
+      // Initially not co-host
+      expect(guestQueue.canAddToQueue, isFalse);
+      expect(guestQueue.canManageQueue, isFalse);
+
+      // Promoted to co-host
+      isCoHost = true;
+      expect(guestQueue.canAddToQueue, isTrue);
+      expect(guestQueue.canManageQueue, isTrue);
+
+      guestQueue.dispose();
+    });
   });
 }

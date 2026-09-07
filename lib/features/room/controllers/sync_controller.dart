@@ -15,6 +15,7 @@ class SyncController extends ChangeNotifier {
   final SyncEngine syncEngine;
   final SupabaseClient? supabase;
   final bool Function()? isHostProvider;
+  final bool Function()? canControlProvider;
 
   RealtimeChannel? _realtimeChannel;
   Timer? _heartbeatTimer;
@@ -36,6 +37,7 @@ class SyncController extends ChangeNotifier {
     SyncEngine? engine,
     this.supabase,
     this.isHostProvider,
+    this.canControlProvider,
   })  : syncEngine = engine ?? SyncEngine() {
     _initChannel();
     _setupPlayerListeners();
@@ -52,6 +54,7 @@ class SyncController extends ChangeNotifier {
   /// Whether current user has permission to control playback
   bool get canControl {
     if (room.isCollaborative) return true;
+    if (canControlProvider?.call() ?? false) return true;
     if (isHostProvider?.call() ?? false) return true;
     if (room.hostId != null &&
         room.hostId!.isNotEmpty &&
