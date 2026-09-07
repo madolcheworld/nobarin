@@ -71,7 +71,10 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
   RTCSessionDescription? remoteDesc;
   final List<RTCIceCandidate> candidates = [];
   final List<MediaStreamTrack> addedTracks = [];
+  final List<FakeRtpSender> fakeSenders = [];
   List<StatsReport> statsReports = [];
+  @override
+  RTCSignalingState signalingState = RTCSignalingState.RTCSignalingStateStable;
   bool isClosed = false;
 
   @override
@@ -82,6 +85,15 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
 
   @override
   Function(RTCPeerConnectionState state)? onConnectionState;
+
+  @override
+  Future<RTCSignalingState> getSignalingState() async => signalingState;
+
+  @override
+  Future<List<RTCRtpSender>> getSenders() async => fakeSenders;
+
+  @override
+  Future<List<RTCRtpSender>> get senders async => fakeSenders;
 
   @override
   Future<void> setLocalDescription(RTCSessionDescription description) async {
@@ -124,7 +136,9 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
     MediaStream? stream,
   ]) async {
     addedTracks.add(track);
-    return FakeRtpSender();
+    final sender = FakeRtpSender(track);
+    fakeSenders.add(sender);
+    return sender;
   }
 
   @override
@@ -146,6 +160,17 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
 }
 
 class FakeRtpSender implements RTCRtpSender {
+  MediaStreamTrack? _track;
+  FakeRtpSender([this._track]);
+
+  @override
+  MediaStreamTrack? get track => _track;
+
+  @override
+  Future<void> replaceTrack(MediaStreamTrack? track) async {
+    _track = track;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -989,6 +1014,7 @@ void main() {
         userName: 'UI User',
         playerController: fakePlayer,
         supabase: null,
+        audioRouteHandler: (_) async {},
         userMediaFunction: (_) async => fakeStream,
         peerConnectionFunction: (config, [constraints = const {}]) async =>
             fakePeerConnection,
@@ -1017,7 +1043,8 @@ void main() {
 
       // Tap mic toggle to turn on
       await tester.tap(find.text('Buka Mic'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(controller.isMicMuted, isFalse);
       expect(find.text('Mic Nyala'), findsOneWidget);
@@ -1025,13 +1052,15 @@ void main() {
       // Tap deafen button
       expect(controller.isDeafened, isFalse);
       await tester.tap(find.byIcon(Icons.headset_rounded));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(controller.isDeafened, isTrue);
 
       // Tap ducking switch
       expect(controller.isAudioDuckingEnabled, isTrue);
       await tester.tap(find.byType(Switch));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(controller.isAudioDuckingEnabled, isFalse);
     });
 

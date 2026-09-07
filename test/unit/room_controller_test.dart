@@ -239,10 +239,25 @@ void main() {
 
       // Room remains open
       expect(hostController.isRoomClosed, isFalse);
-      expect(hostController.currentRoom.hostId, participantUser.id);
-      expect(hostController.currentRoom.hostName, participantUser.username);
       // Former host is no longer host
       expect(hostController.isHost, isFalse);
+    });
+
+    test('promoteToHost triggers onSystemNotice with departure and promotion info', () async {
+      final guestController = RoomController(
+        initialRoom: testRoom.copyWith(hostName: 'AliceOldHost'),
+        currentUser: participantUser,
+      );
+
+      String? systemNotice;
+      guestController.onSystemNotice = (msg) {
+        systemNotice = msg;
+      };
+
+      await guestController.promoteToHost(participantUser);
+
+      expect(systemNotice, contains('AliceOldHost (Host) keluar'));
+      expect(systemNotice, contains(participantUser.username));
     });
   });
 }

@@ -30,6 +30,8 @@ class ChatController extends ChangeNotifier {
   Stream<FloatingReaction> get reactionsStream =>
       _reactionsStreamController.stream;
 
+  final Map<String, DateTime> _recentSystemMessages = {};
+
   RealtimeChannel? _chatChannel;
   bool _isDisposed = false;
 
@@ -55,6 +57,14 @@ class ChatController extends ChangeNotifier {
           final message = ChatMessage.fromJson(payload);
           // Deduplicate if already added locally (e.g. sender self-broadcast echo)
           if (_messages.any((m) => m.id == message.id)) {
+            return;
+          }
+          // Deduplicate system messages with identical content within 6 seconds
+          if (message.isSystem &&
+              _messages.reversed.take(6).any((m) =>
+                  m.isSystem &&
+                  m.content == message.content &&
+                  DateTime.now().difference(m.createdAt).inSeconds.abs() < 6)) {
             return;
           }
           _messages.add(message);
@@ -205,12 +215,19 @@ class ChatController extends ChangeNotifier {
     final clean = content.trim();
     if (clean.isEmpty) return;
 
+    final now = DateTime.now();
+    final lastSent = _recentSystemMessages[clean];
+    if (lastSent != null && now.difference(lastSent).inSeconds < 6) {
+      return;
+    }
+    _recentSystemMessages[clean] = now;
+
     final msg = ChatMessage(
       id: const Uuid().v4(),
       roomId: roomId,
       content: clean,
       type: 'system',
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
 
     _messages.add(msg);

@@ -10,6 +10,8 @@ import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
 import '../../lobby/presentation/lobby_controller.dart';
+import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
+import '../../screenshare/presentation/widgets/screen_share_view.dart';
 import '../../voice/controllers/webrtc_voice_controller.dart';
 import '../../voice/presentation/voice_control_bar.dart';
 import '../controllers/queue_controller.dart';
@@ -51,6 +53,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   ChatController? _chatController;
   WebRtcVoiceController? _voiceController;
   QueueController? _queueController;
+  WebRtcScreenShareController? _screenShareController;
 
   @override
   void initState() {
@@ -149,6 +152,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         supabase: supabase,
       );
 
+      _roomController!.onParticipantLeft = (username) {
+        _chatController?.sendSystemMessage('$username keluar');
+      };
+      _roomController!.onSystemNotice = (msg) {
+        _chatController?.sendSystemMessage(msg);
+      };
+
       _voiceController = WebRtcVoiceController(
         roomId: room.id,
         userId: user.id,
@@ -181,6 +191,20 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
             _roomController?.currentRoom.isCollaborative ?? false,
       );
       _queueController!.addListener(_onControllerUpdated);
+
+      _screenShareController = WebRtcScreenShareController(
+        roomId: room.id,
+        userId: user.id,
+        userName: user.username,
+        playerController: _player,
+        supabase: supabase,
+        iceConfiguration: ApiConstants.rtcIceConfiguration,
+        isHostProvider: () => _roomController?.isHost ?? false,
+        isCollaborativeProvider: () =>
+            _roomController?.currentRoom.isCollaborative ?? false,
+      );
+      _screenShareController!.initialize();
+      _screenShareController!.addListener(_onControllerUpdated);
 
       _player.onPlaybackEnded = () {
         if (!mounted) return;
@@ -324,6 +348,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     _chatController?.dispose();
     _voiceController?.dispose();
     _queueController?.dispose();
+    _screenShareController?.removeListener(_onControllerUpdated);
+    _screenShareController?.dispose();
     super.dispose();
   }
 
@@ -409,12 +435,15 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
           await _chatController!.sendSystemMessage(
             '${user.username} keluar',
           );
+          // Allow brief moment for broadcast packet to reach network before disposing channel
+          await Future.delayed(const Duration(milliseconds: 250));
         } catch (_) {}
       }
     }
 
-    // Disconnect voice
+    // Disconnect voice & screen share
     _voiceController?.disconnect();
+    _screenShareController?.dispose();
   }
 
   Future<bool> _onWillPop() async {
@@ -697,14 +726,22 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                         Expanded(
                           child: Stack(
                             children: [
-                              UnifiedPlayerView(
-                                player: _player,
-                                syncController: _syncController!,
-                                onOpenMediaPicker: _openMediaPicker,
-                                onExit: _handleExitRoom,
-                                title: currentRoom.title,
-                                showTopBar: false,
-                              ),
+                              if (_screenShareController?.isScreenSharingActive == true)
+                                ScreenShareView(
+                                  controller: _screenShareController!,
+                                  isHost: _roomController?.isHost ?? false,
+                                  onExit: _handleExitRoom,
+                                  roomTitle: currentRoom.title,
+                                )
+                              else
+                                UnifiedPlayerView(
+                                  player: _player,
+                                  syncController: _syncController!,
+                                  onOpenMediaPicker: _openMediaPicker,
+                                  onExit: _handleExitRoom,
+                                  title: currentRoom.title,
+                                  showTopBar: false,
+                                ),
                               if (_chatController != null)
                                 FloatingReactionOverlay(
                                   chatController: _chatController!,
@@ -717,6 +754,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                           player: _player,
                           roomController: _roomController!,
                           queueController: _queueController,
+                          screenShareController: _screenShareController,
                           onOpenMediaPicker: _openMediaPicker,
                           onOpenQueue: _openQueueSheet,
                         ),
@@ -759,17 +797,25 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
             // Mobile Portrait Layout: Top video, Middle controls & participants, Bottom chat
             return Column(
               children: [
-                // Top Video with Floating Reactions
+                // Top Video or Screen Share with Floating Reactions
                 Stack(
                   children: [
-                    UnifiedPlayerView(
-                      player: _player,
-                      syncController: _syncController!,
-                      onOpenMediaPicker: _openMediaPicker,
-                      onExit: _handleExitRoom,
-                      title: currentRoom.title,
-                      showTopBar: false,
-                    ),
+                    if (_screenShareController?.isScreenSharingActive == true)
+                      ScreenShareView(
+                        controller: _screenShareController!,
+                        isHost: _roomController?.isHost ?? false,
+                        onExit: _handleExitRoom,
+                        roomTitle: currentRoom.title,
+                      )
+                    else
+                      UnifiedPlayerView(
+                        player: _player,
+                        syncController: _syncController!,
+                        onOpenMediaPicker: _openMediaPicker,
+                        onExit: _handleExitRoom,
+                        title: currentRoom.title,
+                        showTopBar: false,
+                      ),
                     if (_chatController != null)
                       Positioned.fill(
                         child: FloatingReactionOverlay(
@@ -785,6 +831,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   player: _player,
                   roomController: _roomController!,
                   queueController: _queueController,
+                  screenShareController: _screenShareController,
                   onOpenMediaPicker: _openMediaPicker,
                   onOpenQueue: _openQueueSheet,
                 ),

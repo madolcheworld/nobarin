@@ -75,5 +75,18 @@ void main() {
       await chatController.sendSystemMessage('   ');
       expect(chatController.messages.length, initialCount);
     });
+
+    test('sendSystemMessage deduplicates identical messages within short window', () async {
+      await chatController.sendSystemMessage('Alex keluar');
+      expect(chatController.messages.length, 1);
+
+      // Immediate duplicate should be ignored
+      await chatController.sendSystemMessage('Alex keluar');
+      expect(chatController.messages.length, 1);
+
+      // Different message should be accepted
+      await chatController.sendSystemMessage('Bob keluar');
+      expect(chatController.messages.length, 2);
+    });
   });
 }

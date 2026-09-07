@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../screenshare/controllers/webrtc_screenshare_controller.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/room_controller.dart';
 import '../../controllers/sync_controller.dart';
@@ -11,6 +12,7 @@ class RoomControlsBar extends StatelessWidget {
   final UnifiedPlayerController player;
   final RoomController roomController;
   final QueueController? queueController;
+  final WebRtcScreenShareController? screenShareController;
   final VoidCallback onOpenMediaPicker;
   final VoidCallback? onOpenQueue;
 
@@ -20,6 +22,7 @@ class RoomControlsBar extends StatelessWidget {
     required this.player,
     required this.roomController,
     this.queueController,
+    this.screenShareController,
     required this.onOpenMediaPicker,
     this.onOpenQueue,
   });
@@ -52,6 +55,7 @@ class RoomControlsBar extends StatelessWidget {
           syncController,
           player,
           ?queueController,
+          ?screenShareController,
         ]),
         builder: (context, _) {
           final bool hasMedia = player.mediaUrl.isNotEmpty;
@@ -214,6 +218,10 @@ class RoomControlsBar extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (screenShareController != null) ...[
+                            _buildScreenShareButton(context, screenShareController!),
+                            const SizedBox(width: 4),
+                          ],
                           if (onOpenQueue != null || queueController != null) ...[
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
@@ -297,6 +305,95 @@ class RoomControlsBar extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildScreenShareButton(
+    BuildContext context,
+    WebRtcScreenShareController controller,
+  ) {
+    if (controller.isSharing) {
+      return ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.accentRed,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        onPressed: () => controller.stopScreenShare(),
+        icon: const Icon(Icons.stop_screen_share_rounded, size: 15),
+        label: const Text('Hentikan Layar', style: TextStyle(fontSize: 12)),
+      );
+    }
+
+    if (controller.isScreenSharingActive) {
+      return OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          backgroundColor: AppColors.surfaceElevated,
+          foregroundColor: AppColors.secondaryNeon,
+          side: const BorderSide(color: AppColors.secondaryNeon),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${controller.sharerName ?? "Peserta"} sedang berbagi layar.',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        icon: const Icon(Icons.personal_video_rounded, size: 15),
+        label: Text(
+          'Layar: ${controller.sharerName ?? "Aktif"}',
+          style: const TextStyle(fontSize: 12),
+        ),
+      );
+    }
+
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: AppColors.surfaceElevated,
+        foregroundColor: AppColors.textSecondary,
+        side: const BorderSide(color: AppColors.border),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      onPressed: controller.canShareScreen
+          ? () async {
+              final success = await controller.startScreenShare();
+              if (!success && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tidak dapat memulai berbagi layar.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            }
+          : () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Hanya Host yang dapat membagikan layar pada mode Host Only.',
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+      icon: const Icon(Icons.screen_share_rounded, size: 15),
+      label: const Text('Bagi Layar', style: TextStyle(fontSize: 12)),
     );
   }
 }

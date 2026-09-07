@@ -22,6 +22,8 @@ typedef PeerConnectionFunction = Future<RTCPeerConnection> Function(
   Map<String, dynamic> constraints,
 ]);
 
+typedef AudioRouteHandler = Future<void> Function(bool enableSpeaker);
+
 /// Controller for WebRTC P2P Mesh Voice Chat using Supabase Realtime for signaling.
 class WebRtcVoiceController extends ChangeNotifier {
   final String roomId;
@@ -33,6 +35,7 @@ class WebRtcVoiceController extends ChangeNotifier {
 
   final UserMediaFunction _userMediaFunction;
   final PeerConnectionFunction _peerConnectionFunction;
+  final AudioRouteHandler _audioRouteHandler;
 
   VoiceStatus _status = VoiceStatus.disconnected;
   bool _isMicMuted = true;
@@ -51,6 +54,8 @@ class WebRtcVoiceController extends ChangeNotifier {
   final Map<String, RTCPeerConnection> _peerConnections = {};
   // In-flight peer connection creation lock to prevent concurrency race conditions
   final Map<String, Future<RTCPeerConnection>> _creatingPeerConnections = {};
+  // In-flight offers to prevent duplicate offer storm / collision
+  final Set<String> _inFlightOffers = {};
   // Remote audio streams: remotePeerId -> MediaStream?
   final Map<String, MediaStream?> _remoteStreams = {};
   // Remote audio tracks: remotePeerId -> Set<MediaStreamTrack>
@@ -77,6 +82,29 @@ class WebRtcVoiceController extends ChangeNotifier {
 
   final bool autoCaptureMic;
 
+  /// High-fidelity studio voice audio constraints with hardware/software AEC, NS, AGC, and 48kHz mono
+  static const Map<String, dynamic> highQualityAudioConstraints = {
+    'audio': {
+      'echoCancellation': true,
+      'noiseSuppression': true,
+      'autoGainControl': true,
+      'googEchoCancellation': true,
+      'googEchoCancellation2': true,
+      'googAutoGainControl': true,
+      'googAutoGainControl2': true,
+      'googNoiseSuppression': true,
+      'googNoiseSuppression2': true,
+      'googHighpassFilter': true,
+      'googTypingNoiseDetection': true,
+      'googAudioMirroring': false,
+      'channelCount': 1,
+      'sampleRate': 48000,
+      'sampleSize': 16,
+      'latency': 0,
+    },
+    'video': false,
+  };
+
   WebRtcVoiceController({
     required this.roomId,
     required this.userId,
@@ -87,11 +115,69 @@ class WebRtcVoiceController extends ChangeNotifier {
     bool? autoCaptureMic,
     UserMediaFunction? userMediaFunction,
     PeerConnectionFunction? peerConnectionFunction,
+    AudioRouteHandler? audioRouteHandler,
   })  : autoCaptureMic = autoCaptureMic ?? false,
         _userMediaFunction = userMediaFunction ?? _defaultUserMedia,
         _peerConnectionFunction =
-            peerConnectionFunction ?? _defaultPeerConnection {
+            peerConnectionFunction ?? _defaultPeerConnection,
+        _audioRouteHandler = audioRouteHandler ?? _defaultAudioRouteHandler {
     _mutedUserIds.add(userId);
+  }
+
+  static Future<void> _defaultAudioRouteHandler(bool enable) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await Helper.setSpeakerphoneOn(enable);
+    } catch (e) {
+      debugPrint('[WebRtcVoiceController] Helper.setSpeakerphoneOn note: $e');
+    }
+  }
+
+  /// Optimizes WebRTC SDP for Opus audio: sets FEC (packet loss recovery), DTX (silence suppression),
+  /// 64kbps bitrate, and enforces mono for optimal AEC performance.
+  static String optimizeAudioSdp(String sdp) {
+    // Find opus payload type from a=rtpmap:<pt> opus/48000
+    final rtpmapRegex =
+        RegExp(r'a=rtpmap:(\d+)\s+opus/48000', caseSensitive: false);
+    final match = rtpmapRegex.firstMatch(sdp);
+    if (match == null) return sdp;
+    final pt = match.group(1);
+
+    final fmtpRegex = RegExp('a=fmtp:$pt (.*)');
+    const optimalParams =
+        'minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
+
+    if (fmtpRegex.hasMatch(sdp)) {
+      return sdp.replaceAllMapped(fmtpRegex, (m) {
+        final existing = m.group(1) ?? '';
+        final params = existing
+            .split(';')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final paramMap = <String, String>{};
+        for (final p in params) {
+          final parts = p.split('=');
+          if (parts.length == 2) {
+            paramMap[parts[0].trim()] = parts[1].trim();
+          }
+        }
+        paramMap['minptime'] = '10';
+        paramMap['useinbandfec'] = '1';
+        paramMap['usedtx'] = '1';
+        paramMap['stereo'] = '0';
+        paramMap['sprop-stereo'] = '0';
+        paramMap['maxaveragebitrate'] = '64000';
+        final newParams =
+            paramMap.entries.map((e) => '${e.key}=${e.value}').join(';');
+        return 'a=fmtp:$pt $newParams';
+      });
+    } else {
+      return sdp.replaceFirst(
+        'a=rtpmap:$pt opus/48000/2',
+        'a=rtpmap:$pt opus/48000/2\r\na=fmtp:$pt $optimalParams',
+      );
+    }
   }
 
   static Future<MediaStream> _defaultUserMedia(
@@ -122,14 +208,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       // By default in production, hardware microphone is NEVER captured until user explicitly unmutes.
       if (autoCaptureMic) {
         try {
-          final stream = await _userMediaFunction({
-            'audio': {
-              'echoCancellation': true,
-              'noiseSuppression': true,
-              'autoGainControl': true,
-            },
-            'video': false,
-          });
+          final stream = await _userMediaFunction(highQualityAudioConstraints);
           _localStream = stream;
           // Ensure track is disabled when muted
           for (final track in _localStream!.getAudioTracks()) {
@@ -141,6 +220,9 @@ class WebRtcVoiceController extends ChangeNotifier {
       } else {
         _localStream = null;
       }
+
+      // 2. Engage speakerphone & hardware AEC on Android
+      await _audioRouteHandler(true);
 
       // 2. Setup Supabase Realtime signaling
       if (supabase == null) {
@@ -297,8 +379,10 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
 
     if (action == 'announce') {
-      // Existing peer announced itself in response to our join
-      if (userId.compareTo(senderId) > 0) {
+      // Existing peer announced itself in response to our join.
+      // Only initiate offer if connection does not already exist to avoid duplicate offer collisions!
+      if (!_peerConnections.containsKey(senderId) &&
+          userId.compareTo(senderId) > 0) {
         await _initiateOfferTo(senderId);
       }
       _handleAudioDucking();
@@ -310,31 +394,50 @@ class WebRtcVoiceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Creates and sends an SDP offer to [remotePeerId]
+  /// Creates and sends an SDP offer to [remotePeerId] with Opus optimization and in-flight guard
   Future<void> _initiateOfferTo(String remotePeerId) async {
+    if (_isDisposed || _inFlightOffers.contains(remotePeerId)) return;
+
+    _inFlightOffers.add(remotePeerId);
     try {
       final pc = await _getOrCreatePeerConnection(remotePeerId);
+
+      // Verify signaling state is stable before creating offer
+      try {
+        final state = await pc.getSignalingState();
+        if (state != RTCSignalingState.RTCSignalingStateStable) {
+          debugPrint(
+              '[WebRtcVoiceController] Skipping offer to $remotePeerId; state is $state');
+          return;
+        }
+      } catch (_) {}
+
       final offer = await pc.createOffer({
         'offerToReceiveAudio': 1,
         'offerToReceiveVideo': 0,
       });
-      await pc.setLocalDescription(offer);
+
+      final optimizedSdp = optimizeAudioSdp(offer.sdp ?? '');
+      final optimizedOffer = RTCSessionDescription(optimizedSdp, offer.type);
+      await pc.setLocalDescription(optimizedOffer);
 
       await _sendSignalingMessage('VOICE_OFFER', {
         'sender_id': userId,
         'target_id': remotePeerId,
         'sdp': {
-          'type': offer.type,
-          'sdp': offer.sdp,
+          'type': optimizedOffer.type,
+          'sdp': optimizedOffer.sdp,
         },
       });
     } catch (e) {
       debugPrint(
           '[WebRtcVoiceController] Error initiating offer to $remotePeerId: $e');
+    } finally {
+      _inFlightOffers.remove(remotePeerId);
     }
   }
 
-  /// Handles incoming VOICE_OFFER targeted at this user
+  /// Handles incoming VOICE_OFFER targeted at this user with Opus optimization
   @visibleForTesting
   Future<void> handleVoiceOffer(Map<String, dynamic> payload) async {
     final senderId = payload['sender_id'] as String?;
@@ -354,7 +457,10 @@ class WebRtcVoiceController extends ChangeNotifier {
         'offerToReceiveAudio': 1,
         'offerToReceiveVideo': 0,
       });
-      await pc.setLocalDescription(answer);
+
+      final optimizedSdp = optimizeAudioSdp(answer.sdp ?? '');
+      final optimizedAnswer = RTCSessionDescription(optimizedSdp, answer.type);
+      await pc.setLocalDescription(optimizedAnswer);
 
       // Flush any queued ICE candidates after local description is set (state is stable)
       await _flushPendingCandidates(senderId, pc);
@@ -363,8 +469,8 @@ class WebRtcVoiceController extends ChangeNotifier {
         'sender_id': userId,
         'target_id': senderId,
         'sdp': {
-          'type': answer.type,
-          'sdp': answer.sdp,
+          'type': optimizedAnswer.type,
+          'sdp': optimizedAnswer.sdp,
         },
       });
     } catch (e) {
@@ -448,6 +554,35 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
   }
 
+  /// Safely attaches local audio tracks to [pc], reusing existing audio senders if present
+  /// to avoid duplicate audio senders / m-lines in WebRTC unified-plan.
+  Future<void> _attachLocalAudioTracksTo(RTCPeerConnection pc) async {
+    if (_localStream == null) return;
+    for (final track in _localStream!.getAudioTracks()) {
+      track.enabled = !_isMicMuted;
+      try {
+        final senders = await pc.getSenders();
+        final existingSender = senders.where((s) {
+          try {
+            return s.track?.kind == 'audio' || s.track == null;
+          } catch (_) {
+            return false;
+          }
+        }).firstOrNull;
+
+        if (existingSender != null) {
+          await existingSender.replaceTrack(track);
+        } else {
+          await pc.addTrack(track, _localStream!);
+        }
+      } catch (_) {
+        try {
+          await pc.addTrack(track, _localStream!);
+        } catch (_) {}
+      }
+    }
+  }
+
   /// Creates or retrieves existing RTCPeerConnection for [remotePeerId]
   Future<RTCPeerConnection> _getOrCreatePeerConnection(
     String remotePeerId,
@@ -463,7 +598,10 @@ class WebRtcVoiceController extends ChangeNotifier {
     _creatingPeerConnections[remotePeerId] = completer.future;
 
     try {
-      final pcConfig = iceConfiguration ?? ApiConstants.rtcIceConfiguration;
+      final pcConfig = <String, dynamic>{
+        ...iceConfiguration ?? ApiConstants.rtcIceConfiguration,
+        'sdpSemantics': 'unified-plan',
+      };
       final pc = await _peerConnectionFunction(pcConfig, {
         'mandatory': {},
         'optional': [
@@ -473,11 +611,9 @@ class WebRtcVoiceController extends ChangeNotifier {
 
       _peerConnections[remotePeerId] = pc;
 
-      // Attach local audio track if available
+      // Attach local audio track if available, reusing existing sender if any
       if (_localStream != null) {
-        for (final track in _localStream!.getAudioTracks()) {
-          await pc.addTrack(track, _localStream!);
-        }
+        await _attachLocalAudioTracksTo(pc);
       }
 
       // Send local ICE candidates to peer
@@ -494,18 +630,27 @@ class WebRtcVoiceController extends ChangeNotifier {
         });
       };
 
-      // Track remote audio stream and tracks
+      // Track remote audio stream and tracks with deduplication
       pc.onTrack = (event) {
         if (event.track.kind == 'audio') {
+          // Disable any prior active tracks from this remote peer to prevent duplicate/echo audio
+          final existingTracks = _remoteAudioTracks[remotePeerId];
+          if (existingTracks != null) {
+            for (final oldTrack in existingTracks) {
+              if (oldTrack.id != event.track.id) {
+                oldTrack.enabled = false;
+              }
+            }
+          }
+
           _remoteStreams[remotePeerId] =
               event.streams.isNotEmpty ? event.streams[0] : null;
-          _remoteAudioTracks
-              .putIfAbsent(remotePeerId, () => {})
-              .add(event.track);
+          _remoteAudioTracks[remotePeerId] = {event.track};
 
-          if (_isDeafened) {
-            event.track.enabled = false;
-          }
+          event.track.enabled = !_isDeafened;
+
+          // Ensure speakerphone is active on mobile so audio routes to speaker with hardware AEC
+          _audioRouteHandler(true);
         }
       };
 
@@ -557,22 +702,12 @@ class WebRtcVoiceController extends ChangeNotifier {
     // Lazily acquire mic if not yet available and user wants to unmute
     if (!_isMicMuted && _localStream == null) {
       try {
-        final stream = await _userMediaFunction({
-          'audio': {
-            'echoCancellation': true,
-            'noiseSuppression': true,
-            'autoGainControl': true,
-          },
-          'video': false,
-        });
+        final stream = await _userMediaFunction(highQualityAudioConstraints);
         _localStream = stream;
         for (final entry in _peerConnections.entries) {
           final peerId = entry.key;
           final pc = entry.value;
-          for (final track in _localStream!.getAudioTracks()) {
-            track.enabled = true;
-            await pc.addTrack(track, _localStream!);
-          }
+          await _attachLocalAudioTracksTo(pc);
           await _initiateOfferTo(peerId);
         }
       } catch (e) {
@@ -823,12 +958,15 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
     _peerConnections.clear();
     _creatingPeerConnections.clear();
+    _inFlightOffers.clear();
     _remoteStreams.clear();
     _remoteAudioTracks.clear();
     _pendingCandidates.clear();
     _activeSpeakerIds.clear();
     _mutedUserIds.clear();
     _mutedUserIds.add(userId);
+
+    await _audioRouteHandler(false);
 
     try {
       _localStream?.getTracks().forEach((t) => t.stop());

@@ -53,6 +53,11 @@ class RoomController extends ChangeNotifier {
 
   void Function(String reason)? onRoomClosed;
   void Function(String? newHostId, String? newHostName)? onHostChanged;
+  void Function(String username)? onParticipantLeft;
+  void Function(String message)? onSystemNotice;
+
+  Set<String> _knownParticipantKeys = {};
+  Map<String, String> _knownParticipantNames = {};
 
   String? _detectedHostId;
   String? _detectedHostName;
@@ -309,6 +314,42 @@ class RoomController extends ChangeNotifier {
           }
         }
 
+        final currentKeys = uniqueMap.keys.toSet();
+
+        // Identify departed participants after presence has been established
+        if (_hasEstablishedPresence) {
+          final departedKeys = _knownParticipantKeys.difference(currentKeys);
+          for (final departedKey in departedKeys) {
+            if (departedKey == _currentUser.id ||
+                departedKey == _currentUser.username) {
+              continue;
+            }
+
+            final departedName = _knownParticipantNames[departedKey];
+            if (departedName != null &&
+                departedName.isNotEmpty &&
+                departedName != 'Host') {
+              // Elect reporter to prevent multiple clients broadcasting duplicate messages:
+              // Prefer Host, or the active participant with the lowest ID
+              final sortedRemaining = uniqueMap.values.toList()
+                ..sort((a, b) => a.id.compareTo(b.id));
+              final isElectedReporter = isHost ||
+                  (sortedRemaining.isNotEmpty &&
+                      sortedRemaining.first.id == _currentUser.id);
+
+              if (isElectedReporter) {
+                onParticipantLeft?.call(departedName);
+              }
+            }
+          }
+        }
+
+        _knownParticipantKeys = currentKeys;
+        _knownParticipantNames = {
+          for (var u in uniqueMap.values)
+            (u.id.isNotEmpty ? u.id : u.username): u.username,
+        };
+
         _state = _state.copyWith(
           participants: uniqueMap.values.toList(),
           room: currentRoomModel.copyWith(
@@ -507,12 +548,18 @@ class RoomController extends ChangeNotifier {
     }
 
     // Optional chat notification
+    final hostNotice = (prevHostName != null &&
+            prevHostName.isNotEmpty &&
+            prevHostName != 'Host')
+        ? '$prevHostName (Host) keluar. 👑 ${newHost.username} sekarang menjadi Host room ini!'
+        : '👑 ${newHost.username} sekarang menjadi Host room ini!';
+
     if (chatController != null) {
       try {
-        await chatController.sendSystemMessage(
-          '👑 ${newHost.username} sekarang menjadi Host room ini!',
-        );
+        await chatController.sendSystemMessage(hostNotice);
       } catch (_) {}
+    } else {
+      onSystemNotice?.call(hostNotice);
     }
 
     notifyListeners();
