@@ -7,15 +7,12 @@ class NtpClockSync {
   NtpClockSync._internal();
 
   int _clockOffsetMs = 0;
-  bool _isSynchronized = false;
 
   int get clockOffsetMs => _clockOffsetMs;
-  bool get isSynchronized => _isSynchronized;
 
   /// Sets clock offset directly (useful for tests or manual calibration)
   void setClockOffset(int offsetMs) {
     _clockOffsetMs = offsetMs;
-    _isSynchronized = true;
   }
 
   /// Calculates synchronized current epoch time in milliseconds
@@ -46,7 +43,6 @@ class NtpClockSync {
           // Approximate server time when response arrived = serverTime + (roundTrip / 2)
           final int estimatedServerTimeNow = serverTimeMs + (roundTripTime ~/ 2);
           _clockOffsetMs = estimatedServerTimeNow - t1;
-          _isSynchronized = true;
           debugPrint(
               '[NtpClockSync] Synced with server. Offset: ${_clockOffsetMs}ms (RTT: ${roundTripTime}ms)');
           return;
@@ -56,11 +52,5 @@ class NtpClockSync {
     } catch (e) {
       debugPrint('[NtpClockSync] Clock sync error: $e');
     }
-  }
-
-  /// Reset to zero offset
-  void reset() {
-    _clockOffsetMs = 0;
-    _isSynchronized = false;
   }
 }

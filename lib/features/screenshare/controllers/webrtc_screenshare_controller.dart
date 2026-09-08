@@ -38,7 +38,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
   bool _isSharing = false;
   String? _sharerId;
   String? _sharerName;
-  bool _isConnecting = false;
   bool _isDisposed = false;
 
   MediaStream? _localStream;
@@ -59,7 +58,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
   String? get sharerName => _sharerName;
   bool get isScreenSharingActive =>
       _isSharing || (_sharerId != null && _sharerId!.isNotEmpty);
-  bool get isConnecting => _isConnecting;
   MediaStream? get localStream => _localStream;
   MediaStream? get remoteStream => _remoteStream;
   RTCVideoRenderer get localRenderer => _localRenderer;
@@ -249,9 +247,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
   Future<bool> startScreenShare() async {
     if (!canShareScreen || _isSharing) return false;
 
-    _isConnecting = true;
-    notifyListeners();
-
     try {
       await _backgroundServiceHandler(true);
       final stream = await _displayMediaFunction({
@@ -282,7 +277,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _isSharing = true;
       _sharerId = userId;
       _sharerName = userName;
-      _isConnecting = false;
       notifyListeners();
 
       // Broadcast start event
@@ -301,7 +295,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _isSharing = false;
       _sharerId = null;
       _sharerName = null;
-      _isConnecting = false;
       notifyListeners();
       return false;
     }
@@ -337,7 +330,6 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _isSharing = false;
       _sharerId = null;
       _sharerName = null;
-      _isConnecting = false;
 
       await _sendSignalingMessage('SCREEN_SHARE_STATE', {
         'action': 'stop',

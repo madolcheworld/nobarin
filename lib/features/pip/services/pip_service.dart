@@ -24,9 +24,8 @@ class PipService {
 
   /// Visible for testing to inject mock channel and test environment
   @visibleForTesting
-  PipService.withChannel(MethodChannel channel, {bool isAndroid = true})
+  PipService.withChannel(MethodChannel channel, {this._isAndroid = true})
       : _channel = channel,
-        _isAndroid = isAndroid,
         isInPipModeNotifier = ValueNotifier<bool>(false),
         pipActionNotifier = ValueNotifier<String?>(null) {
     _initMethodCallHandler();

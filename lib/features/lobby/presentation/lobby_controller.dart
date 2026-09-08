@@ -212,26 +212,6 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
     }
   }
 
-  /// Updates room host in repository and refreshes state
-  Future<void> updateRoomHost(
-    String roomId, {
-    required String newHostId,
-    required String newHostName,
-    String? code,
-  }) async {
-    try {
-      await _repository.updateRoomHost(
-        roomId,
-        newHostId: newHostId,
-        newHostName: newHostName,
-        code: code,
-      );
-      refreshRooms();
-    } catch (e) {
-      // Ignored
-    }
-  }
-
   @override
   void dispose() {
     final client = supabase;

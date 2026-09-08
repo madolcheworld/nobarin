@@ -48,7 +48,6 @@ class UnifiedPlayerController extends ChangeNotifier {
   double get volume => _volume;
   bool get isMuted => _isMuted;
   String? get errorMessage => _errorMessage;
-  Player? get mkPlayer => _mkPlayer;
   VideoController? get mkVideoController => _mkVideoController;
   YoutubePlayerController? get ytController => _ytController;
   Widget? get webVideoWidget => _webVideoAdapter?.buildVideoWidget();

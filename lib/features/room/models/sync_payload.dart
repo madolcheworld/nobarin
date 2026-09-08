@@ -26,7 +26,6 @@ class SyncPayload {
 
   bool get isPlaying => state == 'playing';
   bool get isPaused => state == 'paused';
-  bool get isBuffering => state == 'buffering';
 
   factory SyncPayload.fromJson(Map<String, dynamic> raw) {
     final json = (raw['payload'] is Map<String, dynamic>)

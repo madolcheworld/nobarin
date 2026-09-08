@@ -11,11 +11,8 @@ class AppColors {
   static const Color primaryNeon = Color(0xFFA855F7); // Neon Purple
   static const Color primaryNeonGlow = Color(0x66A855F7);
   static const Color secondaryNeon = Color(0xFF06B6D4); // Neon Cyan
-  static const Color secondaryNeonGlow = Color(0x6606B6D4);
   static const Color accentPink = Color(0xFFEC4899); // Neon Pink
-  static const Color accentPinkGlow = Color(0x66EC4899);
   static const Color accentGreen = Color(0xFF10B981); // Neon Green (Voice Active)
-  static const Color accentGreenGlow = Color(0x6610B981);
   static const Color accentYellow = Color(0xFFF59E0B); // Host Crown / Warning
   static const Color accentRed = Color(0xFFEF4444); // Error / Danger
 
@@ -32,18 +29,6 @@ class AppColors {
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primaryNeon, accentPink],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient cyanPurpleGradient = LinearGradient(
-    colors: [secondaryNeon, primaryNeon],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient darkCardGradient = LinearGradient(
-    colors: [surface, surfaceElevated],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

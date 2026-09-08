@@ -24,11 +24,6 @@ class SyncController extends ChangeNotifier {
 
   // Track latest known sync payload
   SyncPayload? _latestPayload;
-  SyncPayload? get latestPayload => _latestPayload;
-
-  // Drift info for debugging/UI stats
-  double _lastCalculatedDrift = 0.0;
-  double get lastCalculatedDrift => _lastCalculatedDrift;
 
   SyncController({
     required this.room,
@@ -165,8 +160,6 @@ class SyncController extends ChangeNotifier {
       }
 
       // 3. Drift Calculation & Multi-Tier Correction
-      final drift = syncEngine.calculateDrift(payload, player.position);
-      _lastCalculatedDrift = drift;
       notifyListeners();
 
       final action = syncEngine.evaluateCorrection(payload, player.position);
