@@ -29,16 +29,23 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
     super.initState();
     _lastMessageCount = widget.chatController.messages.length;
     widget.chatController.addListener(_handleChatUpdate);
+    _inputController.addListener(_onTextChanged);
   }
 
   @override
   void didUpdateWidget(covariant ChatPanelWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatController != widget.chatController) {
+      oldWidget.chatController.setTyping(false);
       oldWidget.chatController.removeListener(_handleChatUpdate);
       _lastMessageCount = widget.chatController.messages.length;
       widget.chatController.addListener(_handleChatUpdate);
     }
+  }
+
+  void _onTextChanged() {
+    final hasText = _inputController.text.trim().isNotEmpty;
+    widget.chatController.setTyping(hasText);
   }
 
   void _handleChatUpdate() {
@@ -51,7 +58,9 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
 
   @override
   void dispose() {
+    widget.chatController.setTyping(false);
     widget.chatController.removeListener(_handleChatUpdate);
+    _inputController.removeListener(_onTextChanged);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -166,6 +175,9 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                     },
                   ),
                 ),
+
+              // Typing Indicator Banner
+              _buildTypingIndicator(widget.chatController.typingStatusText),
 
               // Input Bar
               Container(
@@ -328,6 +340,100 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildTypingIndicator(String? typingText) {
+    final isTyping = typingText != null && typingText.isNotEmpty;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: isTyping
+          ? Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated.withValues(alpha: 0.7),
+                border: const Border(
+                  top: BorderSide(color: AppColors.border, width: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const _TypingDotsIndicator(),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      typingText,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.secondaryNeon,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _TypingDotsIndicator extends StatefulWidget {
+  const _TypingDotsIndicator();
+
+  @override
+  State<_TypingDotsIndicator> createState() => _TypingDotsIndicatorState();
+}
+
+class _TypingDotsIndicatorState extends State<_TypingDotsIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animController,
+      builder: (context, _) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            final progress = (_animController.value - (index * 0.2)) % 1.0;
+            final double t = progress < 0.5 ? progress * 2 : (1.0 - progress) * 2;
+            final double scale = 0.6 + 0.4 * t;
+            final double opacity = 0.3 + 0.7 * t;
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.secondaryNeon.withValues(alpha: opacity.clamp(0.2, 1.0)),
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

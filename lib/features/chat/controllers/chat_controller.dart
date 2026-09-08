@@ -32,6 +32,26 @@ class ChatController extends ChangeNotifier {
 
   final Map<String, DateTime> _recentSystemMessages = {};
 
+  final Map<String, String> _typingUsers = {};
+  final Map<String, Timer> _typingTimers = {};
+  Timer? _localTypingDebounceTimer;
+  bool _isLocalTyping = false;
+
+  List<String> get typingUsernames => _typingUsers.values.toList();
+  bool get hasTypingUsers => _typingUsers.isNotEmpty;
+
+  String? get typingStatusText {
+    if (_typingUsers.isEmpty) return null;
+    final names = _typingUsers.values.toList();
+    if (names.length == 1) {
+      return '${names[0]} sedang mengetik...';
+    } else if (names.length == 2) {
+      return '${names[0]} dan ${names[1]} sedang mengetik...';
+    } else {
+      return '${names[0]} dan ${names.length - 1} lainnya sedang mengetik...';
+    }
+  }
+
   RealtimeChannel? _chatChannel;
   bool _isDisposed = false;
 
@@ -73,6 +93,14 @@ class ChatController extends ChangeNotifier {
           if (message.isReaction) {
             _triggerFloatingReaction(message.content);
           }
+        },
+      );
+
+      _chatChannel!.onBroadcast(
+        event: 'TYPING_STATUS',
+        callback: (payload) {
+          if (_isDisposed) return;
+          handleTypingBroadcast(payload);
         },
       );
 
@@ -132,8 +160,77 @@ class ChatController extends ChangeNotifier {
     _reactionsStreamController.add(reaction);
   }
 
+  /// Updates local typing status and dispatches broadcast if changed
+  void setTyping(bool isTyping) {
+    if (_isDisposed) return;
+
+    if (isTyping) {
+      if (!_isLocalTyping) {
+        _isLocalTyping = true;
+        _broadcastTypingStatus(true);
+      }
+      _localTypingDebounceTimer?.cancel();
+      _localTypingDebounceTimer = Timer(const Duration(seconds: 3), () {
+        if (_isDisposed) return;
+        setTyping(false);
+      });
+    } else {
+      _localTypingDebounceTimer?.cancel();
+      _localTypingDebounceTimer = null;
+      if (_isLocalTyping) {
+        _isLocalTyping = false;
+        _broadcastTypingStatus(false);
+      }
+    }
+  }
+
+  Future<void> _broadcastTypingStatus(bool isTyping) async {
+    if (_chatChannel == null || _isDisposed) return;
+    try {
+      await _chatChannel!.sendBroadcastMessage(
+        event: 'TYPING_STATUS',
+        payload: {
+          'user_id': currentUser.id,
+          'username': currentUser.username,
+          'is_typing': isTyping,
+        },
+      );
+    } catch (e) {
+      debugPrint('[ChatController] Error broadcasting typing status: $e');
+    }
+  }
+
+  @visibleForTesting
+  void handleTypingBroadcast(Map<String, dynamic> payload) {
+    final userId = payload['user_id'] as String?;
+    final username = payload['username'] as String?;
+    final isTyping = payload['is_typing'] as bool? ?? false;
+
+    if (userId == null || userId == currentUser.id) return;
+
+    if (isTyping) {
+      _typingUsers[userId] =
+          (username != null && username.isNotEmpty) ? username : 'Seseorang';
+      _typingTimers[userId]?.cancel();
+      _typingTimers[userId] = Timer(const Duration(seconds: 4), () {
+        if (_isDisposed) return;
+        _typingUsers.remove(userId);
+        _typingTimers.remove(userId);
+        notifyListeners();
+      });
+      notifyListeners();
+    } else {
+      _typingTimers[userId]?.cancel();
+      _typingTimers.remove(userId);
+      if (_typingUsers.remove(userId) != null) {
+        notifyListeners();
+      }
+    }
+  }
+
   /// Sends a chat message
   Future<void> sendMessage(String text) async {
+    setTyping(false);
     final clean = text.trim();
     if (clean.isEmpty) return;
 
@@ -254,6 +351,12 @@ class ChatController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _localTypingDebounceTimer?.cancel();
+    for (final timer in _typingTimers.values) {
+      timer.cancel();
+    }
+    _typingTimers.clear();
+    _typingUsers.clear();
     _reactionsStreamController.close();
     if (_chatChannel != null && supabase != null) {
       supabase!.removeChannel(_chatChannel!);

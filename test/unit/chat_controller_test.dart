@@ -88,5 +88,75 @@ void main() {
       await chatController.sendSystemMessage('Bob keluar');
       expect(chatController.messages.length, 2);
     });
+
+    test('handleTypingBroadcast updates typing status and usernames', () {
+      expect(chatController.hasTypingUsers, isFalse);
+      expect(chatController.typingStatusText, isNull);
+
+      chatController.handleTypingBroadcast({
+        'user_id': 'user-2',
+        'username': 'Bob',
+        'is_typing': true,
+      });
+
+      expect(chatController.hasTypingUsers, isTrue);
+      expect(chatController.typingUsernames, contains('Bob'));
+      expect(chatController.typingStatusText, 'Bob sedang mengetik...');
+
+      // Remove typing
+      chatController.handleTypingBroadcast({
+        'user_id': 'user-2',
+        'username': 'Bob',
+        'is_typing': false,
+      });
+
+      expect(chatController.hasTypingUsers, isFalse);
+      expect(chatController.typingStatusText, isNull);
+    });
+
+    test('typingStatusText formats correctly for 1, 2, and >2 users', () {
+      // 1 user
+      chatController.handleTypingBroadcast({
+        'user_id': 'user-2',
+        'username': 'Alice',
+        'is_typing': true,
+      });
+      expect(chatController.typingStatusText, 'Alice sedang mengetik...');
+
+      // 2 users
+      chatController.handleTypingBroadcast({
+        'user_id': 'user-3',
+        'username': 'Bob',
+        'is_typing': true,
+      });
+      expect(chatController.typingStatusText, 'Alice dan Bob sedang mengetik...');
+
+      // 3 users
+      chatController.handleTypingBroadcast({
+        'user_id': 'user-4',
+        'username': 'Charlie',
+        'is_typing': true,
+      });
+      expect(chatController.typingStatusText, 'Alice dan 2 lainnya sedang mengetik...');
+    });
+
+    test('handleTypingBroadcast ignores own user events', () {
+      chatController.handleTypingBroadcast({
+        'user_id': testUser.id,
+        'username': testUser.username,
+        'is_typing': true,
+      });
+
+      expect(chatController.hasTypingUsers, isFalse);
+      expect(chatController.typingStatusText, isNull);
+    });
+
+    test('sendMessage automatically resets typing state', () async {
+      chatController.setTyping(true);
+      await chatController.sendMessage('Halo dunia!');
+
+      expect(chatController.messages.length, 1);
+      expect(chatController.messages.first.content, 'Halo dunia!');
+    });
   });
 }
