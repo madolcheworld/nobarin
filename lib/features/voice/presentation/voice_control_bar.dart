@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import 'package:watch_party/core/utils/app_haptics.dart';
 import '../controllers/webrtc_voice_controller.dart';
 
 class VoiceControlBar extends StatelessWidget {
@@ -40,7 +41,7 @@ class VoiceControlBar extends StatelessWidget {
                 isMuted ? AppColors.textMuted : AppColors.secondaryNeon;
             break;
           case VoiceStatus.error:
-            statusText = 'Voice Offline';
+            statusText = 'Voice Gagal (Coba Lagi)';
             statusColor = AppColors.accentRed;
             break;
           case VoiceStatus.disconnected:
@@ -61,7 +62,10 @@ class VoiceControlBar extends StatelessWidget {
             children: [
               // Mic Toggle Button
               InkWell(
-                onTap: () => voiceController.toggleMic(),
+                onTap: () {
+                  AppHaptics.medium();
+                  voiceController.toggleMic();
+                },
                 borderRadius: BorderRadius.circular(20),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -143,16 +147,44 @@ class VoiceControlBar extends StatelessWidget {
 
               // Status Text (takes all available remaining space and truncates if needed)
               Expanded(
-                child: Text(
-                  statusText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: statusColor,
-                  ),
-                ),
+                child: status == VoiceStatus.error
+                    ? InkWell(
+                        onTap: () => voiceController.reconnect(),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                statusText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.refresh_rounded,
+                              size: 13,
+                              color: AppColors.accentRed,
+                            ),
+                          ],
+                        ),
+                      )
+                    : Text(
+                        statusText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: statusColor,
+                        ),
+                      ),
               ),
 
               const SizedBox(width: 4),
@@ -176,7 +208,10 @@ class VoiceControlBar extends StatelessWidget {
                         ? AppColors.accentRed
                         : AppColors.textSecondary,
                   ),
-                  onPressed: () => voiceController.toggleDeafen(),
+                  onPressed: () {
+                    AppHaptics.selection();
+                    voiceController.toggleDeafen();
+                  },
                 ),
               ),
 
@@ -220,7 +255,10 @@ class VoiceControlBar extends StatelessWidget {
                             MaterialTapTargetSize.shrinkWrap,
                         value: voiceController.isAudioDuckingEnabled,
                         activeThumbColor: AppColors.secondaryNeon,
-                        onChanged: (_) => voiceController.toggleAudioDucking(),
+                        onChanged: (_) {
+                          AppHaptics.light();
+                          voiceController.toggleAudioDucking();
+                        },
                       ),
                     ),
                   ],

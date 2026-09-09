@@ -217,6 +217,140 @@ void main() {
       expect(controller.isMuted, isFalse);
     });
 
+    test('extractTwitchMedia parses channels, videos, and clips accurately', () {
+      // Channel
+      final channel = UnifiedPlayerController.extractTwitchMedia(
+          'https://www.twitch.tv/monstercat');
+      expect(channel, isNotNull);
+      expect(channel!.type, equals('channel'));
+      expect(channel.id, equals('monstercat'));
+      expect(channel.isChannel, isTrue);
+
+      // Video (VOD)
+      final video = UnifiedPlayerController.extractTwitchMedia(
+          'https://www.twitch.tv/videos/123456789');
+      expect(video, isNotNull);
+      expect(video!.type, equals('video'));
+      expect(video.id, equals('123456789'));
+      expect(video.isVideo, isTrue);
+
+      // Clips subdomain
+      final clip1 = UnifiedPlayerController.extractTwitchMedia(
+          'https://clips.twitch.tv/GloriousTastyApple');
+      expect(clip1, isNotNull);
+      expect(clip1!.type, equals('clip'));
+      expect(clip1.id, equals('GloriousTastyApple'));
+      expect(clip1.isClip, isTrue);
+
+      // Channel clip path
+      final clip2 = UnifiedPlayerController.extractTwitchMedia(
+          'https://www.twitch.tv/ninja/clip/GloriousTastyApple');
+      expect(clip2, isNotNull);
+      expect(clip2!.type, equals('clip'));
+      expect(clip2.id, equals('GloriousTastyApple'));
+
+      // Non-Twitch
+      expect(
+          UnifiedPlayerController.extractTwitchMedia('https://vimeo.com/76979871'),
+          isNull);
+      expect(
+          UnifiedPlayerController.extractTwitchMedia('https://youtube.com/watch?v=123'),
+          isNull);
+      expect(UnifiedPlayerController.extractTwitchMedia(''), isNull);
+    });
+
+    test('extractVimeoVideoId parses standard, channel, and player URLs', () {
+      // Standard
+      expect(
+        UnifiedPlayerController.extractVimeoVideoId('https://vimeo.com/76979871'),
+        equals('76979871'),
+      );
+
+      // Channel / Staffpicks
+      expect(
+        UnifiedPlayerController.extractVimeoVideoId(
+            'https://vimeo.com/channels/staffpicks/76979871'),
+        equals('76979871'),
+      );
+
+      // Player embed
+      expect(
+        UnifiedPlayerController.extractVimeoVideoId(
+            'https://player.vimeo.com/video/76979871'),
+        equals('76979871'),
+      );
+
+      // Non-Vimeo
+      expect(
+        UnifiedPlayerController.extractVimeoVideoId(
+            'https://www.twitch.tv/monstercat'),
+        isNull,
+      );
+      expect(
+        UnifiedPlayerController.extractVimeoVideoId('https://example.com/video.mp4'),
+        isNull,
+      );
+      expect(UnifiedPlayerController.extractVimeoVideoId(''), isNull);
+    });
+
+    test('loadMedia auto-detects Twitch and Vimeo URLs', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      // Twitch auto-detect
+      await controller.loadMedia(
+        'direct_url',
+        'https://www.twitch.tv/monstercat',
+        autoPlay: false,
+      );
+      expect(controller.mediaType, equals('twitch'));
+      expect(controller.mediaUrl, equals('https://www.twitch.tv/monstercat'));
+
+      // Vimeo auto-detect
+      await controller.loadMedia(
+        'youtube',
+        'https://vimeo.com/76979871',
+        autoPlay: false,
+      );
+      expect(controller.mediaType, equals('vimeo'));
+      expect(controller.mediaUrl, equals('https://vimeo.com/76979871'));
+    });
+
+    test('embed player delegates play, pause, seek, and state updates', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      await controller.loadMedia(
+        'twitch',
+        'https://www.twitch.tv/monstercat',
+        autoPlay: false,
+      );
+
+      final List<String> receivedCommands = [];
+      controller.onEmbedPlayerCommand = (action, arg) {
+        receivedCommands.add('$action:${arg ?? ""}');
+      };
+
+      await controller.play();
+      expect(receivedCommands, contains('play:'));
+
+      await controller.pause();
+      expect(receivedCommands, contains('pause:'));
+
+      await controller.seekTo(45.0);
+      expect(receivedCommands, contains('seek:45.0'));
+
+      controller.updateEmbedPlaybackState(
+        isPlaying: true,
+        position: 15.0,
+        duration: 120.0,
+      );
+
+      expect(controller.isPlaying, isTrue);
+      expect(controller.position, equals(15.0));
+      expect(controller.duration, equals(120.0));
+    });
+
     test('enterFullscreen, exitFullscreen, and toggleFullscreen update state and notify listeners', () async {
       final controller = UnifiedPlayerController();
       addTearDown(() => controller.dispose());

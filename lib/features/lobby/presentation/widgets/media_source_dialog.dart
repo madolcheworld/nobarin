@@ -3,9 +3,14 @@ import '../../../../core/constants/app_colors.dart';
 
 enum MediaSourceType {
   youtube,
+  twitch,
+  vimeo,
+  googleDrive,
+  dailymotion,
+  bstation,
+  directUrl,
   disney,
   netflix,
-  directUrl,
 }
 
 class MediaSourceDialog extends StatelessWidget {
@@ -37,7 +42,10 @@ class MediaSourceDialog extends StatelessWidget {
           top: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -53,14 +61,14 @@ class MediaSourceDialog extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
 
           // Header
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: AppColors.primaryGradient,
                   shape: BoxShape.circle,
                 ),
@@ -88,10 +96,16 @@ class MediaSourceDialog extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
 
-          // Source Cards
-          _SourceCard(
+          Flexible(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Source Cards
+                  _SourceCard(
             title: 'YouTube',
             subtitle: 'Jelajahi & tonton video YouTube bersama',
             icon: Icons.play_arrow_rounded,
@@ -101,6 +115,76 @@ class MediaSourceDialog extends StatelessWidget {
             badgeColor: AppColors.secondaryNeon,
             isAvailable: true,
             onTap: () => onSourceSelected(MediaSourceType.youtube),
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Twitch',
+            subtitle: 'Tonton siaran streamer, turnamen & VOD',
+            icon: Icons.live_tv_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF9146FF),
+            badgeText: 'Live',
+            badgeColor: const Color(0xFF9146FF),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.twitch),
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Vimeo',
+            subtitle: 'Streaming video sinematik & karya kreatif',
+            icon: Icons.video_collection_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF1AB7EA),
+            badgeText: 'HD',
+            badgeColor: const Color(0xFF1AB7EA),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.vimeo),
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Google Drive',
+            subtitle: 'Streaming video dari link Google Drive bersama',
+            icon: Icons.cloud_queue_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF0F9D58),
+            badgeText: 'Cloud',
+            badgeColor: const Color(0xFF0F9D58),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.googleDrive),
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Dailymotion',
+            subtitle: 'Tonton video trending, berita & klip musik',
+            icon: Icons.play_circle_filled_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF0066DC),
+            badgeText: 'Trending',
+            badgeColor: const Color(0xFF0066DC),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.dailymotion),
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Bstation (Bilibili)',
+            subtitle: 'Streaming anime populer, musik AMV & kreator ACG',
+            icon: Icons.smart_display_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF00A1D6),
+            badgeText: 'Anime & ACG',
+            badgeColor: const Color(0xFF00A1D6),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.bstation),
           ),
 
           const SizedBox(height: 12),
@@ -159,6 +243,10 @@ class MediaSourceDialog extends StatelessWidget {
             badgeColor: AppColors.primaryNeon,
             isAvailable: true,
             onTap: () => onSourceSelected(MediaSourceType.directUrl),
+          ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

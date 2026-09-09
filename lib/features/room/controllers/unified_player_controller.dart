@@ -8,8 +8,34 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
+/// Metadata for Twitch streams, VODs, or clips
+class TwitchMedia {
+  final String type; // 'channel', 'video', 'clip'
+  final String id;
+
+  const TwitchMedia({required this.type, required this.id});
+
+  bool get isChannel => type == 'channel';
+  bool get isVideo => type == 'video';
+  bool get isClip => type == 'clip';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TwitchMedia &&
+          runtimeType == other.runtimeType &&
+          type == other.type &&
+          id == other.id;
+
+  @override
+  int get hashCode => Object.hash(type, id);
+
+  @override
+  String toString() => 'TwitchMedia(type: $type, id: $id)';
+}
+
 class UnifiedPlayerController extends ChangeNotifier {
-  String _mediaType = 'direct_url'; // 'direct_url' or 'youtube'
+  String _mediaType = 'direct_url'; // 'direct_url', 'youtube', 'twitch', 'vimeo'
   String _mediaUrl = '';
   bool _isPlaying = false;
   bool _isFullscreen = false;
@@ -33,10 +59,39 @@ class UnifiedPlayerController extends ChangeNotifier {
   YoutubePlayerController? _ytController;
   final List<StreamSubscription> _ytSubscriptions = [];
 
+  // Callbacks for Twitch / Vimeo Embed Player
+  void Function(String action, dynamic argument)? onEmbedPlayerCommand;
+
   // Callbacks for SyncController
   void Function(double positionSeconds)? onPositionChanged;
   void Function(String state)? onPlaybackStateChanged;
   void Function()? onPlaybackEnded;
+
+  /// Called by embed player widget (Twitch/Vimeo) to update state
+  void updateEmbedPlaybackState({
+    required bool isPlaying,
+    double? position,
+    double? duration,
+    String? error,
+  }) {
+    if (_isDisposed) return;
+    if (error != null) {
+      _errorMessage = error;
+      _isPlaying = false;
+      notifyListeners();
+      return;
+    }
+    _isPlaying = isPlaying;
+    if (position != null) {
+      _position = position;
+      onPositionChanged?.call(_position);
+    }
+    if (duration != null && duration > 0 && duration != _duration) {
+      _duration = duration;
+    }
+    notifyListeners();
+    onPlaybackStateChanged?.call(isPlaying ? 'playing' : 'paused');
+  }
 
   String get mediaType => _mediaType;
   String get mediaUrl => _mediaUrl;
@@ -55,6 +110,18 @@ class UnifiedPlayerController extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// Reloads current media from scratch at current position
+  Future<void> reloadCurrentMedia() async {
+    if (_mediaUrl.isEmpty) return;
+    clearError();
+    await loadMedia(
+      _mediaType,
+      _mediaUrl,
+      autoPlay: true,
+      startSeconds: _position,
+    );
   }
 
   UnifiedPlayerController() {
@@ -176,7 +243,154 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
   }
 
-  /// Loads media by type and URL
+  /// Extracts Twitch media information (channel, video, or clip) from URL
+  static TwitchMedia? extractTwitchMedia(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    try {
+      // 1. Clips: clips.twitch.tv/{clipId} or twitch.tv/{channel}/clip/{clipId}
+      final clipMatch1 = RegExp(r'clips\.twitch\.tv\/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+      if (clipMatch1 != null) {
+        return TwitchMedia(type: 'clip', id: clipMatch1.group(1)!);
+      }
+      final clipMatch2 = RegExp(r'twitch\.tv\/[a-zA-Z0-9_]+\/clip\/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
+      if (clipMatch2 != null) {
+        return TwitchMedia(type: 'clip', id: clipMatch2.group(1)!);
+      }
+
+      // 2. Videos / VODs: twitch.tv/videos/{videoId}
+      final videoMatch = RegExp(r'twitch\.tv\/videos\/(\d+)', caseSensitive: false).firstMatch(trimmed);
+      if (videoMatch != null) {
+        return TwitchMedia(type: 'video', id: videoMatch.group(1)!);
+      }
+
+      // 3. Channels: twitch.tv/{channel}
+      final channelMatch = RegExp(r'(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/([a-zA-Z0-9_]{3,25})(?:\/|\?|$)', caseSensitive: false).firstMatch(trimmed);
+      if (channelMatch != null) {
+        final channel = channelMatch.group(1)!.toLowerCase();
+        const reserved = {
+          'directory', 'videos', 'p', 'downloads', 'jobs', 'turbo',
+          'settings', 'friends', 'messages', 'search', 'subscriptions',
+          'wallet', 'drops', 'inventory', 'popout'
+        };
+        if (!reserved.contains(channel)) {
+          return TwitchMedia(type: 'channel', id: channel);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Extracts Vimeo video ID from URL or raw digits
+  static String? extractVimeoVideoId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    if (RegExp(r'^\d{5,12}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    try {
+      final regExp = RegExp(
+        r'(?:vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|video\/|)|player\.vimeo\.com\/video\/)(\d+)',
+        caseSensitive: false,
+      );
+      final match = regExp.firstMatch(trimmed);
+      return match?.group(1);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Extracts Google Drive file ID from URL or raw ID
+  static String? extractGoogleDriveFileId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    final pathMatch = RegExp(
+      r'(?:drive|docs)\.google\.com\/file\/d\/([a-zA-Z0-9_-]{20,})',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (pathMatch != null) return pathMatch.group(1);
+
+    final paramMatch = RegExp(
+      r'(?:drive|docs)\.google\.com\/(?:open|uc)\?(?:[^\s&]+&)*id=([a-zA-Z0-9_-]{20,})',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (paramMatch != null) return paramMatch.group(1);
+
+    if (RegExp(r'^[a-zA-Z0-9_-]{25,60}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
+  /// Extracts Dailymotion video ID from URL or raw ID
+  static String? extractDailymotionVideoId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    if (RegExp(r'^[xk][a-zA-Z0-9]{4,8}$', caseSensitive: false).hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    try {
+      final regExp = RegExp(
+        r'(?:dailymotion\.com\/(?:video\/|embed\/video\/)|dai\.ly\/)([a-zA-Z0-9]+)',
+        caseSensitive: false,
+      );
+      final match = regExp.firstMatch(trimmed);
+      final id = match?.group(1);
+      return id?.split('_').first;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Extracts Bstation / Bilibili video ID from URL or raw ID
+  static String? extractBstationVideoId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    if (RegExp(r'^BV[a-zA-Z0-9]{10}$', caseSensitive: false).hasMatch(trimmed)) {
+      return trimmed;
+    }
+    if (RegExp(r'^\d+(?:\/\d+)?$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    try {
+      final playMatch = RegExp(
+        r'bilibili\.tv\/(?:id|en|th|vi|ms)\/play\/([0-9]+(?:\/[0-9]+)?)',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (playMatch != null) return playMatch.group(1);
+
+      final tvMatch = RegExp(
+        r'bilibili\.tv\/(?:id|en|th|vi|ms)\/video\/([0-9]+)',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (tvMatch != null) return tvMatch.group(1);
+
+      final comMatch = RegExp(
+        r'bilibili\.com\/video\/(BV[a-zA-Z0-9]+|av[0-9]+)',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (comMatch != null) return comMatch.group(1);
+
+      final shortMatch = RegExp(
+        r'b23\.tv\/([a-zA-Z0-9]+)',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (shortMatch != null) return shortMatch.group(1);
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// Loads media into player
   Future<void> loadMedia(
     String type,
     String url, {
@@ -185,12 +399,31 @@ class UnifiedPlayerController extends ChangeNotifier {
   }) async {
     _errorMessage = null;
 
-    // Smart-detect media type if user entered a YouTube link or direct media URL
+    // Smart-detect media type if user entered a YouTube, Twitch, Vimeo, Google Drive, Dailymotion, Bstation, or direct media URL
     var effectiveType = type;
     final isYtUrl = extractYouTubeVideoId(url) != null;
+    final isTwitchUrl = extractTwitchMedia(url) != null;
+    final isVimeoUrl = extractVimeoVideoId(url) != null;
+    final isDriveUrl = extractGoogleDriveFileId(url) != null;
+    final isDailymotionUrl = extractDailymotionVideoId(url) != null;
+    final isBstationUrl = extractBstationVideoId(url) != null;
+
     if (isYtUrl) {
       effectiveType = 'youtube';
-    } else if (effectiveType == 'youtube') {
+    } else if (isTwitchUrl) {
+      effectiveType = 'twitch';
+    } else if (isVimeoUrl) {
+      effectiveType = 'vimeo';
+    } else if (isDriveUrl) {
+      effectiveType = 'google_drive';
+    } else if (isDailymotionUrl) {
+      effectiveType = 'dailymotion';
+    } else if (isBstationUrl) {
+      effectiveType = 'bstation';
+    } else if (effectiveType == 'direct_url' ||
+        url.endsWith('.mp4') ||
+        url.endsWith('.m3u8') ||
+        url.endsWith('.webm')) {
       effectiveType = 'direct_url';
     }
 
@@ -199,14 +432,30 @@ class UnifiedPlayerController extends ChangeNotifier {
     _position = startSeconds;
     _playbackSpeed = 1.0;
 
-    if (effectiveType == 'youtube') {
-      // Pause direct video players
+    // Pause any active players not matching current type
+    if (effectiveType != 'youtube') {
+      _ytController?.pauseVideo();
+    }
+    if (effectiveType != 'direct_url') {
       if (kIsWeb) {
         await _webVideoAdapter?.pause();
       } else {
         await _mkPlayer?.pause();
       }
+    }
 
+    if (effectiveType == 'twitch' ||
+        effectiveType == 'vimeo' ||
+        effectiveType == 'google_drive' ||
+        effectiveType == 'dailymotion' ||
+        effectiveType == 'bstation' ||
+        effectiveType == 'bilibili') {
+      _isPlaying = autoPlay;
+      notifyListeners();
+      return;
+    }
+
+    if (effectiveType == 'youtube') {
       final videoId = extractYouTubeVideoId(url) ?? 'aqz-KE-bpKQ';
 
       // If YouTube controller already exists for this video ID, reuse it
@@ -366,13 +615,20 @@ class UnifiedPlayerController extends ChangeNotifier {
           _isPlaying = autoPlay;
         }
       } else if (_mkPlayer != null) {
-        await _mkPlayer!.open(Media(url), play: autoPlay);
-        if (startSeconds > 0) {
-          await _mkPlayer!.seek(
-            Duration(milliseconds: (startSeconds * 1000).round()),
-          );
+        try {
+          await _mkPlayer!.open(Media(url), play: autoPlay);
+          if (startSeconds > 0) {
+            await _mkPlayer!.seek(
+              Duration(milliseconds: (startSeconds * 1000).round()),
+            );
+          }
+          _isPlaying = autoPlay;
+        } catch (e) {
+          debugPrint('[UnifiedPlayerController] MediaKit open error: $e');
+          _errorMessage = 'Gagal memutar video: $e';
+          _isPlaying = false;
+          notifyListeners();
         }
-        _isPlaying = autoPlay;
       } else {
         _isPlaying = autoPlay;
       }
@@ -411,6 +667,13 @@ class UnifiedPlayerController extends ChangeNotifier {
           _isMuted = true;
           notifyListeners();
         }
+      } else if (_mediaType == 'twitch' ||
+          _mediaType == 'vimeo' ||
+          _mediaType == 'google_drive' ||
+          _mediaType == 'dailymotion' ||
+          _mediaType == 'bstation' ||
+          _mediaType == 'bilibili') {
+        onEmbedPlayerCommand?.call('play', null);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.play();
         if (_webVideoAdapter!.isMuted != _isMuted) {
@@ -434,6 +697,13 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.pauseVideo();
+      } else if (_mediaType == 'twitch' ||
+          _mediaType == 'vimeo' ||
+          _mediaType == 'google_drive' ||
+          _mediaType == 'dailymotion' ||
+          _mediaType == 'bstation' ||
+          _mediaType == 'bilibili') {
+        onEmbedPlayerCommand?.call('pause', null);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else {
@@ -451,6 +721,13 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.seekTo(seconds: seconds, allowSeekAhead: true);
+      } else if (_mediaType == 'twitch' ||
+          _mediaType == 'vimeo' ||
+          _mediaType == 'google_drive' ||
+          _mediaType == 'dailymotion' ||
+          _mediaType == 'bstation' ||
+          _mediaType == 'bilibili') {
+        onEmbedPlayerCommand?.call('seek', seconds);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.seekTo(seconds);
       } else {
@@ -470,6 +747,13 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.setPlaybackRate(speed);
+      } else if (_mediaType == 'twitch' ||
+          _mediaType == 'vimeo' ||
+          _mediaType == 'google_drive' ||
+          _mediaType == 'dailymotion' ||
+          _mediaType == 'bstation' ||
+          _mediaType == 'bilibili') {
+        onEmbedPlayerCommand?.call('setRate', speed);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.setPlaybackSpeed(speed);
       } else {
@@ -493,6 +777,13 @@ class UnifiedPlayerController extends ChangeNotifier {
           await _ytController?.unMute();
           await _ytController?.setVolume((_volume * 100).toInt());
         }
+      } else if (_mediaType == 'twitch' ||
+          _mediaType == 'vimeo' ||
+          _mediaType == 'google_drive' ||
+          _mediaType == 'dailymotion' ||
+          _mediaType == 'bstation' ||
+          _mediaType == 'bilibili') {
+        onEmbedPlayerCommand?.call('setVolume', _volume);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.setVolume(_volume);
       } else {
@@ -512,6 +803,13 @@ class UnifiedPlayerController extends ChangeNotifier {
       try {
         if (_mediaType == 'youtube') {
           await _ytController?.mute();
+        } else if (_mediaType == 'twitch' ||
+            _mediaType == 'vimeo' ||
+            _mediaType == 'google_drive' ||
+            _mediaType == 'dailymotion' ||
+            _mediaType == 'bstation' ||
+            _mediaType == 'bilibili') {
+          onEmbedPlayerCommand?.call('setMuted', true);
         } else if (kIsWeb && _webVideoAdapter != null) {
           await _webVideoAdapter?.setMuted(true);
         } else {

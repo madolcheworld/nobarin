@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/auth_controller.dart';
@@ -48,6 +48,58 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       return null;
+    },
+    errorBuilder: (context, state) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF090B14),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.explore_off_rounded,
+                  color: Color(0xFFFF5252),
+                  size: 54,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Halaman Tidak Ditemukan',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Rute "${state.uri}" tidak tersedia atau telah dipindahkan.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF9E9E9E),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => context.go('/lobby'),
+                  icon: const Icon(Icons.home_rounded),
+                  label: const Text('Kembali ke Lobby'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00FFC2),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     },
     routes: [
       GoRoute(

@@ -51,10 +51,11 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
       }
       widget.onJoined?.call(room);
     } else {
+      final repoError = ref.read(lobbyControllerProvider.notifier).lastRepositoryError;
       final clean = input.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '').trim();
       final display = clean.length > 20 ? '${clean.substring(0, 17)}...' : clean;
       setState(() {
-        _errorMessage = 'Room dengan kode "$display" tidak ditemukan';
+        _errorMessage = repoError ?? 'Room dengan kode "$display" tidak ditemukan';
       });
     }
   }

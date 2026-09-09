@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/time_formatter.dart';
 import '../controllers/chat_controller.dart';
 import '../models/chat_message.dart';
@@ -8,11 +9,17 @@ import '../models/chat_message.dart';
 class ChatPanelWidget extends StatefulWidget {
   final ChatController chatController;
   final bool showReactions;
+  final String? hostId;
+  final String? hostName;
+  final Set<String> coHostUserIds;
 
   const ChatPanelWidget({
     super.key,
     required this.chatController,
     this.showReactions = true,
+    this.hostId,
+    this.hostName,
+    this.coHostUserIds = const {},
   });
 
   @override
@@ -81,6 +88,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    AppHaptics.light();
     widget.chatController.sendMessage(text);
     _inputController.clear();
     _scrollToBottom();
@@ -159,6 +167,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                       final emoji = ApiConstants.quickReactions[index];
                       return InkWell(
                         onTap: () {
+                          AppHaptics.selection();
                           widget.chatController.sendReaction(emoji);
                           _scrollToBottom();
                         },
@@ -256,6 +265,16 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
   }
 
   Widget _buildMessageBubble(ChatMessage msg, bool isMe) {
+    final isHost = (widget.hostId != null &&
+            widget.hostId!.isNotEmpty &&
+            msg.userId == widget.hostId) ||
+        (widget.hostName != null &&
+            widget.hostName!.isNotEmpty &&
+            widget.hostName != 'Host' &&
+            msg.username == widget.hostName);
+    final isCoHost = widget.coHostUserIds.contains(msg.userId) ||
+        widget.coHostUserIds.contains(msg.username);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -279,52 +298,135 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                 if (!isMe)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 2),
-                    child: Text(
-                      msg.username,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.secondaryNeon,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          msg.username,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.secondaryNeon,
+                          ),
+                        ),
+                        if (isHost) ...[
+                          const SizedBox(width: 4),
+                          const Text('👑', style: TextStyle(fontSize: 10)),
+                        ] else if (isCoHost) ...[
+                          const SizedBox(width: 4),
+                          const Text('⭐', style: TextStyle(fontSize: 10)),
+                        ],
+                      ],
                     ),
                   ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 9),
+                  padding: msg.isReaction
+                      ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+                      : const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
                   decoration: BoxDecoration(
-                    color: isMe
-                        ? AppColors.primaryNeon.withValues(alpha: 0.85)
-                        : AppColors.surfaceElevated,
+                    color: msg.isReaction
+                        ? Colors.transparent
+                        : (isMe
+                            ? (msg.status == MessageStatus.failed
+                                ? AppColors.accentRed.withValues(alpha: 0.2)
+                                : null)
+                            : AppColors.surfaceElevated),
+                    gradient: (!msg.isReaction &&
+                            isMe &&
+                            msg.status != MessageStatus.failed)
+                        ? const LinearGradient(
+                            colors: [
+                              Color(0xFF6366F1), // Indigo
+                              Color(0xFF00E5FF), // Cyan neon
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(14),
-                      topRight: const Radius.circular(14),
-                      bottomLeft: Radius.circular(isMe ? 14 : 2),
-                      bottomRight: Radius.circular(isMe ? 2 : 14),
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isMe ? 16 : 3),
+                      bottomRight: Radius.circular(isMe ? 3 : 16),
                     ),
-                    border: Border.all(
-                      color: isMe
-                          ? AppColors.primaryNeon
-                          : AppColors.border,
-                      width: 1,
-                    ),
+                    border: msg.isReaction
+                        ? null
+                        : Border.all(
+                            color: isMe
+                                ? (msg.status == MessageStatus.failed
+                                    ? AppColors.accentRed
+                                    : AppColors.borderLight)
+                                : AppColors.borderLight,
+                            width: 1,
+                          ),
+                    boxShadow: (!msg.isReaction &&
+                            isMe &&
+                            msg.status != MessageStatus.failed)
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primaryNeon.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Text(
                     msg.content,
                     style: TextStyle(
-                      fontSize: msg.isReaction ? 24 : 13,
+                      fontSize: msg.isReaction ? 28 : 13,
                       color: Colors.white,
+                      fontWeight: isMe ? FontWeight.w500 : FontWeight.normal,
                     ),
                   ),
                 ),
                 Padding(
                   padding:
                       const EdgeInsets.only(top: 2, left: 4, right: 4),
-                  child: Text(
-                    TimeFormatter.formatChatTime(msg.createdAt),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textMuted,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        TimeFormatter.formatChatTime(msg.createdAt),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      if (isMe) ...[
+                        const SizedBox(width: 4),
+                        if (msg.status == MessageStatus.sending)
+                          const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppColors.textMuted,
+                            ),
+                          )
+                        else if (msg.status == MessageStatus.failed)
+                          InkWell(
+                            onTap: () => widget.chatController.retryMessage(msg.id),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline_rounded,
+                                    size: 12, color: AppColors.accentRed),
+                                SizedBox(width: 2),
+                                Text(
+                                  'Gagal (Kirim ulang)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.accentRed,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ],
                   ),
                 ),
               ],

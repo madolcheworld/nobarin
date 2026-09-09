@@ -32,4 +32,32 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+  static const LinearGradient cyanGradient = LinearGradient(
+    colors: [secondaryNeon, primaryNeon],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient cardGradient = LinearGradient(
+    colors: [Color(0xFF161B2E), Color(0xFF101322)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Glass & Elevated
+  static final Color surfaceGlass = const Color(0xFF141829).withValues(alpha: 0.7);
+  static const Color borderLight = Color(0x22FFFFFF);
+
+  // Platform Brand Colors
+  static const Color youtubeRed = Color(0xFFFF0000);
+  static const Color twitchPurple = Color(0xFF9146FF);
+  static const Color vimeoBlue = Color(0xFF1AB7EA);
+  static const Color googleDriveGreen = Color(0xFF0F9D58);
+  static const Color dailymotionBlue = Color(0xFF0066DC);
+  static const Color bstationBlue = Color(0xFF00A1D6);
+
+  // Shimmer / Skeleton Loading
+  static const Color shimmerBase = Color(0xFF171B2D);
+  static const Color shimmerHighlight = Color(0xFF262E4A);
 }

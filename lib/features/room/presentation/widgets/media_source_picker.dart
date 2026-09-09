@@ -3,7 +3,17 @@ import 'package:flutter/services.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../chat/controllers/chat_controller.dart';
+import '../../../lobby/data/models/bstation_video_model.dart';
+import '../../../lobby/data/models/dailymotion_video_model.dart';
+import '../../../lobby/data/models/google_drive_video_model.dart';
+import '../../../lobby/data/models/twitch_stream_model.dart';
+import '../../../lobby/data/models/vimeo_video_model.dart';
 import '../../../lobby/data/models/youtube_video_model.dart';
+import '../../../lobby/presentation/screens/bstation_picker_screen.dart';
+import '../../../lobby/presentation/screens/dailymotion_picker_screen.dart';
+import '../../../lobby/presentation/screens/google_drive_picker_screen.dart';
+import '../../../lobby/presentation/screens/twitch_picker_screen.dart';
+import '../../../lobby/presentation/screens/vimeo_picker_screen.dart';
 import '../../../lobby/presentation/screens/youtube_picker_screen.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/sync_controller.dart';
@@ -54,7 +64,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   String? _thumbnailUrl;
-  String _selectedType = 'youtube'; // 'youtube' or 'direct_url'
+  String _selectedType = 'youtube'; // 'youtube', 'twitch', 'vimeo', 'direct_url'
   bool _showPresets = false;
 
   @override
@@ -72,14 +82,41 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   void _onUrlChanged() {
     final text = _urlController.text.trim();
     final detectedYtId = UnifiedPlayerController.extractYouTubeVideoId(text);
-    if (detectedYtId != null && _selectedType != 'youtube') {
+    final detectedTwitch = UnifiedPlayerController.extractTwitchMedia(text);
+    final detectedVimeo = UnifiedPlayerController.extractVimeoVideoId(text);
+    final detectedDriveId = UnifiedPlayerController.extractGoogleDriveFileId(text);
+    final detectedDmId = UnifiedPlayerController.extractDailymotionVideoId(text);
+    final detectedBstationId = UnifiedPlayerController.extractBstationVideoId(text);
+
+    if (detectedYtId != null) {
       setState(() {
         _selectedType = 'youtube';
         _thumbnailUrl = 'https://img.youtube.com/vi/$detectedYtId/mqdefault.jpg';
       });
-    } else if (detectedYtId != null && _thumbnailUrl == null) {
+    } else if (detectedTwitch != null) {
       setState(() {
-        _thumbnailUrl = 'https://img.youtube.com/vi/$detectedYtId/mqdefault.jpg';
+        _selectedType = 'twitch';
+        _thumbnailUrl = null;
+      });
+    } else if (detectedVimeo != null) {
+      setState(() {
+        _selectedType = 'vimeo';
+        _thumbnailUrl = null;
+      });
+    } else if (detectedDriveId != null) {
+      setState(() {
+        _selectedType = 'google_drive';
+        _thumbnailUrl = 'https://drive.google.com/thumbnail?id=$detectedDriveId&sz=w640';
+      });
+    } else if (detectedDmId != null) {
+      setState(() {
+        _selectedType = 'dailymotion';
+        _thumbnailUrl = 'https://www.dailymotion.com/thumbnail/video/$detectedDmId';
+      });
+    } else if (detectedBstationId != null) {
+      setState(() {
+        _selectedType = 'bstation';
+        _thumbnailUrl = null;
       });
     } else if ((text.endsWith('.mp4') ||
             text.endsWith('.m3u8') ||
@@ -109,10 +146,48 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
       if (text != null && text.isNotEmpty) {
         _urlController.text = text;
         final ytId = UnifiedPlayerController.extractYouTubeVideoId(text);
+        final twitch = UnifiedPlayerController.extractTwitchMedia(text);
+        final vimeo = UnifiedPlayerController.extractVimeoVideoId(text);
+        final driveId = UnifiedPlayerController.extractGoogleDriveFileId(text);
+        final dmId = UnifiedPlayerController.extractDailymotionVideoId(text);
+        final bstationId = UnifiedPlayerController.extractBstationVideoId(text);
+
         if (ytId != null) {
           setState(() {
             _selectedType = 'youtube';
             _thumbnailUrl = 'https://img.youtube.com/vi/$ytId/mqdefault.jpg';
+          });
+        } else if (twitch != null) {
+          setState(() {
+            _selectedType = 'twitch';
+            _thumbnailUrl = null;
+          });
+        } else if (vimeo != null) {
+          setState(() {
+            _selectedType = 'vimeo';
+            _thumbnailUrl = null;
+          });
+        } else if (driveId != null) {
+          setState(() {
+            _selectedType = 'google_drive';
+            _thumbnailUrl = 'https://drive.google.com/thumbnail?id=$driveId&sz=w640';
+          });
+        } else if (dmId != null) {
+          setState(() {
+            _selectedType = 'dailymotion';
+            _thumbnailUrl = 'https://www.dailymotion.com/thumbnail/video/$dmId';
+          });
+        } else if (bstationId != null) {
+          setState(() {
+            _selectedType = 'bstation';
+            _thumbnailUrl = null;
+          });
+        } else if (text.endsWith('.mp4') ||
+            text.endsWith('.m3u8') ||
+            text.endsWith('.webm')) {
+          setState(() {
+            _selectedType = 'direct_url';
+            _thumbnailUrl = null;
           });
         }
       }
@@ -124,9 +199,31 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     if (url.isEmpty) return;
 
     var type = _selectedType;
-    if (UnifiedPlayerController.extractYouTubeVideoId(url) != null) {
+    final ytId = UnifiedPlayerController.extractYouTubeVideoId(url);
+    final twitch = UnifiedPlayerController.extractTwitchMedia(url);
+    final vimeo = UnifiedPlayerController.extractVimeoVideoId(url);
+    final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url);
+    final dmId = UnifiedPlayerController.extractDailymotionVideoId(url);
+    final bstationId = UnifiedPlayerController.extractBstationVideoId(url);
+
+    if (ytId != null) {
       type = 'youtube';
-    } else if (type == 'youtube' &&
+    } else if (twitch != null) {
+      type = 'twitch';
+    } else if (vimeo != null) {
+      type = 'vimeo';
+    } else if (driveId != null) {
+      type = 'google_drive';
+    } else if (dmId != null) {
+      type = 'dailymotion';
+    } else if (bstationId != null) {
+      type = 'bstation';
+    } else if ((type == 'youtube' ||
+            type == 'twitch' ||
+            type == 'vimeo' ||
+            type == 'google_drive' ||
+            type == 'dailymotion' ||
+            type == 'bstation') &&
         (url.endsWith('.mp4') ||
             url.endsWith('.m3u8') ||
             url.endsWith('.webm'))) {
@@ -145,9 +242,31 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     if (url.isEmpty || widget.queueController == null) return;
 
     var type = _selectedType;
-    if (UnifiedPlayerController.extractYouTubeVideoId(url) != null) {
+    final ytId = UnifiedPlayerController.extractYouTubeVideoId(url);
+    final twitch = UnifiedPlayerController.extractTwitchMedia(url);
+    final vimeo = UnifiedPlayerController.extractVimeoVideoId(url);
+    final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url);
+    final dmId = UnifiedPlayerController.extractDailymotionVideoId(url);
+    final bstationId = UnifiedPlayerController.extractBstationVideoId(url);
+
+    if (ytId != null) {
       type = 'youtube';
-    } else if (type == 'youtube' &&
+    } else if (twitch != null) {
+      type = 'twitch';
+    } else if (vimeo != null) {
+      type = 'vimeo';
+    } else if (driveId != null) {
+      type = 'google_drive';
+    } else if (dmId != null) {
+      type = 'dailymotion';
+    } else if (bstationId != null) {
+      type = 'bstation';
+    } else if ((type == 'youtube' ||
+            type == 'twitch' ||
+            type == 'vimeo' ||
+            type == 'google_drive' ||
+            type == 'dailymotion' ||
+            type == 'bstation') &&
         (url.endsWith('.mp4') ||
             url.endsWith('.m3u8') ||
             url.endsWith('.webm'))) {
@@ -156,9 +275,22 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
 
     var title = _titleController.text.trim();
     if (title.isEmpty) {
-      final ytId = UnifiedPlayerController.extractYouTubeVideoId(url);
       if (ytId != null) {
         title = 'Video YouTube ($ytId)';
+      } else if (twitch != null) {
+        title = twitch.isChannel
+            ? 'Twitch Live (${twitch.id})'
+            : (twitch.isVideo
+                ? 'Twitch Video (${twitch.id})'
+                : 'Twitch Clip (${twitch.id})');
+      } else if (vimeo != null) {
+        title = 'Video Vimeo ($vimeo)';
+      } else if (driveId != null) {
+        title = 'Google Drive Video ($driveId)';
+      } else if (dmId != null) {
+        title = 'Video Dailymotion ($dmId)';
+      } else if (bstationId != null) {
+        title = 'Video Bstation ($bstationId)';
       } else {
         final uri = Uri.tryParse(url);
         final segment = uri?.pathSegments.isNotEmpty == true
@@ -285,33 +417,74 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
 
                 // Modern Pill Segmented Control
                 Container(
-                  padding: const EdgeInsets.all(3),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.border, width: 0.8),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _PillTabItem(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        _PillTabItem(
                           icon: Icons.play_circle_fill_rounded,
                           iconColor: const Color(0xFFFF0000),
-                          label: 'YouTube',
+                          label: 'YT',
                           isSelected: _selectedType == 'youtube',
                           onTap: () => setState(() => _selectedType = 'youtube'),
                         ),
-                      ),
-                      Expanded(
-                        child: _PillTabItem(
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.live_tv_rounded,
+                          iconColor: const Color(0xFF9146FF),
+                          label: 'Twitch',
+                          isSelected: _selectedType == 'twitch',
+                          onTap: () => setState(() => _selectedType = 'twitch'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.video_collection_rounded,
+                          iconColor: const Color(0xFF1AB7EA),
+                          label: 'Vimeo',
+                          isSelected: _selectedType == 'vimeo',
+                          onTap: () => setState(() => _selectedType = 'vimeo'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.play_circle_filled_rounded,
+                          iconColor: const Color(0xFF0066DC),
+                          label: 'Daily',
+                          isSelected: _selectedType == 'dailymotion',
+                          onTap: () => setState(() => _selectedType = 'dailymotion'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.smart_display_rounded,
+                          iconColor: const Color(0xFF00A1D6),
+                          label: 'Bili',
+                          isSelected: _selectedType == 'bstation',
+                          onTap: () => setState(() => _selectedType = 'bstation'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.cloud_queue_rounded,
+                          iconColor: const Color(0xFF0F9D58),
+                          label: 'Drive',
+                          isSelected: _selectedType == 'google_drive',
+                          onTap: () => setState(() => _selectedType = 'google_drive'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
                           icon: Icons.link_rounded,
                           iconColor: AppColors.secondaryNeon,
-                          label: 'Direct / HLS',
+                          label: 'Direct',
                           isSelected: _selectedType == 'direct_url',
                           onTap: () => setState(() => _selectedType = 'direct_url'),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
 
@@ -511,6 +684,667 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                       ),
                     ),
                   ],
+                ] else if (_selectedType == 'twitch') ...[
+                  // Twitch Browse / Search Action Card
+                  Material(
+                    color: const Color(0xFF9146FF).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final stream = await Navigator.of(context).push<TwitchStream>(
+                          MaterialPageRoute(
+                            builder: (_) => const TwitchPickerScreen(),
+                          ),
+                        );
+                        if (stream != null && mounted) {
+                          setState(() {
+                            _urlController.text = stream.url;
+                            _titleController.text = stream.title;
+                            _thumbnailUrl = stream.thumbnailUrl;
+                            _selectedType = 'twitch';
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF9146FF).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.search_rounded,
+                                color: Color(0xFF9146FF),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Jelajahi Stream Twitch',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pilih siaran live, musik 24/7, esports, gaming',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Twitch URL Input
+                  TextField(
+                    controller: _urlController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Tautan Channel atau Video Twitch',
+                      hintText: 'https://twitch.tv/monstercat atau /videos/...',
+                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      prefixIcon: const Icon(
+                        Icons.live_tv_rounded,
+                        color: Color(0xFF9146FF),
+                        size: 18,
+                      ),
+                      suffixIcon: hasUrl
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _urlController.clear();
+                                _titleController.clear();
+                                setState(() => _thumbnailUrl = null);
+                              },
+                            )
+                          : TextButton.icon(
+                              onPressed: _pasteFromClipboard,
+                              icon: const Icon(Icons.content_paste_rounded, size: 14),
+                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF9146FF),
+                              ),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Siaran (Opsional)',
+                      hintText: 'Contoh: Nonton Bareng Streamer Favorit',
+                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ] else if (_selectedType == 'vimeo') ...[
+                  // Vimeo Browse / Search Action Card
+                  Material(
+                    color: const Color(0xFF1AB7EA).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final video = await Navigator.of(context).push<VimeoVideo>(
+                          MaterialPageRoute(
+                            builder: (_) => const VimeoPickerScreen(),
+                          ),
+                        );
+                        if (video != null && mounted) {
+                          setState(() {
+                            _urlController.text = video.url;
+                            _titleController.text = video.title;
+                            _thumbnailUrl = video.thumbnailUrl;
+                            _selectedType = 'vimeo';
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1AB7EA).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.search_rounded,
+                                color: Color(0xFF1AB7EA),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Jelajahi Video Vimeo',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pilih Staff Picks, film pendek, animasi 3D',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Vimeo URL Input
+                  TextField(
+                    controller: _urlController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Tautan Video Vimeo',
+                      hintText: 'https://vimeo.com/76979871',
+                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      prefixIcon: const Icon(
+                        Icons.video_collection_rounded,
+                        color: Color(0xFF1AB7EA),
+                        size: 18,
+                      ),
+                      suffixIcon: hasUrl
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _urlController.clear();
+                                _titleController.clear();
+                                setState(() => _thumbnailUrl = null);
+                              },
+                            )
+                          : TextButton.icon(
+                              onPressed: _pasteFromClipboard,
+                              icon: const Icon(Icons.content_paste_rounded, size: 14),
+                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF1AB7EA),
+                              ),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Video (Opsional)',
+                      hintText: 'Contoh: Tears of Steel 4K',
+                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ] else if (_selectedType == 'google_drive') ...[
+                  // Google Drive Browse / Search Action Card
+                  Material(
+                    color: const Color(0xFF0F9D58).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final video = await Navigator.of(context).push<GoogleDriveVideo>(
+                          MaterialPageRoute(
+                            builder: (_) => const GoogleDrivePickerScreen(),
+                          ),
+                        );
+                        if (video != null && mounted) {
+                          setState(() {
+                            _urlController.text = video.url;
+                            _titleController.text = video.title;
+                            _thumbnailUrl = video.thumbnailUrl;
+                            _selectedType = 'google_drive';
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F9D58).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.cloud_queue_rounded,
+                                color: Color(0xFF0F9D58),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Jelajahi Video Google Drive',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pilih film, trailer 4K, demo atau link file Drive',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Drive URL Input
+                  TextField(
+                    controller: _urlController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Tautan atau File ID Google Drive',
+                      hintText: 'https://drive.google.com/file/d/... atau ID',
+                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      prefixIcon: const Icon(
+                        Icons.cloud_queue_rounded,
+                        color: Color(0xFF0F9D58),
+                        size: 18,
+                      ),
+                      suffixIcon: hasUrl
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _urlController.clear();
+                                _titleController.clear();
+                                setState(() => _thumbnailUrl = null);
+                              },
+                            )
+                          : TextButton.icon(
+                              onPressed: _pasteFromClipboard,
+                              icon: const Icon(Icons.content_paste_rounded, size: 14),
+                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF0F9D58),
+                              ),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Video (Opsional)',
+                      hintText: 'Contoh: Tears of Steel Drive 4K',
+                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ] else if (_selectedType == 'dailymotion') ...[
+                  // Dailymotion Browse / Search Action Card
+                  Material(
+                    color: const Color(0xFF0066DC).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final video = await Navigator.of(context).push<DailymotionVideo>(
+                          MaterialPageRoute(
+                            builder: (_) => const DailymotionPickerScreen(),
+                          ),
+                        );
+                        if (video != null && mounted) {
+                          setState(() {
+                            _urlController.text = video.url;
+                            _titleController.text = video.title;
+                            _thumbnailUrl = video.effectiveThumbnailUrl;
+                            _selectedType = 'dailymotion';
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0066DC).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.play_circle_filled_rounded,
+                                color: Color(0xFF0066DC),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Jelajahi Video Dailymotion',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pilih video trending, berita, musik & animasi',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Divider with text
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          'atau tempel link Dailymotion',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ),
+                      Expanded(
+                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Dailymotion URL Input
+                  TextField(
+                    controller: _urlController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Link Video Dailymotion',
+                      hintText: 'https://www.dailymotion.com/video/x7tgad0',
+                      hintStyle: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: const Icon(Icons.link_rounded,
+                          color: Color(0xFF0066DC), size: 18),
+                      suffixIcon: hasUrl
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _urlController.clear();
+                                _titleController.clear();
+                                setState(() => _thumbnailUrl = null);
+                              },
+                            )
+                          : TextButton.icon(
+                              onPressed: _pasteFromClipboard,
+                              icon: const Icon(Icons.content_paste_rounded, size: 14),
+                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF0066DC),
+                              ),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Video (Opsional)',
+                      hintText: 'Contoh: Big Buck Bunny Dailymotion',
+                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ] else if (_selectedType == 'bstation') ...[
+                  // Bstation Browse / Search Action Card
+                  Material(
+                    color: const Color(0xFF00A1D6).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final video = await Navigator.of(context).push<BstationVideo>(
+                          MaterialPageRoute(
+                            builder: (_) => const BstationPickerScreen(),
+                          ),
+                        );
+                        if (video != null && mounted) {
+                          setState(() {
+                            _urlController.text = video.url;
+                            _titleController.text = video.title;
+                            _thumbnailUrl = video.effectiveThumbnailUrl;
+                            _selectedType = 'bstation';
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00A1D6).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.smart_display_rounded,
+                                color: Color(0xFF00A1D6),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Jelajahi Video Bstation',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Pilih anime populer, trending, AMV, kreator & musik',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Divider with text
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          'atau tempel link Bstation',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ),
+                      Expanded(
+                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Bstation URL Input
+                  TextField(
+                    controller: _urlController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Link Video / Anime Bstation',
+                      hintText: 'https://bilibili.tv/id/video/... atau BV...',
+                      hintStyle: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: const Icon(Icons.smart_display_rounded,
+                          color: Color(0xFF00A1D6), size: 18),
+                      suffixIcon: hasUrl
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _urlController.clear();
+                                _titleController.clear();
+                                setState(() => _thumbnailUrl = null);
+                              },
+                            )
+                          : TextButton.icon(
+                              onPressed: _pasteFromClipboard,
+                              icon: const Icon(Icons.content_paste_rounded, size: 14),
+                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF00A1D6),
+                              ),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Video (Opsional)',
+                      hintText: 'Contoh: Spy x Family Episode 1',
+                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
                 ] else ...[
                   // Direct URL Tab
                   TextField(
@@ -631,11 +1465,31 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                               avatar: Icon(
                                 m['type'] == 'youtube'
                                     ? Icons.play_arrow_rounded
-                                    : Icons.movie_rounded,
+                                    : (m['type'] == 'twitch'
+                                        ? Icons.live_tv_rounded
+                                        : (m['type'] == 'vimeo'
+                                            ? Icons.video_collection_rounded
+                                            : (m['type'] == 'google_drive'
+                                                ? Icons.cloud_queue_rounded
+                                                : (m['type'] == 'dailymotion'
+                                                    ? Icons.play_circle_filled_rounded
+                                                    : (m['type'] == 'bstation'
+                                                        ? Icons.smart_display_rounded
+                                                        : Icons.movie_rounded))))),
                                 size: 14,
                                 color: m['type'] == 'youtube'
                                     ? const Color(0xFFFF0000)
-                                    : AppColors.secondaryNeon,
+                                    : (m['type'] == 'twitch'
+                                        ? const Color(0xFF9146FF)
+                                        : (m['type'] == 'vimeo'
+                                            ? const Color(0xFF1AB7EA)
+                                            : (m['type'] == 'google_drive'
+                                                ? const Color(0xFF0F9D58)
+                                                : (m['type'] == 'dailymotion'
+                                                    ? const Color(0xFF0066DC)
+                                                    : (m['type'] == 'bstation'
+                                                        ? const Color(0xFF00A1D6)
+                                                        : AppColors.secondaryNeon))))),
                               ),
                               label: Text(
                                 m['title']!,
@@ -747,7 +1601,7 @@ class _PillTabItem extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.surface
@@ -765,21 +1619,26 @@ class _PillTabItem extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 15,
+              size: 14,
               color: isSelected ? iconColor : AppColors.textMuted,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

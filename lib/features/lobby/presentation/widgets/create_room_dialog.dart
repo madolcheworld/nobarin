@@ -5,13 +5,33 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
+import '../../data/models/bstation_video_model.dart';
+import '../../data/models/dailymotion_video_model.dart';
+import '../../data/models/google_drive_video_model.dart';
+import '../../data/models/twitch_stream_model.dart';
+import '../../data/models/vimeo_video_model.dart';
 import '../../data/models/youtube_video_model.dart';
+import '../../data/bstation_service.dart';
+import '../../data/dailymotion_service.dart';
+import '../../data/google_drive_service.dart';
+import '../../data/twitch_service.dart';
+import '../../data/vimeo_service.dart';
 import '../../data/youtube_service.dart';
 import '../lobby_controller.dart';
+import '../screens/bstation_picker_screen.dart';
+import '../screens/dailymotion_picker_screen.dart';
+import '../screens/google_drive_picker_screen.dart';
+import '../screens/twitch_picker_screen.dart';
+import '../screens/vimeo_picker_screen.dart';
 import '../screens/youtube_picker_screen.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
   final YouTubeVideo? initialYouTubeVideo;
+  final TwitchStream? initialTwitchStream;
+  final VimeoVideo? initialVimeoVideo;
+  final GoogleDriveVideo? initialGoogleDriveVideo;
+  final DailymotionVideo? initialDailymotionVideo;
+  final BstationVideo? initialBstationVideo;
   final String? initialMediaType;
   final String? initialMediaUrl;
   final VoidCallback? onChangeVideo;
@@ -19,6 +39,11 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   const CreateRoomDialog({
     super.key,
     this.initialYouTubeVideo,
+    this.initialTwitchStream,
+    this.initialVimeoVideo,
+    this.initialGoogleDriveVideo,
+    this.initialDailymotionVideo,
+    this.initialBstationVideo,
     this.initialMediaType,
     this.initialMediaUrl,
     this.onChangeVideo,
@@ -28,6 +53,11 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   static Future<RoomModel?> show(
     BuildContext context, {
     YouTubeVideo? initialYouTubeVideo,
+    TwitchStream? initialTwitchStream,
+    VimeoVideo? initialVimeoVideo,
+    GoogleDriveVideo? initialGoogleDriveVideo,
+    DailymotionVideo? initialDailymotionVideo,
+    BstationVideo? initialBstationVideo,
     String? initialMediaType,
     String? initialMediaUrl,
   }) {
@@ -37,6 +67,11 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => CreateRoomDialog(
         initialYouTubeVideo: initialYouTubeVideo,
+        initialTwitchStream: initialTwitchStream,
+        initialVimeoVideo: initialVimeoVideo,
+        initialGoogleDriveVideo: initialGoogleDriveVideo,
+        initialDailymotionVideo: initialDailymotionVideo,
+        initialBstationVideo: initialBstationVideo,
         initialMediaType: initialMediaType,
         initialMediaUrl: initialMediaUrl,
       ),
@@ -54,6 +89,11 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   final _mediaUrlController = TextEditingController();
 
   YouTubeVideo? _selectedYouTubeVideo;
+  TwitchStream? _selectedTwitchStream;
+  VimeoVideo? _selectedVimeoVideo;
+  GoogleDriveVideo? _selectedGoogleDriveVideo;
+  DailymotionVideo? _selectedDailymotionVideo;
+  BstationVideo? _selectedBstationVideo;
   String _mediaType = 'direct_url';
   String _controlMode = 'host_only'; // 'host_only' or 'collaborative'
   bool _isPublic = true;
@@ -67,10 +107,91 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaType = 'youtube';
       _mediaUrlController.text = widget.initialYouTubeVideo!.url;
       _titleController.text = widget.initialYouTubeVideo!.title;
+    } else if (widget.initialTwitchStream != null) {
+      _selectedTwitchStream = widget.initialTwitchStream;
+      _mediaType = 'twitch';
+      _mediaUrlController.text = widget.initialTwitchStream!.url;
+      _titleController.text = widget.initialTwitchStream!.title;
+    } else if (widget.initialVimeoVideo != null) {
+      _selectedVimeoVideo = widget.initialVimeoVideo;
+      _mediaType = 'vimeo';
+      _mediaUrlController.text = widget.initialVimeoVideo!.url;
+      _titleController.text = widget.initialVimeoVideo!.title;
+    } else if (widget.initialGoogleDriveVideo != null) {
+      _selectedGoogleDriveVideo = widget.initialGoogleDriveVideo;
+      _mediaType = 'google_drive';
+      _mediaUrlController.text = widget.initialGoogleDriveVideo!.url;
+      _titleController.text = widget.initialGoogleDriveVideo!.title;
+    } else if (widget.initialDailymotionVideo != null) {
+      _selectedDailymotionVideo = widget.initialDailymotionVideo;
+      _mediaType = 'dailymotion';
+      _mediaUrlController.text = widget.initialDailymotionVideo!.url;
+      _titleController.text = widget.initialDailymotionVideo!.title;
+    } else if (widget.initialBstationVideo != null) {
+      _selectedBstationVideo = widget.initialBstationVideo;
+      _mediaType = 'bstation';
+      _mediaUrlController.text = widget.initialBstationVideo!.url;
+      _titleController.text = widget.initialBstationVideo!.title;
     } else if (widget.initialMediaUrl != null) {
       _mediaType = widget.initialMediaType ?? 'direct_url';
       _mediaUrlController.text = widget.initialMediaUrl!;
       _titleController.text = 'Nonton Bareng';
+    } else if (widget.initialMediaType == 'twitch') {
+      _mediaType = 'twitch';
+      final twitchPresets = TwitchService.categoryPresets['Populer & Live'] ?? [];
+      if (twitchPresets.isNotEmpty) {
+        _selectedTwitchStream = twitchPresets[0];
+        _mediaUrlController.text = twitchPresets[0].url;
+        _titleController.text = twitchPresets[0].title;
+      } else {
+        _mediaUrlController.text = 'https://www.twitch.tv/monstercat';
+        _titleController.text = 'Nonton Twitch';
+      }
+    } else if (widget.initialMediaType == 'vimeo') {
+      _mediaType = 'vimeo';
+      final vimeoPresets = VimeoService.categoryPresets['Staff Picks'] ?? [];
+      if (vimeoPresets.isNotEmpty) {
+        _selectedVimeoVideo = vimeoPresets[0];
+        _mediaUrlController.text = vimeoPresets[0].url;
+        _titleController.text = vimeoPresets[0].title;
+      } else {
+        _mediaUrlController.text = 'https://vimeo.com/76979871';
+        _titleController.text = 'Nonton Vimeo';
+      }
+    } else if (widget.initialMediaType == 'google_drive') {
+      _mediaType = 'google_drive';
+      final drivePresets = GoogleDriveService.categoryPresets['Film & Animasi Open Source'] ?? [];
+      if (drivePresets.isNotEmpty) {
+        _selectedGoogleDriveVideo = drivePresets[0];
+        _mediaUrlController.text = drivePresets[0].url;
+        _titleController.text = drivePresets[0].title;
+      } else {
+        _mediaUrlController.text = 'https://drive.google.com/file/d/1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8/preview';
+        _titleController.text = 'Nonton Google Drive';
+      }
+    } else if (widget.initialMediaType == 'dailymotion') {
+      _mediaType = 'dailymotion';
+      final dmPresets = DailymotionService.categoryPresets['Trending'] ?? [];
+      if (dmPresets.isNotEmpty) {
+        _selectedDailymotionVideo = dmPresets[0];
+        _mediaUrlController.text = dmPresets[0].url;
+        _titleController.text = dmPresets[0].title;
+      } else {
+        _mediaUrlController.text = 'https://www.dailymotion.com/video/x7tgad0';
+        _titleController.text = 'Nonton Dailymotion';
+      }
+    } else if (widget.initialMediaType == 'bstation' ||
+        widget.initialMediaType == 'bilibili') {
+      _mediaType = 'bstation';
+      final bsPresets = BstationService.categoryPresets['Anime Populer'] ?? [];
+      if (bsPresets.isNotEmpty) {
+        _selectedBstationVideo = bsPresets[0];
+        _mediaUrlController.text = bsPresets[0].url;
+        _titleController.text = bsPresets[0].title;
+      } else {
+        _mediaUrlController.text = 'https://www.bilibili.tv/id/video/2049971954';
+        _titleController.text = 'Nonton Bstation';
+      }
     } else {
       _titleController.text = 'Nonton Bareng';
       _mediaUrlController.text = ApiConstants.presetMedia[0]['url']!;
@@ -81,14 +202,142 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   void _onMediaUrlChanged() {
     final text = _mediaUrlController.text.trim();
     final ytId = UnifiedPlayerController.extractYouTubeVideoId(text);
+    final twitchMedia = UnifiedPlayerController.extractTwitchMedia(text);
+    final vimeoId = UnifiedPlayerController.extractVimeoVideoId(text);
+    final driveId = GoogleDriveService.extractFileId(text);
+    final dmId = UnifiedPlayerController.extractDailymotionVideoId(text);
+    final bsId = UnifiedPlayerController.extractBstationVideoId(text);
+
     if (ytId != null) {
       if (_mediaType != 'youtube') {
-        setState(() => _mediaType = 'youtube');
+        setState(() {
+          _mediaType = 'youtube';
+          _selectedTwitchStream = null;
+          _selectedVimeoVideo = null;
+          _selectedGoogleDriveVideo = null;
+          _selectedDailymotionVideo = null;
+          _selectedBstationVideo = null;
+        });
       }
       if (_selectedYouTubeVideo == null || _selectedYouTubeVideo!.id != ytId) {
         YouTubeService.fetchVideoDetails(ytId).then((v) {
           if (mounted) setState(() => _selectedYouTubeVideo = v);
         });
+      }
+    } else if (twitchMedia != null) {
+      if (_mediaType != 'twitch') {
+        setState(() {
+          _mediaType = 'twitch';
+          _selectedYouTubeVideo = null;
+          _selectedVimeoVideo = null;
+          _selectedGoogleDriveVideo = null;
+          _selectedDailymotionVideo = null;
+          _selectedBstationVideo = null;
+        });
+      }
+      final channel = twitchMedia.id;
+      if (_selectedTwitchStream == null ||
+          _selectedTwitchStream!.id.toLowerCase() != channel.toLowerCase()) {
+        setState(() {
+          _selectedTwitchStream = TwitchStream.fromId(
+            id: channel,
+            title: 'Twitch Channel ($channel)',
+            channelTitle: channel,
+          );
+        });
+      }
+    } else if (vimeoId != null) {
+      if (_mediaType != 'vimeo') {
+        setState(() {
+          _mediaType = 'vimeo';
+          _selectedYouTubeVideo = null;
+          _selectedTwitchStream = null;
+          _selectedGoogleDriveVideo = null;
+          _selectedDailymotionVideo = null;
+          _selectedBstationVideo = null;
+        });
+      }
+      if (_selectedVimeoVideo == null || _selectedVimeoVideo!.id != vimeoId) {
+        VimeoService.fetchVideoDetails(vimeoId).then((v) {
+          if (mounted) setState(() => _selectedVimeoVideo = v);
+        });
+      }
+    } else if (driveId != null) {
+      if (_mediaType != 'google_drive') {
+        setState(() {
+          _mediaType = 'google_drive';
+          _selectedYouTubeVideo = null;
+          _selectedTwitchStream = null;
+          _selectedVimeoVideo = null;
+          _selectedDailymotionVideo = null;
+          _selectedBstationVideo = null;
+        });
+      }
+      if (_selectedGoogleDriveVideo == null ||
+          _selectedGoogleDriveVideo!.id != driveId) {
+        final allPresets =
+            GoogleDriveService.categoryPresets.values.expand((v) => v);
+        final matched = allPresets.where((v) => v.id == driveId);
+        if (matched.isNotEmpty) {
+          setState(() => _selectedGoogleDriveVideo = matched.first);
+        } else {
+          setState(() => _selectedGoogleDriveVideo = GoogleDriveVideo(
+                id: driveId,
+                title: 'Google Drive Video ($driveId)',
+                ownerName: 'Google Drive Shared',
+                category: 'Link Kustom',
+              ));
+        }
+      }
+    } else if (dmId != null) {
+      if (_mediaType != 'dailymotion') {
+        setState(() {
+          _mediaType = 'dailymotion';
+          _selectedYouTubeVideo = null;
+          _selectedTwitchStream = null;
+          _selectedVimeoVideo = null;
+          _selectedGoogleDriveVideo = null;
+          _selectedBstationVideo = null;
+        });
+      }
+      if (_selectedDailymotionVideo == null ||
+          _selectedDailymotionVideo!.id != dmId) {
+        final allPresets = DailymotionService.allPresets;
+        final matched = allPresets.where((v) => v.id == dmId);
+        if (matched.isNotEmpty) {
+          setState(() => _selectedDailymotionVideo = matched.first);
+        } else {
+          DailymotionService.fetchVideoDetails(dmId).then((v) {
+            if (mounted && v != null) {
+              setState(() => _selectedDailymotionVideo = v);
+            }
+          });
+        }
+      }
+    } else if (bsId != null) {
+      if (_mediaType != 'bstation') {
+        setState(() {
+          _mediaType = 'bstation';
+          _selectedYouTubeVideo = null;
+          _selectedTwitchStream = null;
+          _selectedVimeoVideo = null;
+          _selectedGoogleDriveVideo = null;
+          _selectedDailymotionVideo = null;
+        });
+      }
+      if (_selectedBstationVideo == null ||
+          _selectedBstationVideo!.id != bsId) {
+        final allPresets = BstationService.allPresets;
+        final matched = allPresets.where((v) => v.id == bsId);
+        if (matched.isNotEmpty) {
+          setState(() => _selectedBstationVideo = matched.first);
+        } else {
+          BstationService.fetchVideoDetails(bsId).then((v) {
+            if (mounted && v != null) {
+              setState(() => _selectedBstationVideo = v);
+            }
+          });
+        }
       }
     } else if ((text.endsWith('.mp4') ||
             text.endsWith('.m3u8') ||
@@ -97,6 +346,11 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       setState(() {
         _mediaType = 'direct_url';
         _selectedYouTubeVideo = null;
+        _selectedTwitchStream = null;
+        _selectedVimeoVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
       });
     }
   }
@@ -117,7 +371,107 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     if (result != null && mounted) {
       setState(() {
         _selectedYouTubeVideo = result;
+        _selectedTwitchStream = null;
+        _selectedVimeoVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
         _mediaType = 'youtube';
+        _mediaUrlController.text = result.url;
+        _titleController.text = result.title;
+      });
+    }
+  }
+
+  Future<void> _pickAnotherTwitchStream() async {
+    final result = await Navigator.of(context).push<TwitchStream>(
+      MaterialPageRoute(builder: (_) => const TwitchPickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _selectedTwitchStream = result;
+        _selectedYouTubeVideo = null;
+        _selectedVimeoVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
+        _mediaType = 'twitch';
+        _mediaUrlController.text = result.url;
+        _titleController.text = result.title;
+      });
+    }
+  }
+
+  Future<void> _pickAnotherVimeoVideo() async {
+    final result = await Navigator.of(context).push<VimeoVideo>(
+      MaterialPageRoute(builder: (_) => const VimeoPickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _selectedVimeoVideo = result;
+        _selectedYouTubeVideo = null;
+        _selectedTwitchStream = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
+        _mediaType = 'vimeo';
+        _mediaUrlController.text = result.url;
+        _titleController.text = result.title;
+      });
+    }
+  }
+
+  Future<void> _pickAnotherGoogleDriveVideo() async {
+    final result = await Navigator.of(context).push<GoogleDriveVideo>(
+      MaterialPageRoute(builder: (_) => const GoogleDrivePickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _selectedGoogleDriveVideo = result;
+        _selectedYouTubeVideo = null;
+        _selectedTwitchStream = null;
+        _selectedVimeoVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
+        _mediaType = 'google_drive';
+        _mediaUrlController.text = result.url;
+        _titleController.text = result.title;
+      });
+    }
+  }
+
+  Future<void> _pickAnotherDailymotionVideo() async {
+    final result = await Navigator.of(context).push<DailymotionVideo>(
+      MaterialPageRoute(builder: (_) => const DailymotionPickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _selectedDailymotionVideo = result;
+        _selectedYouTubeVideo = null;
+        _selectedTwitchStream = null;
+        _selectedVimeoVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedBstationVideo = null;
+        _mediaType = 'dailymotion';
+        _mediaUrlController.text = result.url;
+        _titleController.text = result.title;
+      });
+    }
+  }
+
+  Future<void> _pickAnotherBstationVideo() async {
+    final result = await Navigator.of(context).push<BstationVideo>(
+      MaterialPageRoute(builder: (_) => const BstationPickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _selectedBstationVideo = result;
+        _selectedYouTubeVideo = null;
+        _selectedTwitchStream = null;
+        _selectedVimeoVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _mediaType = 'bstation';
         _mediaUrlController.text = result.url;
         _titleController.text = result.title;
       });
@@ -128,7 +482,15 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     final user = ref.read(authControllerProvider).asData?.value;
-    if (user == null) return;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sesi pengguna tidak ditemukan. Silakan atur nama terlebih dahulu.'),
+          backgroundColor: AppColors.accentRed,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -136,7 +498,23 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     final mediaUrl = _mediaUrlController.text.trim();
     if (UnifiedPlayerController.extractYouTubeVideoId(mediaUrl) != null) {
       mediaType = 'youtube';
-    } else if (mediaType == 'youtube' &&
+    } else if (UnifiedPlayerController.extractTwitchMedia(mediaUrl) != null) {
+      mediaType = 'twitch';
+    } else if (UnifiedPlayerController.extractVimeoVideoId(mediaUrl) != null) {
+      mediaType = 'vimeo';
+    } else if (UnifiedPlayerController.extractGoogleDriveFileId(mediaUrl) != null) {
+      mediaType = 'google_drive';
+    } else if (UnifiedPlayerController.extractDailymotionVideoId(mediaUrl) != null) {
+      mediaType = 'dailymotion';
+    } else if (UnifiedPlayerController.extractBstationVideoId(mediaUrl) != null) {
+      mediaType = 'bstation';
+    } else if ((mediaType == 'youtube' ||
+            mediaType == 'twitch' ||
+            mediaType == 'vimeo' ||
+            mediaType == 'google_drive' ||
+            mediaType == 'dailymotion' ||
+            mediaType == 'bstation' ||
+            mediaType == 'bilibili') &&
         (mediaUrl.endsWith('.mp4') ||
             mediaUrl.endsWith('.m3u8') ||
             mediaUrl.endsWith('.webm'))) {
@@ -437,6 +815,1181 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                                 ),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        // Twitch options
+                        if (_mediaType == 'twitch') ...[
+                          // Selected Twitch Stream Preview Card
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF9146FF).withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        _selectedTwitchStream?.thumbnailUrl ??
+                                            'https://static-cdn.jtvnw.net/previews-ttv/live_user_${_selectedTwitchStream?.id ?? "monstercat"}-640x360.jpg',
+                                        width: 106,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 106,
+                                          height: 60,
+                                          color: Colors.black26,
+                                          child: const Icon(
+                                            Icons.live_tv_rounded,
+                                            color: Color(0xFF9146FF),
+                                            size: 28,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 3,
+                                        left: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF9146FF),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.circle,
+                                                  size: 6, color: Colors.white),
+                                              SizedBox(width: 2),
+                                              Text(
+                                                'Twitch',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        bottom: 3,
+                                        right: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE91916),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: const Text(
+                                            'LIVE',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedTwitchStream?.title ??
+                                            'Twitch Live Stream',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _selectedTwitchStream?.channelTitle ??
+                                                  'Twitch Channel',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified,
+                                              size: 11,
+                                              color: Color(0xFF9146FF)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherTwitchStream,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF9146FF).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF9146FF).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15,
+                                            color: Color(0xFF9146FF)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Link Channel / Video / Clip Twitch *',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _mediaUrlController,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'https://twitch.tv/monstercat',
+                              prefixIcon: Icon(
+                                Icons.videogame_asset_rounded,
+                                color: Color(0xFF9146FF),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'URL Twitch tidak boleh kosong';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: ApiConstants.presetMedia
+                                .where((m) => m['type'] == 'twitch')
+                                .map((media) {
+                              return ActionChip(
+                                avatar: const Icon(
+                                  Icons.videogame_asset_rounded,
+                                  size: 14,
+                                  color: Color(0xFF9146FF),
+                                ),
+                                label: Text(
+                                  media['title']!,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor: AppColors.surfaceElevated,
+                                side: const BorderSide(color: AppColors.border),
+                                onPressed: () {
+                                  setState(() {
+                                    _mediaUrlController.text = media['url']!;
+                                    final twitchPresets = TwitchService.categoryPresets['Populer & Live'] ?? [];
+                                    final matched = twitchPresets.where((s) => s.url == media['url'] || s.id == media['title']?.toLowerCase());
+                                    if (matched.isNotEmpty) {
+                                      _selectedTwitchStream = matched.first;
+                                    } else {
+                                      final channel = UnifiedPlayerController.extractTwitchMedia(media['url']!)?.id;
+                                      if (channel != null) {
+                                        _selectedTwitchStream = TwitchStream.fromId(
+                                          id: channel,
+                                          title: media['title'] ?? channel,
+                                          channelTitle: channel,
+                                        );
+                                      }
+                                    }
+                                    if (_titleController.text.isEmpty ||
+                                        _titleController.text == 'Nonton Bareng' ||
+                                        _titleController.text == 'Nonton Twitch') {
+                                      _titleController.text = 'Nonton ${media['title']}';
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        // Vimeo options
+                        if (_mediaType == 'vimeo') ...[
+                          // Selected Vimeo Video Preview Card
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF1AB7EA).withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        _selectedVimeoVideo?.thumbnailUrl ??
+                                            'https://vumbnail.com/${UnifiedPlayerController.extractVimeoVideoId(_mediaUrlController.text) ?? "76979871"}.jpg',
+                                        width: 106,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 106,
+                                          height: 60,
+                                          color: Colors.black26,
+                                          child: const Icon(
+                                            Icons.video_collection_rounded,
+                                            color: Color(0xFF1AB7EA),
+                                            size: 28,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 3,
+                                        left: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF1AB7EA),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: const Text(
+                                            'Vimeo',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedVimeoVideo != null &&
+                                          _selectedVimeoVideo!.duration.isNotEmpty)
+                                        Positioned(
+                                          bottom: 3,
+                                          right: 3,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.8),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              _selectedVimeoVideo!.duration,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedVimeoVideo?.title ??
+                                            'Vimeo Video',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _selectedVimeoVideo?.channelTitle ??
+                                                  'Vimeo Creator',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified,
+                                              size: 11,
+                                              color: Color(0xFF1AB7EA)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherVimeoVideo,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1AB7EA).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF1AB7EA).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15,
+                                            color: Color(0xFF1AB7EA)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Link Video Vimeo *',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _mediaUrlController,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'https://vimeo.com/76979871',
+                              prefixIcon: Icon(
+                                Icons.ondemand_video_rounded,
+                                color: Color(0xFF1AB7EA),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'URL Vimeo tidak boleh kosong';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: ApiConstants.presetMedia
+                                .where((m) => m['type'] == 'vimeo')
+                                .map((media) {
+                              return ActionChip(
+                                avatar: const Icon(
+                                  Icons.ondemand_video_rounded,
+                                  size: 14,
+                                  color: Color(0xFF1AB7EA),
+                                ),
+                                label: Text(
+                                  media['title']!,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor: AppColors.surfaceElevated,
+                                side: const BorderSide(color: AppColors.border),
+                                onPressed: () {
+                                  setState(() {
+                                    _mediaUrlController.text = media['url']!;
+                                    final vimeoPresets = VimeoService.categoryPresets['Staff Picks'] ?? [];
+                                    final matched = vimeoPresets.where((v) => v.url == media['url'] || v.title == media['title']);
+                                    if (matched.isNotEmpty) {
+                                      _selectedVimeoVideo = matched.first;
+                                    } else {
+                                      final id = UnifiedPlayerController.extractVimeoVideoId(media['url']!);
+                                      if (id != null) {
+                                        _selectedVimeoVideo = VimeoVideo(
+                                          id: id,
+                                          title: media['title'] ?? 'Vimeo Video ($id)',
+                                          channelTitle: 'Vimeo Creator',
+                                          thumbnailUrl: 'https://vumbnail.com/$id.jpg',
+                                          duration: 'HD',
+                                        );
+                                      }
+                                    }
+                                    if (_titleController.text.isEmpty ||
+                                        _titleController.text == 'Nonton Bareng' ||
+                                        _titleController.text == 'Nonton Vimeo') {
+                                      _titleController.text = 'Nonton ${media['title']}';
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        // Google Drive options (if Google Drive)
+                        if (_mediaType == 'google_drive') ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF0F9D58).withValues(alpha: 0.6),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        _selectedGoogleDriveVideo?.driveThumbnailUrl ??
+                                            'https://drive.google.com/thumbnail?id=${GoogleDriveService.extractFileId(_mediaUrlController.text) ?? "1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8"}&sz=w640',
+                                        width: 106,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 106,
+                                          height: 60,
+                                          color: const Color(0xFF132B1C),
+                                          child: const Icon(
+                                            Icons.cloud_circle_rounded,
+                                            color: Color(0xFF0F9D58),
+                                            size: 28,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 3,
+                                        left: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0F9D58),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: const Text(
+                                            'Drive',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedGoogleDriveVideo != null &&
+                                          _selectedGoogleDriveVideo!.duration.isNotEmpty)
+                                        Positioned(
+                                          bottom: 3,
+                                          right: 3,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.8),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              _selectedGoogleDriveVideo!.duration,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedGoogleDriveVideo?.title ??
+                                            'Google Drive Video',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _selectedGoogleDriveVideo?.ownerName ??
+                                                  'Google Drive Shared',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified_rounded,
+                                              size: 11,
+                                              color: Color(0xFF4285F4)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherGoogleDriveVideo,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F9D58).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF0F9D58).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15,
+                                            color: Color(0xFF0F9D58)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Link Video Google Drive *',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _mediaUrlController,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'https://drive.google.com/file/d/...',
+                              prefixIcon: Icon(
+                                Icons.cloud_queue_rounded,
+                                color: Color(0xFF0F9D58),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'URL Google Drive tidak boleh kosong';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: ApiConstants.presetMedia
+                                .where((m) => m['type'] == 'google_drive')
+                                .map((media) {
+                              return ActionChip(
+                                avatar: const Icon(
+                                  Icons.cloud_queue_rounded,
+                                  size: 14,
+                                  color: Color(0xFF0F9D58),
+                                ),
+                                label: Text(
+                                  media['title']!,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor: AppColors.surfaceElevated,
+                                side: const BorderSide(color: AppColors.border),
+                                onPressed: () {
+                                  setState(() {
+                                    _mediaUrlController.text = media['url']!;
+                                    final allPresets = GoogleDriveService.categoryPresets.values.expand((v) => v);
+                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
+                                    if (matched.isNotEmpty) {
+                                      _selectedGoogleDriveVideo = matched.first;
+                                    } else {
+                                      final id = GoogleDriveService.extractFileId(media['url']!);
+                                      if (id != null) {
+                                        _selectedGoogleDriveVideo = GoogleDriveVideo(
+                                          id: id,
+                                          title: media['title'] ?? 'Google Drive Video ($id)',
+                                          ownerName: 'Google Drive Shared',
+                                          category: 'Koleksi Drive',
+                                        );
+                                      }
+                                    }
+                                    if (_titleController.text.isEmpty ||
+                                        _titleController.text == 'Nonton Bareng' ||
+                                        _titleController.text == 'Nonton Google Drive') {
+                                      _titleController.text = 'Nonton ${media['title']}';
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        // Dailymotion options (if Dailymotion)
+                        if (_mediaType == 'dailymotion') ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF0066DC).withValues(alpha: 0.6),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        _selectedDailymotionVideo?.effectiveThumbnailUrl ??
+                                            'https://www.dailymotion.com/thumbnail/video/${UnifiedPlayerController.extractDailymotionVideoId(_mediaUrlController.text) ?? "x7tgad0"}',
+                                        width: 106,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 106,
+                                          height: 60,
+                                          color: const Color(0xFF001F4D),
+                                          child: const Icon(
+                                            Icons.play_circle_filled_rounded,
+                                            color: Color(0xFF0066DC),
+                                            size: 28,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 3,
+                                        left: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0066DC),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: const Text(
+                                            'Daily',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedDailymotionVideo != null &&
+                                          _selectedDailymotionVideo!.durationFormatted.isNotEmpty)
+                                        Positioned(
+                                          bottom: 3,
+                                          right: 3,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.8),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              _selectedDailymotionVideo!.durationFormatted,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedDailymotionVideo?.title ??
+                                            'Dailymotion Video',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _selectedDailymotionVideo?.uploaderName ??
+                                                  'Dailymotion',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified_rounded,
+                                              size: 11,
+                                              color: Color(0xFF0066DC)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherDailymotionVideo,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0066DC).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF0066DC).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15,
+                                            color: Color(0xFF0066DC)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Link Video Dailymotion *',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _mediaUrlController,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'https://www.dailymotion.com/video/...',
+                              prefixIcon: Icon(
+                                Icons.play_circle_filled_rounded,
+                                color: Color(0xFF0066DC),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'URL Dailymotion tidak boleh kosong';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: ApiConstants.presetMedia
+                                .where((m) => m['type'] == 'dailymotion')
+                                .map((media) {
+                              return ActionChip(
+                                avatar: const Icon(
+                                  Icons.play_circle_filled_rounded,
+                                  size: 14,
+                                  color: Color(0xFF0066DC),
+                                ),
+                                label: Text(
+                                  media['title']!,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor: AppColors.surfaceElevated,
+                                side: const BorderSide(color: AppColors.border),
+                                onPressed: () {
+                                  setState(() {
+                                    _mediaUrlController.text = media['url']!;
+                                    final allPresets = DailymotionService.allPresets;
+                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
+                                    if (matched.isNotEmpty) {
+                                      _selectedDailymotionVideo = matched.first;
+                                    } else {
+                                      final id = UnifiedPlayerController.extractDailymotionVideoId(media['url']!);
+                                      if (id != null) {
+                                        _selectedDailymotionVideo = DailymotionVideo.fromId(
+                                          id,
+                                          title: media['title'],
+                                        );
+                                      }
+                                    }
+                                    if (_titleController.text.isEmpty ||
+                                        _titleController.text == 'Nonton Bareng' ||
+                                        _titleController.text == 'Nonton Dailymotion') {
+                                      _titleController.text = 'Nonton ${media['title']}';
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        // Bstation options (if Bstation)
+                        if (_mediaType == 'bstation') ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF00A1D6).withValues(alpha: 0.6),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Image.network(
+                                        _selectedBstationVideo?.effectiveThumbnailUrl ??
+                                            'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+                                        width: 106,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 106,
+                                          height: 60,
+                                          color: const Color(0xFF002F44),
+                                          child: const Icon(
+                                            Icons.smart_display_rounded,
+                                            color: Color(0xFF00A1D6),
+                                            size: 28,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 3,
+                                        left: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: _selectedBstationVideo?.episodeNumber != null
+                                                ? const Color(0xFFFB7299)
+                                                : const Color(0xFF00A1D6),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: Text(
+                                            _selectedBstationVideo?.episodeNumber ?? 'Bstation',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedBstationVideo != null &&
+                                          _selectedBstationVideo!.durationFormatted.isNotEmpty)
+                                        Positioned(
+                                          bottom: 3,
+                                          right: 3,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.8),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              _selectedBstationVideo!.durationFormatted,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedBstationVideo?.title ??
+                                            'Bstation Video',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _selectedBstationVideo?.uploaderName ??
+                                                  'Bstation Creator',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified_rounded,
+                                              size: 11,
+                                              color: Color(0xFF00A1D6)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherBstationVideo,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00A1D6).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF00A1D6).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15,
+                                            color: Color(0xFF00A1D6)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Link Video / Anime Bstation *',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _mediaUrlController,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'https://www.bilibili.tv/id/video/...',
+                              prefixIcon: Icon(
+                                Icons.smart_display_rounded,
+                                color: Color(0xFF00A1D6),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'URL Bstation tidak boleh kosong';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: ApiConstants.presetMedia
+                                .where((m) => m['type'] == 'bstation')
+                                .map((media) {
+                              return ActionChip(
+                                avatar: const Icon(
+                                  Icons.smart_display_rounded,
+                                  size: 14,
+                                  color: Color(0xFF00A1D6),
+                                ),
+                                label: Text(
+                                  media['title']!,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor: AppColors.surfaceElevated,
+                                side: const BorderSide(color: AppColors.border),
+                                onPressed: () {
+                                  setState(() {
+                                    _mediaUrlController.text = media['url']!;
+                                    final allPresets = BstationService.allPresets;
+                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
+                                    if (matched.isNotEmpty) {
+                                      _selectedBstationVideo = matched.first;
+                                    } else {
+                                      final id = UnifiedPlayerController.extractBstationVideoId(media['url']!);
+                                      if (id != null) {
+                                        _selectedBstationVideo = BstationVideo.fromId(
+                                          id,
+                                          title: media['title'],
+                                        );
+                                      }
+                                    }
+                                    if (_titleController.text.isEmpty ||
+                                        _titleController.text == 'Nonton Bareng' ||
+                                        _titleController.text == 'Nonton Bstation') {
+                                      _titleController.text = 'Nonton ${media['title']}';
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
                           ),
                           const SizedBox(height: 14),
                         ],

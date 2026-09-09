@@ -11,6 +11,8 @@ class RoomState {
   final String? error;
   final bool isRoomClosed;
   final String? closedReason;
+  final bool isRealtimeConnected;
+  final bool isReconnecting;
 
   const RoomState({
     required this.room,
@@ -19,6 +21,8 @@ class RoomState {
     this.error,
     this.isRoomClosed = false,
     this.closedReason,
+    this.isRealtimeConnected = true,
+    this.isReconnecting = false,
   });
 
   RoomState copyWith({
@@ -28,6 +32,8 @@ class RoomState {
     String? error,
     bool? isRoomClosed,
     String? closedReason,
+    bool? isRealtimeConnected,
+    bool? isReconnecting,
   }) {
     return RoomState(
       room: room ?? this.room,
@@ -36,6 +42,8 @@ class RoomState {
       error: error,
       isRoomClosed: isRoomClosed ?? this.isRoomClosed,
       closedReason: closedReason ?? this.closedReason,
+      isRealtimeConnected: isRealtimeConnected ?? this.isRealtimeConnected,
+      isReconnecting: isReconnecting ?? this.isReconnecting,
     );
   }
 }
@@ -46,8 +54,11 @@ class RoomController extends ChangeNotifier {
   RealtimeChannel? _presenceChannel;
   bool _hasEstablishedPresence = false;
   bool _hasSeenHost = false;
+  bool _isDisposed = false;
   Timer? _hostMissingTimer;
   Timer? _initialHostDiscoveryTimer;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
   static const Duration _hostGracePeriod = Duration(seconds: 10);
   static const Duration _initialHostDiscoveryTimeout = Duration(seconds: 15);
 
@@ -534,6 +545,12 @@ class RoomController extends ChangeNotifier {
         debugPrint(
             '[RoomController] Presence channel subscribe status: $status (error: $error)');
         if (status == RealtimeSubscribeStatus.subscribed) {
+          _reconnectAttempts = 0;
+          _state = _state.copyWith(
+            isRealtimeConnected: true,
+            isReconnecting: false,
+          );
+          notifyListeners();
           final res = await _presenceChannel!.track({
             'user_id': _currentUser.id,
             'username': _currentUser.username,
@@ -544,10 +561,56 @@ class RoomController extends ChangeNotifier {
             'role': isHost ? 'host' : (isCurrentUserCoHost ? 'co_host' : 'viewer'),
           });
           debugPrint('[RoomController] Presence track response: $res');
+        } else if (status == RealtimeSubscribeStatus.channelError ||
+            status == RealtimeSubscribeStatus.timedOut) {
+          _state = _state.copyWith(
+            isRealtimeConnected: false,
+            isReconnecting: true,
+          );
+          notifyListeners();
+          _schedulePresenceReconnect();
         }
       });
     } catch (e) {
       debugPrint('[RoomController] Error setting up presence: $e');
+      _state = _state.copyWith(
+        isRealtimeConnected: false,
+        isReconnecting: true,
+      );
+      notifyListeners();
+      _schedulePresenceReconnect();
+    }
+  }
+
+  void _schedulePresenceReconnect() {
+    if (_isDisposed || _reconnectTimer?.isActive == true) return;
+    _reconnectAttempts++;
+    final delaySeconds = (_reconnectAttempts * 2).clamp(2, 10);
+    debugPrint(
+        '[RoomController] Scheduling presence reconnect in ${delaySeconds}s (attempt $_reconnectAttempts)...');
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (!_isDisposed) {
+        reconnectPresence();
+      }
+    });
+  }
+
+  /// Re-establishes connection to Supabase presence channel
+  Future<void> reconnectPresence() async {
+    if (_isDisposed || supabase == null) return;
+    debugPrint('[RoomController] Reconnecting presence channel...');
+    try {
+      if (_presenceChannel != null) {
+        try {
+          await _presenceChannel!.untrack();
+          await supabase!.removeChannel(_presenceChannel!);
+        } catch (_) {}
+        _presenceChannel = null;
+      }
+      _initPresence();
+    } catch (e) {
+      debugPrint('[RoomController] Reconnect presence failed: $e');
+      _schedulePresenceReconnect();
     }
   }
 
@@ -758,37 +821,21 @@ class RoomController extends ChangeNotifier {
           }
         } catch (_) {}
 
-        // Parallel cleanup for participants, messages, and room
-        await Future.wait([
-          if (isUuid)
-            supabase!
-                .from('room_participants')
-                .delete()
-                .eq('room_id', _state.room.id)
-                .timeout(const Duration(seconds: 2))
-                .then((_) {}, onError: (_) {}),
-          if (isUuid)
-            supabase!
-                .from('room_messages')
-                .delete()
-                .eq('room_id', _state.room.id)
-                .timeout(const Duration(seconds: 2))
-                .then((_) {}, onError: (_) {}),
-          if (isUuid)
-            supabase!
-                .from('rooms')
-                .delete()
-                .eq('id', _state.room.id)
-                .timeout(const Duration(seconds: 3))
-                .then((_) {}, onError: (_) {})
-          else if (_state.room.code.isNotEmpty)
-            supabase!
-                .from('rooms')
-                .delete()
-                .eq('code', _state.room.code)
-                .timeout(const Duration(seconds: 3))
-                .then((_) {}, onError: (_) {}),
-        ]);
+        // Step 2: Delete room. PostgreSQL ON DELETE CASCADE will automatically
+        // clean up all associated room_messages, room_participants, and room_queue in 1 atomic query.
+        if (isUuid) {
+          await supabase!
+              .from('rooms')
+              .delete()
+              .eq('id', _state.room.id)
+              .timeout(const Duration(seconds: 3));
+        } else if (_state.room.code.isNotEmpty) {
+          await supabase!
+              .from('rooms')
+              .delete()
+              .eq('code', _state.room.code)
+              .timeout(const Duration(seconds: 3));
+        }
       } catch (e) {
         debugPrint('[RoomController] Error deleting room from Supabase: $e');
       }
@@ -983,6 +1030,9 @@ class RoomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _hostMissingTimer?.cancel();
     _hostMissingTimer = null;
     _initialHostDiscoveryTimer?.cancel();

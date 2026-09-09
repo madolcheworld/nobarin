@@ -73,6 +73,56 @@ class ApiConstants {
       'type': 'youtube',
       'url': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     },
+    {
+      'title': 'Monstercat 24/7 Live (Twitch)',
+      'type': 'twitch',
+      'url': 'https://www.twitch.tv/monstercat',
+    },
+    {
+      'title': 'Riot Games Channel (Twitch)',
+      'type': 'twitch',
+      'url': 'https://www.twitch.tv/riotgames',
+    },
+    {
+      'title': 'Tears of Steel Sci-Fi (Vimeo)',
+      'type': 'vimeo',
+      'url': 'https://vimeo.com/76979871',
+    },
+    {
+      'title': 'Big Buck Bunny (Vimeo)',
+      'type': 'vimeo',
+      'url': 'https://vimeo.com/1084537',
+    },
+    {
+      'title': 'Big Buck Bunny (Google Drive)',
+      'type': 'google_drive',
+      'url': 'https://drive.google.com/file/d/1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8/preview',
+    },
+    {
+      'title': 'Tears of Steel 4K (Google Drive)',
+      'type': 'google_drive',
+      'url': 'https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW/preview',
+    },
+    {
+      'title': 'Big Buck Bunny (Dailymotion)',
+      'type': 'dailymotion',
+      'url': 'https://www.dailymotion.com/video/x7tgad0',
+    },
+    {
+      'title': 'Tears of Steel 4K (Dailymotion)',
+      'type': 'dailymotion',
+      'url': 'https://www.dailymotion.com/video/x8n6y2p',
+    },
+    {
+      'title': 'Spy x Family Season 2 (Bstation)',
+      'type': 'bstation',
+      'url': 'https://www.bilibili.tv/id/video/2049971954',
+    },
+    {
+      'title': 'Genshin Impact Concert (Bstation)',
+      'type': 'bstation',
+      'url': 'https://www.bilibili.com/video/BV14x411c7A2',
+    },
   ];
 
   // Preset Avatars for Guest Profile

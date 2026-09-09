@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/errors/failures.dart';
 import '../domain/user_profile.dart';
 
 class AuthRepository {
@@ -32,7 +33,12 @@ class AuthRepository {
     required String username,
     required String avatarUrl,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (e) {
+      throw AuthFailure('Gagal mengakses penyimpanan lokal perangkat.', e);
+    }
 
     String userId;
     // Attempt Supabase anonymous sign-in if client is present
@@ -54,11 +60,14 @@ class AuthRepository {
           'is_guest': true,
         }).timeout(const Duration(seconds: 5));
       } catch (e) {
-        debugPrint('[AuthRepository] Supabase auth/profile fallback: $e');
-        userId = const Uuid().v4();
+        debugPrint('[AuthRepository] Supabase auth/profile sync note: $e');
+        // Fallback to existing cached ID if available to keep identity consistent
+        final cached = await getCachedProfile();
+        userId = cached?.id ?? const Uuid().v4();
       }
     } else {
-      userId = const Uuid().v4();
+      final cached = await getCachedProfile();
+      userId = cached?.id ?? const Uuid().v4();
     }
 
     final profile = UserProfile(

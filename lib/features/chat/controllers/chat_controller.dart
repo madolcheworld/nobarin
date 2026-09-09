@@ -22,8 +22,16 @@ class ChatController extends ChangeNotifier {
   final UserProfile currentUser;
   final SupabaseClient? supabase;
 
+  static const int maxInMemoryMessages = 150;
+
   final List<ChatMessage> _messages = [];
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  void _pruneOldMessages() {
+    if (_messages.length > maxInMemoryMessages) {
+      _messages.removeRange(0, _messages.length - maxInMemoryMessages);
+    }
+  }
 
   final StreamController<FloatingReaction> _reactionsStreamController =
       StreamController<FloatingReaction>.broadcast();
@@ -88,6 +96,7 @@ class ChatController extends ChangeNotifier {
             return;
           }
           _messages.add(message);
+          _pruneOldMessages();
           notifyListeners();
 
           if (message.isReaction) {
@@ -143,6 +152,7 @@ class ChatController extends ChangeNotifier {
           }
         }
         if (addedAny) {
+          _pruneOldMessages();
           notifyListeners();
         }
       }
@@ -228,6 +238,52 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  void _updateMessageStatus(String messageId, MessageStatus newStatus) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index != -1) {
+      _messages[index] = _messages[index].copyWith(status: newStatus);
+      notifyListeners();
+    }
+  }
+
+  /// Retries sending a previously failed message
+  Future<void> retryMessage(String messageId) async {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    final msg = _messages[index];
+    if (msg.status != MessageStatus.failed) return;
+
+    _updateMessageStatus(messageId, MessageStatus.sending);
+
+    if (_chatChannel != null) {
+      try {
+        await _chatChannel!.sendBroadcastMessage(
+          event: 'NEW_MESSAGE',
+          payload: {
+            ...msg.toJson(),
+            'username': currentUser.username,
+            'avatar_url': currentUser.avatarUrl,
+          },
+        );
+
+        if (supabase != null) {
+          final payload = msg.toJson();
+          if (supabase!.auth.currentUser == null ||
+              supabase!.auth.currentUser!.id != currentUser.id) {
+            payload.remove('user_id');
+          }
+          await supabase!.from('room_messages').insert(payload);
+        }
+        _updateMessageStatus(messageId, MessageStatus.sent);
+      } catch (e) {
+        debugPrint('[ChatController] Error retrying message: $e');
+        _updateMessageStatus(messageId, MessageStatus.failed);
+      }
+    } else {
+      _updateMessageStatus(messageId, MessageStatus.failed);
+    }
+  }
+
   /// Sends a chat message
   Future<void> sendMessage(String text) async {
     setTyping(false);
@@ -243,9 +299,11 @@ class ChatController extends ChangeNotifier {
       content: clean,
       type: 'text',
       createdAt: DateTime.now(),
+      status: MessageStatus.sending,
     );
 
     _messages.add(msg);
+    _pruneOldMessages();
     notifyListeners();
 
     if (_chatChannel != null) {
@@ -267,9 +325,13 @@ class ChatController extends ChangeNotifier {
           }
           await supabase!.from('room_messages').insert(payload);
         }
+        _updateMessageStatus(msg.id, MessageStatus.sent);
       } catch (e) {
         debugPrint('[ChatController] Error broadcasting message: $e');
+        _updateMessageStatus(msg.id, MessageStatus.failed);
       }
+    } else {
+      _updateMessageStatus(msg.id, MessageStatus.failed);
     }
   }
 
@@ -289,6 +351,7 @@ class ChatController extends ChangeNotifier {
     );
 
     _messages.add(msg);
+    _pruneOldMessages();
     notifyListeners();
 
     if (_chatChannel != null) {
@@ -328,6 +391,7 @@ class ChatController extends ChangeNotifier {
     );
 
     _messages.add(msg);
+    _pruneOldMessages();
     notifyListeners();
 
     if (_chatChannel != null) {

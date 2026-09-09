@@ -39,6 +39,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
   String? _sharerId;
   String? _sharerName;
   bool _isDisposed = false;
+  String? _errorMessage;
 
   MediaStream? _localStream;
   MediaStream? _remoteStream;
@@ -56,6 +57,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
   bool get isSharing => _isSharing;
   String? get sharerId => _sharerId;
   String? get sharerName => _sharerName;
+  String? get errorMessage => _errorMessage;
   bool get isScreenSharingActive =>
       _isSharing || (_sharerId != null && _sharerId!.isNotEmpty);
   MediaStream? get localStream => _localStream;
@@ -245,7 +247,16 @@ class WebRtcScreenShareController extends ChangeNotifier {
 
   /// Starts screen sharing by acquiring display media and broadcasting state to peers.
   Future<bool> startScreenShare() async {
-    if (!canShareScreen || _isSharing) return false;
+    if (!canShareScreen || _isSharing) {
+      if (isScreenSharingActive && !_isSharing) {
+        _errorMessage = 'Seseorang sedang membagikan layar saat ini.';
+      } else {
+        _errorMessage = 'Anda tidak memiliki izin untuk membagikan layar.';
+      }
+      return false;
+    }
+
+    _errorMessage = null;
 
     try {
       await _backgroundServiceHandler(true);
@@ -295,6 +306,17 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _isSharing = false;
       _sharerId = null;
       _sharerName = null;
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('permission') ||
+          errStr.contains('denied') ||
+          errStr.contains('notallowederror')) {
+        _errorMessage = 'Izin berbagi layar ditolak.';
+      } else if (errStr.contains('notsupportederror') ||
+          errStr.contains('unsupported')) {
+        _errorMessage = 'Berbagi layar tidak didukung di perangkat ini.';
+      } else {
+        _errorMessage = 'Gagal memulai berbagi layar: $e';
+      }
       notifyListeners();
       return false;
     }

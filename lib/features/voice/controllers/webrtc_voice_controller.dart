@@ -45,6 +45,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   bool _isDucking = false;
   double _savedVideoVolume = 1.0;
   bool _isDisposed = false;
+  String? _errorMessage;
 
   RealtimeChannel? _voiceChannel;
   MediaStream? _localStream;
@@ -74,6 +75,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   bool get isAudioDuckingEnabled => _audioDuckingEnabled;
   bool get isLocalSpeaking => _isLocalSpeaking;
   bool get isDucking => _isDucking;
+  String? get errorMessage => _errorMessage;
   MediaStream? get localStream => _localStream;
   Set<String> get activeSpeakerIds => Set.unmodifiable(_activeSpeakerIds);
   Set<String> get mutedUserIds => Set.unmodifiable(_mutedUserIds);
@@ -200,6 +202,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       return;
     }
 
+    _errorMessage = null;
     _status = VoiceStatus.connecting;
     notifyListeners();
 
@@ -248,9 +251,17 @@ class WebRtcVoiceController extends ChangeNotifier {
       });
     } catch (e) {
       debugPrint('[WebRtcVoiceController] Connect failed: $e');
+      _errorMessage = 'Gagal menghubungkan voice chat: $e';
       _status = VoiceStatus.error;
       notifyListeners();
     }
+  }
+
+  /// Reconnects to voice chat after failure or disconnection
+  Future<void> reconnect() async {
+    await disconnect();
+    _errorMessage = null;
+    await connect();
   }
 
   void _setupSignaling() {
@@ -713,6 +724,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       } catch (e) {
         debugPrint(
             '[WebRtcVoiceController] Mic lazy acquisition failed on unmute: $e');
+        _errorMessage = 'Gagal mengakses mikrofon: $e';
         _isMicMuted = true;
         _mutedUserIds.add(userId);
         notifyListeners();

@@ -2,13 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/app_haptics.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../auth/presentation/auth_controller.dart';
 import 'lobby_controller.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/join_code_dialog.dart';
 import 'widgets/media_source_dialog.dart';
 import 'widgets/room_card.dart';
+import 'screens/bstation_picker_screen.dart';
+import 'screens/dailymotion_picker_screen.dart';
+import 'screens/google_drive_picker_screen.dart';
+import 'screens/twitch_picker_screen.dart';
+import 'screens/vimeo_picker_screen.dart';
 import 'screens/youtube_picker_screen.dart';
+import '../data/models/bstation_video_model.dart';
+import '../data/models/dailymotion_video_model.dart';
+import '../data/models/google_drive_video_model.dart';
+import '../data/models/twitch_stream_model.dart';
+import '../data/models/vimeo_video_model.dart';
 import '../data/models/youtube_video_model.dart';
 import '../../room/models/room_model.dart';
 
@@ -21,6 +33,7 @@ class LobbyScreen extends ConsumerStatefulWidget {
 
 class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   final TextEditingController _searchController = TextEditingController();
+  String _selectedCategory = 'all';
 
   @override
   void dispose() {
@@ -43,6 +56,56 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       room = await CreateRoomDialog.show(
         context,
         initialYouTubeVideo: video,
+      );
+    } else if (sourceType == MediaSourceType.twitch) {
+      final stream = await Navigator.of(context).push<TwitchStream>(
+        MaterialPageRoute(builder: (_) => const TwitchPickerScreen()),
+      );
+      if (stream == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialTwitchStream: stream,
+      );
+    } else if (sourceType == MediaSourceType.vimeo) {
+      final video = await Navigator.of(context).push<VimeoVideo>(
+        MaterialPageRoute(builder: (_) => const VimeoPickerScreen()),
+      );
+      if (video == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialVimeoVideo: video,
+      );
+    } else if (sourceType == MediaSourceType.googleDrive) {
+      final video = await Navigator.of(context).push<GoogleDriveVideo>(
+        MaterialPageRoute(builder: (_) => const GoogleDrivePickerScreen()),
+      );
+      if (video == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialGoogleDriveVideo: video,
+      );
+    } else if (sourceType == MediaSourceType.dailymotion) {
+      final video = await Navigator.of(context).push<DailymotionVideo>(
+        MaterialPageRoute(builder: (_) => const DailymotionPickerScreen()),
+      );
+      if (video == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialDailymotionVideo: video,
+      );
+    } else if (sourceType == MediaSourceType.bstation) {
+      final video = await Navigator.of(context).push<BstationVideo>(
+        MaterialPageRoute(builder: (_) => const BstationPickerScreen()),
+      );
+      if (video == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialBstationVideo: video,
       );
     } else if (sourceType == MediaSourceType.directUrl) {
       room = await CreateRoomDialog.show(
@@ -187,7 +250,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Hero / Action Section
+            // Hero / Quick Action Cards Section
             SliverToBoxAdapter(
               child: Padding(
                 padding:
@@ -195,61 +258,139 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Action Buttons Row
+                    // Dual Action Cards Row
                     Row(
                       children: [
+                        // Card 1: Buat Room Baru
                         Expanded(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      AppColors.primaryNeon.withValues(alpha: 0.35),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 3),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                AppHaptics.light();
+                                _openCreateRoomDialog();
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Ink(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 16),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.primaryGradient,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primaryNeon
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                              onPressed: _openCreateRoomDialog,
-                              icon: const Icon(Icons.add_rounded,
-                                  color: Colors.white),
-                              label: const Text(
-                                'Buat Room',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.add_rounded,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Buat Room',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Mulai pesta nonton',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
+
+                        // Card 2: Gabung Kode PIN
                         Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(
-                                color: AppColors.secondaryNeon,
-                                width: 1.5,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                AppHaptics.light();
+                                _openJoinCodeDialog();
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Ink(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: AppColors.secondaryNeon.withValues(alpha: 0.6),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.secondaryNeon
+                                          .withValues(alpha: 0.12),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondaryNeon
+                                            .withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.pin_rounded,
+                                        color: AppColors.secondaryNeon,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Gabung Kode',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    const Text(
+                                      'Masukkan 6 PIN',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              foregroundColor: AppColors.secondaryNeon,
-                            ),
-                            onPressed: _openJoinCodeDialog,
-                            icon: const Icon(Icons.pin_rounded,
-                                color: AppColors.secondaryNeon),
-                            label: const Text(
-                              'Gabung Kode',
-                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
@@ -262,7 +403,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Cari room atau kode...',
+                        hintText: 'Cari judul room, host, atau kode...',
                         prefixIcon: const Icon(
                           Icons.search_rounded,
                           color: AppColors.textSecondary,
@@ -286,37 +427,73 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       },
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
 
-                    // Section Title
-                    Row(
-                      children: [
-                        const Text(
-                          'Room Publik',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${filteredRooms.length}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryNeon,
+                    // Horizontal Platform Filter Chips
+                    SizedBox(
+                      height: 36,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _buildFilterChip('all', 'Semua', Icons.grid_view_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('youtube', 'YouTube', Icons.play_circle_filled_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('twitch', 'Twitch', Icons.live_tv_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('vimeo', 'Vimeo', Icons.video_collection_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('bstation', 'Bstation', Icons.smart_display_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('google_drive', 'Drive', Icons.cloud_queue_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('dailymotion', 'Dailymotion', Icons.play_circle_filled_rounded),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('direct_url', 'Direct URL', Icons.link_rounded),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Section Title with room count
+                    Builder(
+                      builder: (_) {
+                        final displayed = _filterByCategory(filteredRooms);
+                        return Row(
+                          children: [
+                            const Text(
+                              'Room Publik',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                '${displayed.length}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryNeon,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -325,10 +502,15 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
             // Room List / Grid
             roomsAsync.when(
-              loading: () => const SliverFillRemaining(
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primaryNeon,
+              loading: () => SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: RoomCardSkeleton(),
+                    ),
+                    childCount: 4,
                   ),
                 ),
               ),
@@ -359,52 +541,83 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ),
               ),
               data: (_) {
-                if (filteredRooms.isEmpty) {
+                final displayedRooms = _filterByCategory(filteredRooms);
+
+                if (displayedRooms.isEmpty) {
                   return SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.surfaceElevated,
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevated.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.borderLight),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.primaryNeon.withValues(alpha: 0.1),
+                                  border: Border.all(
+                                    color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.tv_off_rounded,
+                                  size: 42,
+                                  color: AppColors.primaryNeon,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.tv_off_rounded,
-                                size: 48,
-                                color: AppColors.textMuted,
+                              const SizedBox(height: 16),
+                              Text(
+                                _selectedCategory == 'all'
+                                    ? 'Belum Ada Room Publik'
+                                    : 'Tidak Ada Room ${_getCategoryLabel(_selectedCategory)}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Belum ada room publik',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Buat room pertama dan tonton bersama temanmu sekarang!',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Buat room pertama dan tonton bersama teman!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
+                              const SizedBox(height: 20),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.primaryGradient,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                  ),
+                                  onPressed: () {
+                                    AppHaptics.light();
+                                    _openCreateRoomDialog();
+                                  },
+                                  icon: const Icon(Icons.add_rounded, color: Colors.white),
+                                  label: const Text(
+                                    'Buat Room Sekarang',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: _openCreateRoomDialog,
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('Buat Room'),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -427,7 +640,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         return SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final room = filteredRooms[index];
+                              final room = displayedRooms[index];
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: RoomCard(
@@ -441,7 +654,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                 ),
                               );
                             },
-                            childCount: filteredRooms.length,
+                            childCount: displayedRooms.length,
                           ),
                         );
                       }
@@ -456,7 +669,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            final room = filteredRooms[index];
+                            final room = displayedRooms[index];
                             return RoomCard(
                               room: room,
                               onTap: () async {
@@ -467,7 +680,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                               },
                             );
                           },
-                          childCount: filteredRooms.length,
+                          childCount: displayedRooms.length,
                         ),
                       );
                     },
@@ -476,6 +689,94 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  List<RoomModel> _filterByCategory(List<RoomModel> rooms) {
+    if (_selectedCategory == 'all') return rooms;
+    return rooms.where((r) {
+      if (_selectedCategory == 'youtube') return r.currentMediaType == 'youtube';
+      if (_selectedCategory == 'twitch') return r.currentMediaType == 'twitch';
+      if (_selectedCategory == 'vimeo') return r.currentMediaType == 'vimeo';
+      if (_selectedCategory == 'bstation') {
+        return r.currentMediaType == 'bstation' || r.currentMediaType == 'bilibili';
+      }
+      if (_selectedCategory == 'google_drive') return r.currentMediaType == 'google_drive';
+      if (_selectedCategory == 'dailymotion') return r.currentMediaType == 'dailymotion';
+      if (_selectedCategory == 'direct_url') return r.currentMediaType == 'direct_url';
+      return true;
+    }).toList();
+  }
+
+  String _getCategoryLabel(String cat) {
+    switch (cat) {
+      case 'youtube':
+        return 'YouTube';
+      case 'twitch':
+        return 'Twitch';
+      case 'vimeo':
+        return 'Vimeo';
+      case 'bstation':
+        return 'Bstation';
+      case 'google_drive':
+        return 'Google Drive';
+      case 'dailymotion':
+        return 'Dailymotion';
+      case 'direct_url':
+        return 'Direct URL';
+      default:
+        return 'Publik';
+    }
+  }
+
+  Widget _buildFilterChip(String id, String label, IconData icon) {
+    final isSelected = _selectedCategory == id;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          AppHaptics.selection();
+          setState(() {
+            _selectedCategory = id;
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primaryNeon.withValues(alpha: 0.2)
+                : AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.primaryNeon
+                  : AppColors.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? AppColors.primaryNeon : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

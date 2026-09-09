@@ -7,10 +7,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../../../../core/utils/time_formatter.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
+import 'twitch_vimeo_embed_player.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
   final UnifiedPlayerController player;
@@ -41,6 +43,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   double? _draggingPosition;
   Timer? _hideControlsTimer;
   bool _lastIsPlaying = false;
+  bool _leftDoubleTapActive = false;
+  bool _rightDoubleTapActive = false;
+  Timer? _doubleTapTimer;
 
   @override
   void initState() {
@@ -68,8 +73,39 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _doubleTapTimer?.cancel();
     widget.player.removeListener(_onPlayerChanged);
     super.dispose();
+  }
+
+  void _onDoubleTapLeft() {
+    if (!widget.syncController.canControl) return;
+    AppHaptics.selection();
+    final target = (widget.player.position - 10).clamp(0.0, widget.player.duration);
+    widget.syncController.requestSeek(target);
+    setState(() {
+      _leftDoubleTapActive = true;
+      _rightDoubleTapActive = false;
+    });
+    _doubleTapTimer?.cancel();
+    _doubleTapTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _leftDoubleTapActive = false);
+    });
+  }
+
+  void _onDoubleTapRight() {
+    if (!widget.syncController.canControl) return;
+    AppHaptics.selection();
+    final target = (widget.player.position + 10).clamp(0.0, widget.player.duration);
+    widget.syncController.requestSeek(target);
+    setState(() {
+      _rightDoubleTapActive = true;
+      _leftDoubleTapActive = false;
+    });
+    _doubleTapTimer?.cancel();
+    _doubleTapTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _rightDoubleTapActive = false);
+    });
   }
 
   void _onPlayerChanged() {
@@ -129,6 +165,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
       listenable: widget.player,
       builder: (context, _) {
         final bool isYouTube = widget.player.mediaType == 'youtube';
+        final bool isTwitch = widget.player.mediaType == 'twitch';
+        final bool isVimeo = widget.player.mediaType == 'vimeo';
+        final bool isGoogleDrive = widget.player.mediaType == 'google_drive';
+        final bool isDailymotion = widget.player.mediaType == 'dailymotion';
+        final bool isBstation = widget.player.mediaType == 'bstation' ||
+            widget.player.mediaType == 'bilibili';
+        final bool isEmbed =
+            isTwitch || isVimeo || isGoogleDrive || isDailymotion || isBstation;
         final bool hasMedia = widget.player.mediaUrl.isNotEmpty;
         final bool canControl = widget.syncController.canControl;
         final bool isMobileYouTube = !kIsWeb && isYouTube;
@@ -137,6 +181,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         Widget playerWidget;
         if (!hasMedia) {
           playerWidget = _buildEmptyPlaceholder();
+        } else if (isEmbed) {
+          playerWidget = TwitchVimeoEmbedPlayer(
+            key: ValueKey(
+              'embed_${widget.player.mediaType}_${widget.player.mediaUrl}',
+            ),
+            player: widget.player,
+            isPipMode: widget.isPipMode,
+          );
         } else if (isYouTube && widget.player.ytController != null) {
           playerWidget = YoutubePlayer(
             key: ValueKey(
@@ -301,14 +353,97 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 0. Base tap target to toggle controls when hidden
+        // 0. Base tap and double-tap targets (Seek -10s on left, Seek +10s on right)
         Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            child: const SizedBox.expand(),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleControls,
+                  onDoubleTap: _onDoubleTapLeft,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleControls,
+                  onDoubleTap: _onDoubleTapRight,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ],
           ),
         ),
+
+        // 0b. Double-Tap Seek Visual Feedback Badges
+        if (_leftDoubleTapActive)
+          Positioned(
+            left: 32,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.secondaryNeon.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.fast_rewind_rounded, color: Colors.white, size: 22),
+                    SizedBox(width: 4),
+                    Text(
+                      '-10s',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_rightDoubleTapActive)
+          Positioned(
+            right: 32,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.secondaryNeon.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '+10s',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.fast_forward_rounded, color: Colors.white, size: 22),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
         // 1. Smooth animated overlay with interactive controls
         Positioned.fill(
@@ -895,8 +1030,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                       ),
                     ),
                     onPressed: () {
-                      widget.player.clearError();
-                      widget.player.play();
+                      widget.player.reloadCurrentMedia();
                     },
                     icon: const Icon(Icons.refresh_rounded, size: 14),
                     label: const Text(

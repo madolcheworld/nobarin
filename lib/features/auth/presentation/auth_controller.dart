@@ -1,14 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/supabase_client.dart';
 import '../data/auth_repository.dart';
 import '../domain/user_profile.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  SupabaseClient? client;
-  try {
-    client = Supabase.instance.client;
-  } catch (_) {}
+  final client = SupabaseService().clientOrNull;
   return AuthRepository(supabase: client);
 });
 

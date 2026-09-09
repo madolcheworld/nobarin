@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/network/supabase_client.dart';
+import '../../../core/utils/app_haptics.dart';
+import '../../auth/domain/user_profile.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
@@ -23,8 +25,8 @@ import '../controllers/sync_controller.dart';
 import '../controllers/unified_player_controller.dart';
 import '../models/room_model.dart';
 import 'widgets/media_source_picker.dart';
-import 'widgets/participants_header.dart';
-import 'widgets/queue_bottom_sheet.dart';
+import 'widgets/participants_tab_view.dart';
+import 'widgets/queue_tab_view.dart';
 import 'widgets/room_controls_bar.dart';
 import 'widgets/unified_player_view.dart';
 
@@ -42,7 +44,8 @@ class RoomScreen extends ConsumerStatefulWidget {
   ConsumerState<RoomScreen> createState() => _RoomScreenState();
 }
 
-class _RoomScreenState extends ConsumerState<RoomScreen> {
+class _RoomScreenState extends ConsumerState<RoomScreen>
+    with SingleTickerProviderStateMixin {
   RoomModel? _room;
   bool _isLoading = true;
   String? _errorMessage;
@@ -53,6 +56,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   final GlobalKey _playerKey = GlobalKey();
   final GlobalKey _screenShareKey = GlobalKey();
 
+  late final TabController _tabController;
   late final UnifiedPlayerController _player;
   SyncController? _syncController;
   RoomController? _roomController;
@@ -64,6 +68,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _player = UnifiedPlayerController();
     _player.addListener(_onPlayerStateChanged);
     PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
@@ -138,10 +143,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       _isLoading = false;
     });
 
-    SupabaseClient? supabase;
-    try {
-      supabase = Supabase.instance.client;
-    } catch (_) {}
+    final supabase = SupabaseService().clientOrNull;
 
     try {
       _roomController = RoomController(
@@ -439,6 +441,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     PipService.instance.isInPipModeNotifier.removeListener(_onPipModeChanged);
     PipService.instance.pipActionNotifier.removeListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(false);
+    _tabController.dispose();
     _roomController?.dispose();
     _chatController?.dispose();
     _voiceController?.dispose();
@@ -459,12 +462,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   }
 
   void _openQueueSheet() {
-    if (_queueController == null) return;
-    QueueBottomSheet.show(
-      context,
-      queueController: _queueController!,
-      player: _player,
-    );
+    AppHaptics.selection();
+    _tabController.animateTo(2);
   }
 
   Future<void> _handleExitRoom() async {
@@ -668,21 +667,58 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline_rounded,
-                    size: 54, color: AppColors.accentRed),
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 54,
+                  color: AppColors.accentRed,
+                ),
                 const SizedBox(height: 16),
                 Text(
-                  _errorMessage ?? 'Terjadi kesalahan',
+                  _errorMessage ?? 'Terjadi kesalahan saat memuat room.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => context.go('/lobby'),
-                  child: const Text('Kembali ke Lobby'),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _isLoading = true;
+                          _errorMessage = null;
+                        });
+                        _fetchAndInitializeRoom();
+                      },
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Coba Lagi'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => context.go('/lobby'),
+                      icon: const Icon(Icons.home_rounded),
+                      label: const Text('Kembali ke Lobby'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -902,27 +938,18 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
                   const VerticalDivider(width: 1, color: AppColors.border),
 
-                  // Right Sidebar: Participants + Chat + Voice Bar
+                  // Right Sidebar: Unified Social Hub + Voice Bar
                   Expanded(
                     flex: 4,
                     child: Column(
                       children: [
-                        ParticipantsHeader(
-                          participants: participants,
-                          hostId: currentRoom.hostId,
-                          hostName: currentRoom.hostName,
-                          speakingUserIds: speakingIds,
-                          mutedUserIds: mutedIds,
-                          coHostUserIds: _roomController?.coHostUserIds ?? {},
-                          roomController: _roomController,
-                          chatController: _chatController,
-                        ),
                         Expanded(
-                          child: _chatController != null
-                              ? ChatPanelWidget(
-                                  chatController: _chatController!,
-                                )
-                              : const SizedBox.shrink(),
+                          child: _buildSocialHub(
+                            currentRoom: currentRoom,
+                            participants: participants,
+                            speakingIds: speakingIds,
+                            mutedIds: mutedIds,
+                          ),
                         ),
                         if (_voiceController != null)
                           VoiceControlBar(
@@ -935,7 +962,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
               );
             }
 
-            // Mobile Portrait Layout: Top video, Middle controls & participants, Bottom chat
+            // Mobile Portrait Layout: Top video, Middle controls, Bottom Unified Social Hub
             return Column(
               children: [
                 // Top Video or Screen Share with Floating Reactions
@@ -979,26 +1006,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   onOpenQueue: _openQueueSheet,
                 ),
 
-                // Participants Header
-                ParticipantsHeader(
-                  participants: participants,
-                  hostId: currentRoom.hostId,
-                  hostName: currentRoom.hostName,
-                  speakingUserIds: speakingIds,
-                  mutedUserIds: mutedIds,
-                  coHostUserIds: _roomController?.coHostUserIds ?? {},
-                  roomController: _roomController,
-                  chatController: _chatController,
-                ),
-
-                // Chat Panel (fills rest of screen)
+                // Unified Social Hub (fills rest of screen)
                 Expanded(
-                  child: _chatController != null
-                      ? ChatPanelWidget(
-                          key: const ValueKey('chat_panel'),
-                          chatController: _chatController!,
-                        )
-                      : const SizedBox.shrink(),
+                  child: _buildSocialHub(
+                    currentRoom: currentRoom,
+                    participants: participants,
+                    speakingIds: speakingIds,
+                    mutedIds: mutedIds,
+                  ),
                 ),
 
                 // Bottom VoIP Voice Control Bar (hidden while soft keyboard is active)
@@ -1011,6 +1026,141 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildSocialHub({
+    required RoomModel currentRoom,
+    required List<UserProfile> participants,
+    required Set<String> speakingIds,
+    required Set<String> mutedIds,
+  }) {
+    final queueCount = _queueController?.items.length ?? 0;
+    final activeSpeakerCount = (_voiceController?.activeSpeakerIds.length ?? 0) +
+        (_voiceController?.isLocalSpeaking == true ? 1 : 0);
+
+    return Column(
+      children: [
+        // Sleek Cyberpunk TabBar
+        Container(
+          height: 40,
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceElevated,
+            border: Border(
+              top: BorderSide(color: AppColors.borderLight, width: 0.8),
+              bottom: BorderSide(color: AppColors.borderLight, width: 0.8),
+            ),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: AppColors.primaryNeon,
+            indicatorWeight: 2.5,
+            labelColor: AppColors.primaryNeon,
+            unselectedLabelColor: AppColors.textSecondary,
+            labelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            dividerColor: Colors.transparent,
+            onTap: (_) => AppHaptics.selection(),
+            tabs: [
+              const Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.chat_bubble_outline_rounded, size: 14),
+                    SizedBox(width: 5),
+                    Text('Obrolan'),
+                  ],
+                ),
+              ),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.people_alt_rounded, size: 14),
+                    const SizedBox(width: 5),
+                    Text('Peserta (${participants.length})'),
+                    if (activeSpeakerCount > 0) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.accentGreen,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.queue_music_rounded, size: 14),
+                    const SizedBox(width: 5),
+                    Text('Antrean ($queueCount)'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Tab Views
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Tab 0: Chat
+              _chatController != null
+                  ? ChatPanelWidget(
+                      key: const ValueKey('chat_panel'),
+                      chatController: _chatController!,
+                      hostId: currentRoom.hostId,
+                      hostName: currentRoom.hostName,
+                      coHostUserIds: _roomController?.coHostUserIds ?? {},
+                    )
+                  : const SizedBox.shrink(),
+
+              // Tab 1: Participants & Voice
+              ParticipantsTabView(
+                participants: participants,
+                hostId: currentRoom.hostId,
+                hostName: currentRoom.hostName,
+                roomCode: currentRoom.code,
+                roomTitle: currentRoom.title,
+                isHostOnly: currentRoom.isHostOnly,
+                speakingUserIds: speakingIds,
+                mutedUserIds: mutedIds,
+                coHostUserIds: _roomController?.coHostUserIds ?? {},
+                roomController: _roomController,
+                chatController: _chatController,
+                voiceController: _voiceController,
+              ),
+
+              // Tab 2: Queue
+              _queueController != null
+                  ? QueueTabView(
+                      queueController: _queueController!,
+                      player: _player,
+                    )
+                  : const Center(
+                      child: Text(
+                        'Antrean tidak tersedia',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

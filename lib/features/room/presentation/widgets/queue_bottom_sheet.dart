@@ -46,8 +46,47 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
         final bool canAdd = widget.queueController.canAddToQueue;
         final hasMedia = widget.player.mediaUrl.isNotEmpty;
         final isYouTube = widget.player.mediaType == 'youtube';
+        final isTwitch = widget.player.mediaType == 'twitch';
+        final isVimeo = widget.player.mediaType == 'vimeo';
+        final isDailymotion = widget.player.mediaType == 'dailymotion';
+        final isBstation = widget.player.mediaType == 'bstation' ||
+            widget.player.mediaType == 'bilibili';
+        final isGoogleDrive = widget.player.mediaType == 'google_drive' ||
+            widget.player.mediaType == 'gdrive';
         final ytId = UnifiedPlayerController.extractYouTubeVideoId(
             widget.player.mediaUrl);
+        final dmId = isDailymotion
+            ? UnifiedPlayerController.extractDailymotionVideoId(
+                widget.player.mediaUrl)
+            : null;
+        final bsId = isBstation
+            ? UnifiedPlayerController.extractBstationVideoId(
+                widget.player.mediaUrl)
+            : null;
+        final Color sourceColor = isYouTube
+            ? AppColors.accentRed
+            : (isTwitch
+                ? const Color(0xFF9146FF)
+                : (isVimeo
+                    ? const Color(0xFF1AB7EA)
+                    : (isDailymotion
+                        ? const Color(0xFF0066DC)
+                        : (isBstation
+                            ? const Color(0xFF00A1D6)
+                            : (isGoogleDrive
+                                ? const Color(0xFF0F9D58)
+                                : AppColors.secondaryNeon)))));
+        final String sourceLabel = isYouTube
+            ? 'YouTube'
+            : (isTwitch
+                ? 'Twitch'
+                : (isVimeo
+                    ? 'Vimeo'
+                    : (isDailymotion
+                        ? 'Dailymotion'
+                        : (isBstation
+                            ? 'Bstation'
+                            : (isGoogleDrive ? 'Google Drive' : 'Direct URL')))));
 
         return Container(
           constraints: BoxConstraints(
@@ -218,16 +257,60 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
                                         ),
                                       ),
                                     )
-                                  : Container(
-                                      width: 64,
-                                      height: 42,
-                                      color: Colors.black26,
-                                      child: const Icon(
-                                        Icons.movie_outlined,
-                                        color: AppColors.secondaryNeon,
-                                        size: 24,
-                                      ),
-                                    ),
+                                  : (isDailymotion && dmId != null
+                                      ? Image.network(
+                                          'https://www.dailymotion.com/thumbnail/video/$dmId',
+                                          width: 64,
+                                          height: 42,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            width: 64,
+                                            height: 42,
+                                            color: Colors.black26,
+                                            child: const Icon(
+                                              Icons.play_circle_filled_rounded,
+                                              color: Color(0xFF0066DC),
+                                              size: 24,
+                                            ),
+                                          ),
+                                        )
+                                      : (isBstation && bsId != null
+                                          ? Image.network(
+                                              'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+                                              width: 64,
+                                              height: 42,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                width: 64,
+                                                height: 42,
+                                                color: const Color(0xFF002F44),
+                                                child: const Icon(
+                                                  Icons.smart_display_rounded,
+                                                  color: Color(0xFF00A1D6),
+                                                  size: 24,
+                                                ),
+                                              ),
+                                            )
+                                          : Container(
+                                              width: 64,
+                                              height: 42,
+                                              color: sourceColor.withValues(alpha: 0.15),
+                                              child: Icon(
+                                                isTwitch
+                                                    ? Icons.videogame_asset_rounded
+                                                    : (isVimeo
+                                                        ? Icons.ondemand_video_rounded
+                                                        : (isDailymotion
+                                                            ? Icons.play_circle_filled_rounded
+                                                            : (isBstation
+                                                                ? Icons.smart_display_rounded
+                                                                : (isGoogleDrive
+                                                                    ? Icons.cloud_queue_rounded
+                                                                    : Icons.movie_outlined)))),
+                                                color: sourceColor,
+                                                size: 24,
+                                              ),
+                                            ))),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -240,20 +323,15 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 5, vertical: 1.5),
                                         decoration: BoxDecoration(
-                                          color: (isYouTube
-                                                  ? AppColors.accentRed
-                                                  : AppColors.secondaryNeon)
-                                              .withValues(alpha: 0.2),
+                                          color: sourceColor.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          isYouTube ? 'YouTube' : 'Direct URL',
+                                          sourceLabel,
                                           style: TextStyle(
                                             fontSize: 9,
                                             fontWeight: FontWeight.bold,
-                                            color: isYouTube
-                                                ? AppColors.accentRed
-                                                : AppColors.secondaryNeon,
+                                            color: sourceColor,
                                           ),
                                         ),
                                       ),
@@ -410,6 +488,39 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
     final ytId = item.isYouTube
         ? UnifiedPlayerController.extractYouTubeVideoId(item.mediaUrl)
         : null;
+    final isDailymotion = item.isDailymotion;
+    final dmId = isDailymotion
+        ? UnifiedPlayerController.extractDailymotionVideoId(item.mediaUrl)
+        : null;
+    final isBstation = item.isBstation;
+    final bsId = isBstation
+        ? UnifiedPlayerController.extractBstationVideoId(item.mediaUrl)
+        : null;
+    final isGoogleDrive = item.isGoogleDrive;
+    final Color itemColor = item.isYouTube
+        ? AppColors.accentRed
+        : (item.isTwitch
+            ? const Color(0xFF9146FF)
+            : (item.isVimeo
+                ? const Color(0xFF1AB7EA)
+                : (isDailymotion
+                    ? const Color(0xFF0066DC)
+                    : (isBstation
+                        ? const Color(0xFF00A1D6)
+                        : (isGoogleDrive
+                            ? const Color(0xFF0F9D58)
+                            : AppColors.secondaryNeon)))));
+    final String itemLabel = item.isYouTube
+        ? 'YouTube'
+        : (item.isTwitch
+            ? 'Twitch'
+            : (item.isVimeo
+                ? 'Vimeo'
+                : (isDailymotion
+                    ? 'Dailymotion'
+                    : (isBstation
+                        ? 'Bstation'
+                        : (isGoogleDrive ? 'Google Drive' : 'Direct URL')))));
 
     return Container(
       key: key,
@@ -435,34 +546,16 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
             const SizedBox(width: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: item.isYouTube && ytId != null
-                  ? Image.network(
-                      item.thumbnailUrl ??
-                          'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
-                      width: 54,
-                      height: 36,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 54,
-                        height: 36,
-                        color: Colors.black26,
-                        child: const Icon(
-                          Icons.play_circle_fill,
-                          color: AppColors.accentRed,
-                          size: 18,
-                        ),
-                      ),
-                    )
-                  : Container(
-                      width: 54,
-                      height: 36,
-                      color: Colors.black26,
-                      child: const Icon(
-                        Icons.movie_outlined,
-                        color: AppColors.secondaryNeon,
-                        size: 18,
-                      ),
-                    ),
+              child: _buildItemThumbnail(
+                item: item,
+                ytId: ytId,
+                dmId: dmId,
+                bsId: bsId,
+                itemColor: itemColor,
+                isDailymotion: isDailymotion,
+                isBstation: isBstation,
+                isGoogleDrive: isGoogleDrive,
+              ),
             ),
           ],
         ),
@@ -476,14 +569,36 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
             color: AppColors.textPrimary,
           ),
         ),
-        subtitle: Text(
-          'Ditambahkan oleh ${item.addedByUserName}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.textSecondary,
-          ),
+        subtitle: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: itemColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(
+                itemLabel,
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: itemColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Ditambahkan oleh ${item.addedByUserName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -510,6 +625,120 @@ class _QueueBottomSheetState extends State<QueueBottomSheet> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildItemThumbnail({
+    required QueueItem item,
+    required String? ytId,
+    required String? dmId,
+    required String? bsId,
+    required Color itemColor,
+    required bool isDailymotion,
+    required bool isBstation,
+    required bool isGoogleDrive,
+  }) {
+    if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty) {
+      return Image.network(
+        item.thumbnailUrl!,
+        width: 54,
+        height: 36,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 54,
+          height: 36,
+          color: Colors.black26,
+          child: Icon(
+            item.isYouTube
+                ? Icons.play_circle_fill
+                : (isDailymotion
+                    ? Icons.play_circle_filled_rounded
+                    : (isBstation
+                        ? Icons.smart_display_rounded
+                        : Icons.movie_outlined)),
+            color: itemColor,
+            size: 18,
+          ),
+        ),
+      );
+    }
+
+    if (item.isYouTube && ytId != null) {
+      return Image.network(
+        'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
+        width: 54,
+        height: 36,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 54,
+          height: 36,
+          color: Colors.black26,
+          child: const Icon(
+            Icons.play_circle_fill,
+            color: AppColors.accentRed,
+            size: 18,
+          ),
+        ),
+      );
+    }
+
+    if (isDailymotion && dmId != null) {
+      return Image.network(
+        'https://www.dailymotion.com/thumbnail/video/$dmId',
+        width: 54,
+        height: 36,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 54,
+          height: 36,
+          color: Colors.black26,
+          child: const Icon(
+            Icons.play_circle_filled_rounded,
+            color: Color(0xFF0066DC),
+            size: 18,
+          ),
+        ),
+      );
+    }
+
+    if (isBstation && bsId != null) {
+      return Image.network(
+        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+        width: 54,
+        height: 36,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 54,
+          height: 36,
+          color: const Color(0xFF002F44),
+          child: const Icon(
+            Icons.smart_display_rounded,
+            color: Color(0xFF00A1D6),
+            size: 18,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 54,
+      height: 36,
+      color: itemColor.withValues(alpha: 0.15),
+      child: Icon(
+        item.isTwitch
+            ? Icons.videogame_asset_rounded
+            : (item.isVimeo
+                ? Icons.ondemand_video_rounded
+                : (isDailymotion
+                    ? Icons.play_circle_filled_rounded
+                    : (isBstation
+                        ? Icons.smart_display_rounded
+                        : (isGoogleDrive
+                            ? Icons.cloud_queue_rounded
+                            : Icons.movie_outlined)))),
+        color: itemColor,
+        size: 18,
       ),
     );
   }

@@ -291,9 +291,12 @@ class RoomControlsBar extends StatelessWidget {
               final success = await controller.startScreenShare();
               if (!success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Tidak dapat memulai berbagi layar.'),
-                    duration: Duration(seconds: 2),
+                  SnackBar(
+                    content: Text(
+                      controller.errorMessage ??
+                          'Tidak dapat memulai berbagi layar.',
+                    ),
+                    duration: const Duration(seconds: 2),
                   ),
                 );
               }

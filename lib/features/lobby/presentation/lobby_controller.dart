@@ -2,14 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/supabase_client.dart';
 import '../data/lobby_repository.dart';
 import '../../room/models/room_model.dart';
 
 final lobbyRepositoryProvider = Provider<LobbyRepository>((ref) {
-  SupabaseClient? client;
-  try {
-    client = Supabase.instance.client;
-  } catch (_) {}
+  final client = SupabaseService().clientOrNull;
   return LobbyRepository(supabase: client);
 });
 
@@ -17,6 +15,8 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
   final LobbyRepository _repository;
   final SupabaseClient? supabase;
   RealtimeChannel? _roomsSubscription;
+
+  String? get lastRepositoryError => _repository.lastError;
 
   LobbyController(this._repository, {this.supabase})
       : super(const AsyncValue.loading()) {

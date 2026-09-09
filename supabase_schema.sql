@@ -180,3 +180,28 @@ grant execute on function public.get_server_time() to anon, authenticated;
 -- create policy "Semua pengguna dapat menghapus antrean" on public.room_queue for delete using (auth.role() in ('authenticated', 'anon'));
 -- alter table public.room_queue replica identity full;
 
+-- ==============================================================================
+-- 11. FUNGSI PEMBERSIHAN OTOMATIS: CLEANUP EXPIRED / ZOMBIE ROOMS & CHATS
+-- ==============================================================================
+-- Fungsi ini membersihkan room yang sudah ditinggalkan atau tidak aktif lebih dari X jam.
+-- Karena tabel room_messages, room_participants, dan room_queue memiliki 
+-- ON DELETE CASCADE, semua riwayat chat & data terkait akan otomatis ikut terhapus.
+create or replace function public.cleanup_expired_rooms(hours_old int default 12)
+returns int as $$
+declare
+  deleted_count int;
+begin
+  delete from public.rooms
+  where updated_at < (now() - (hours_old || ' hours')::interval);
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$ language plpgsql security definer;
+
+grant execute on function public.cleanup_expired_rooms(int) to authenticated, service_role;
+
+-- Contoh jika menggunakan extension pg_cron di Supabase (jalankan setiap jam):
+-- create extension if not exists pg_cron;
+-- select cron.schedule('cleanup-zombie-rooms', '0 * * * *', 'select public.cleanup_expired_rooms(12);');
+
+

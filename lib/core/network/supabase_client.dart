@@ -10,8 +10,25 @@ class SupabaseService {
   bool _initialized = false;
   bool get isInitialized => _initialized;
 
+  /// Safe accessor that returns null if Supabase is not initialized or failed to connect
+  SupabaseClient? get clientOrNull {
+    if (!_initialized) return null;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns active SupabaseClient or throws descriptive StateError instead of raw AssertionError
   SupabaseClient get client {
-    return Supabase.instance.client;
+    final c = clientOrNull;
+    if (c == null) {
+      throw StateError(
+        'Supabase belum berhasil diinisialisasi. Periksa koneksi internet Anda atau kredensial API.',
+      );
+    }
+    return c;
   }
 
   Future<void> initialize({

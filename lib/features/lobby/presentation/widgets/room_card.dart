@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../room/models/room_model.dart';
 
 class RoomCard extends StatelessWidget {
@@ -12,31 +13,82 @@ class RoomCard extends StatelessWidget {
     required this.onTap,
   });
 
+  ({String label, IconData icon, Color color}) _getSourceInfo(String? type) {
+    switch (type) {
+      case 'youtube':
+        return (
+          label: 'YouTube',
+          icon: Icons.play_circle_filled_rounded,
+          color: AppColors.youtubeRed,
+        );
+      case 'twitch':
+        return (
+          label: 'Twitch',
+          icon: Icons.live_tv_rounded,
+          color: AppColors.twitchPurple,
+        );
+      case 'vimeo':
+        return (
+          label: 'Vimeo',
+          icon: Icons.video_collection_rounded,
+          color: AppColors.vimeoBlue,
+        );
+      case 'bstation':
+      case 'bilibili':
+        return (
+          label: 'Bstation',
+          icon: Icons.smart_display_rounded,
+          color: AppColors.bstationBlue,
+        );
+      case 'google_drive':
+        return (
+          label: 'Google Drive',
+          icon: Icons.cloud_queue_rounded,
+          color: AppColors.googleDriveGreen,
+        );
+      case 'dailymotion':
+        return (
+          label: 'Dailymotion',
+          icon: Icons.play_circle_filled_rounded,
+          color: AppColors.dailymotionBlue,
+        );
+      default:
+        return (
+          label: 'Direct URL',
+          icon: Icons.videocam_rounded,
+          color: AppColors.secondaryNeon,
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isYouTube = room.currentMediaType == 'youtube';
     final bool isPlaying = room.isPlaying;
+    final source = _getSourceInfo(room.currentMediaType);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          AppHaptics.light();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(18),
         splashColor: AppColors.primaryNeonGlow,
         highlightColor: AppColors.surfaceHighlight,
         child: Ink(
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
+            gradient: AppColors.cardGradient,
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: AppColors.border,
+              color: AppColors.borderLight,
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -45,46 +97,32 @@ class RoomCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Row: Media Badge + Status + Viewer Count
+                // Top Row: Media Badge + Live Status + Viewer Count
                 Row(
                   children: [
-                    // Media Type Badge
+                    // Media Platform Badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isYouTube
-                            ? const Color(0x33EF4444)
-                            : const Color(0x3306B6D4),
-                        borderRadius: BorderRadius.circular(6),
+                        color: source.color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: isYouTube
-                              ? AppColors.accentRed
-                              : AppColors.secondaryNeon,
+                          color: source.color.withValues(alpha: 0.5),
                           width: 1,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            isYouTube
-                                ? Icons.play_circle_filled_rounded
-                                : Icons.videocam_rounded,
-                            size: 14,
-                            color: isYouTube
-                                ? AppColors.accentRed
-                                : AppColors.secondaryNeon,
-                          ),
-                          const SizedBox(width: 4),
+                          Icon(source.icon, size: 14, color: source.color),
+                          const SizedBox(width: 5),
                           Text(
-                            isYouTube ? 'YouTube' : 'Direct URL',
+                            source.label,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: isYouTube
-                                  ? AppColors.accentRed
-                                  : AppColors.secondaryNeon,
+                              color: source.color,
                             ),
                           ),
                         ],
@@ -93,63 +131,89 @@ class RoomCard extends StatelessWidget {
 
                     const Spacer(),
 
-                    // State Indicator (Playing / Paused)
+                    // Playing / Paused Pulse Indicator
                     Container(
-                      width: 8,
-                      height: 8,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isPlaying
-                            ? AppColors.accentGreen
-                            : AppColors.accentYellow,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (isPlaying
-                                    ? AppColors.accentGreen
-                                    : AppColors.accentYellow)
-                                .withValues(alpha: 0.6),
-                            blurRadius: 6,
+                        color: (isPlaying
+                                ? AppColors.accentGreen
+                                : AppColors.accentYellow)
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: (isPlaying
+                                  ? AppColors.accentGreen
+                                  : AppColors.accentYellow)
+                              .withValues(alpha: 0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isPlaying
+                                  ? AppColors.accentGreen
+                                  : AppColors.accentYellow,
+                              boxShadow: isPlaying
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.accentGreen
+                                            .withValues(alpha: 0.8),
+                                        blurRadius: 6,
+                                        spreadRadius: 1,
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isPlaying ? 'LIVE' : 'JEDA',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                              color: isPlaying
+                                  ? AppColors.accentGreen
+                                  : AppColors.accentYellow,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isPlaying ? 'Memutar' : 'Jeda',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isPlaying
-                            ? AppColors.accentGreen
-                            : AppColors.accentYellow,
-                      ),
-                    ),
 
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
 
-                    // Viewers count
+                    // Viewers count pill
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceElevated,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(
-                            Icons.people_outline_rounded,
-                            size: 14,
-                            color: AppColors.textSecondary,
+                            Icons.people_alt_rounded,
+                            size: 13,
+                            color: AppColors.secondaryNeon,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${room.participantCount}',
                             style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
@@ -158,7 +222,7 @@ class RoomCard extends StatelessWidget {
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
                 // Title
                 Text(
@@ -179,7 +243,7 @@ class RoomCard extends StatelessWidget {
                   Text(
                     room.description!,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: AppColors.textSecondary,
                       height: 1.3,
                     ),
@@ -190,45 +254,83 @@ class RoomCard extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Bottom Row: Host info & Room code
+                // Bottom Row: Host info, Mode, & Room code
                 Row(
                   children: [
-                    const CircleAvatar(
-                      radius: 12,
-                      backgroundColor: AppColors.surfaceElevated,
-                      child: Text('👑', style: TextStyle(fontSize: 12)),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        room.hostName ?? 'Host',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    // Host Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceElevated,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('👑', style: TextStyle(fontSize: 11)),
+                          const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 100),
+                            child: Text(
+                              room.hostName ?? 'Host',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
-                    // Room Code chip
+                    const SizedBox(width: 6),
+
+                    // Control Mode Pill
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryNeon.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
+                        color: room.isHostOnly
+                            ? AppColors.accentYellow.withValues(alpha: 0.12)
+                            : AppColors.secondaryNeon.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        room.isHostOnly ? 'Host-Only' : 'Kolaboratif',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: room.isHostOnly
+                              ? AppColors.accentYellow
+                              : AppColors.secondaryNeon,
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // Room Code Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                          color: AppColors.primaryNeon.withValues(alpha: 0.35),
+                          width: 1,
                         ),
                       ),
                       child: Text(
                         room.code,
                         style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.primaryNeon,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.8,
                         ),
                       ),
                     ),

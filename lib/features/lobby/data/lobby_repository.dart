@@ -7,6 +7,7 @@ import '../../../core/constants/api_constants.dart';
 
 class LobbyRepository {
   final SupabaseClient? supabase;
+  String? lastError;
 
   LobbyRepository({this.supabase});
 
@@ -465,6 +466,7 @@ class LobbyRepository {
 
   /// Finds room by code with case-insensitivity and prefix tolerance
   Future<RoomModel?> getRoomByCode(String code) async {
+    lastError = null;
     final rawTrimmed = code.trim();
     if (rawTrimmed.isEmpty) return null;
 
@@ -515,6 +517,7 @@ class LobbyRepository {
           }
         }
       } catch (e) {
+        lastError = 'Gangguan koneksi saat menghubungi server room.';
         debugPrint('[LobbyRepository] Supabase getRoomByCode fallback: $e');
       }
     }
@@ -592,37 +595,21 @@ class LobbyRepository {
           }
         } catch (_) {}
 
-        // Parallel cleanup for participants, messages, and room
-        await Future.wait([
-          if (isUuid)
-            supabase!
-                .from('room_participants')
-                .delete()
-                .eq('room_id', roomId)
-                .timeout(const Duration(seconds: 2))
-                .then((_) {}, onError: (_) {}),
-          if (isUuid)
-            supabase!
-                .from('room_messages')
-                .delete()
-                .eq('room_id', roomId)
-                .timeout(const Duration(seconds: 2))
-                .then((_) {}, onError: (_) {}),
-          if (isUuid)
-            supabase!
-                .from('rooms')
-                .delete()
-                .eq('id', roomId)
-                .timeout(const Duration(seconds: 3))
-                .then((_) {}, onError: (_) {})
-          else if (code != null && code.isNotEmpty)
-            supabase!
-                .from('rooms')
-                .delete()
-                .eq('code', code)
-                .timeout(const Duration(seconds: 3))
-                .then((_) {}, onError: (_) {}),
-        ]);
+        // Step 2: Delete room. PostgreSQL ON DELETE CASCADE will automatically
+        // clean up all associated room_messages, room_participants, and room_queue in 1 atomic query.
+        if (isUuid) {
+          await supabase!
+              .from('rooms')
+              .delete()
+              .eq('id', roomId)
+              .timeout(const Duration(seconds: 3));
+        } else if (code != null && code.isNotEmpty) {
+          await supabase!
+              .from('rooms')
+              .delete()
+              .eq('code', code)
+              .timeout(const Duration(seconds: 3));
+        }
         debugPrint('[LobbyRepository] Room $roomId ($code) closed/deleted in Supabase.');
       } catch (e) {
         debugPrint('[LobbyRepository] Supabase deleteRoom failed: $e');
