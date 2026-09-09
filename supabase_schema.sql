@@ -25,16 +25,17 @@ create table if not exists public.rooms (
   host_name text,
   is_public boolean default true,
   control_mode text check (control_mode in ('host_only', 'collaborative')) default 'host_only',
-  current_media_type text check (current_media_type in ('youtube', 'direct_url', null)),
+  current_media_type text check (current_media_type in ('youtube', 'direct_url', 'twitch', 'vimeo', 'google_drive', 'dailymotion', 'bstation', null)),
   current_media_url text,
   current_state text default 'paused',
-  current_position float default 0,
-  livekit_room_name text not null,
+  livekit_room_name text default '', -- Kolom legacy; signaling telah beralih ke WebRTC P2P murni via Supabase Realtime Broadcast
   created_at timestamp with time zone default timezone('utc'::text, now()),
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
 -- 4. TABEL: ROOM PARTICIPANTS
+-- Catatan Arsitektur: Status peserta live, mute, avatar, dan promosi host dikelola secara real-time di memori
+-- melalui Supabase Realtime Presence ('presence_$roomId'). Tabel ini berfungsi sebagai catatan relasi join/keikutsertaan.
 create table if not exists public.room_participants (
   id uuid default gen_random_uuid() primary key,
   room_id uuid references public.rooms(id) on delete cascade,
@@ -56,7 +57,7 @@ create table if not exists public.room_messages (
 );
 
 -- 6. INDEKS UNTUK OPTIMASI PERFORMA QUERY
-create index if not exists idx_rooms_code on public.rooms(code);
+-- Catatan: Kolom 'code' pada public.rooms sudah otomatis memiliki B-tree index unik (rooms_code_key)
 create index if not exists idx_rooms_is_public on public.rooms(is_public);
 create index if not exists idx_room_messages_room_id on public.room_messages(room_id, created_at desc);
 create index if not exists idx_room_participants_room_id on public.room_participants(room_id);
@@ -116,7 +117,7 @@ create policy "Semua pengguna dapat menghapus pesan room"
 create table if not exists public.room_queue (
   id uuid default gen_random_uuid() primary key,
   room_id uuid references public.rooms(id) on delete cascade,
-  media_type text check (media_type in ('youtube', 'direct_url')) not null,
+  media_type text check (media_type in ('youtube', 'direct_url', 'twitch', 'vimeo', 'google_drive', 'dailymotion', 'bstation')) not null,
   media_url text not null,
   title text not null,
   thumbnail_url text,
@@ -146,10 +147,12 @@ alter table public.room_queue replica identity full;
 
 -- 8. AKTIFKAN SUPABASE REALTIME REPLICATION
 -- Mengizinkan tabel didengarkan secara real-time via WebSocket
+-- Catatan: Hanya tabel public.rooms yang didengarkan via Postgres Changes di aplikasi.
+-- Chat dan Queue menggunakan mekanisme Supabase Realtime Broadcast yang jauh lebih hemat resource.
 begin;
   -- Hapus publikasi jika sudah ada untuk menghindari duplikasi
   drop publication if exists supabase_realtime;
-  create publication supabase_realtime for table public.rooms, public.room_messages, public.room_participants, public.room_queue;
+  create publication supabase_realtime for table public.rooms;
 commit;
 
 -- Pastikan payload DELETE berisi data lengkap (replica identity full)
@@ -165,23 +168,7 @@ $$ language sql stable;
 grant execute on function public.get_server_time() to anon, authenticated;
 
 -- ==============================================================================
--- 10. QUERY PERBAIKAN / MIGRATION (JALANKAN JIKA DATABASE SUDAH DIBUAT SEBELUMNYA)
--- ==============================================================================
--- alter table public.rooms add column if not exists host_name text;
--- alter table public.rooms replica identity full;
--- create policy "Semua pengguna dapat menghapus room" on public.rooms for delete using (auth.role() in ('authenticated', 'anon'));
--- create policy "Semua pengguna dapat menghapus peserta room" on public.room_participants for delete using (auth.role() in ('authenticated', 'anon'));
--- create policy "Semua pengguna dapat menghapus pesan room" on public.room_messages for delete using (auth.role() in ('authenticated', 'anon'));
--- create table if not exists public.room_queue (id uuid default gen_random_uuid() primary key, room_id uuid references public.rooms(id) on delete cascade, media_type text check (media_type in ('youtube', 'direct_url')) not null, media_url text not null, title text not null, thumbnail_url text, added_by_user_id uuid references public.profiles(id) on delete set null, added_by_user_name text not null, order_index integer default 0, created_at timestamp with time zone default timezone('utc'::text, now()));
--- alter table public.room_queue enable row level security;
--- create policy "Queue dapat dibaca oleh siapa saja di room" on public.room_queue for select using (true);
--- create policy "Semua pengguna dapat menambah ke antrean" on public.room_queue for insert with check (auth.role() in ('authenticated', 'anon'));
--- create policy "Pengguna dapat mengupdate atau reorder antrean" on public.room_queue for update using (auth.role() in ('authenticated', 'anon'));
--- create policy "Semua pengguna dapat menghapus antrean" on public.room_queue for delete using (auth.role() in ('authenticated', 'anon'));
--- alter table public.room_queue replica identity full;
-
--- ==============================================================================
--- 11. FUNGSI PEMBERSIHAN OTOMATIS: CLEANUP EXPIRED / ZOMBIE ROOMS & CHATS
+-- 10. FUNGSI PEMBERSIHAN OTOMATIS: CLEANUP EXPIRED / ZOMBIE ROOMS & CHATS
 -- ==============================================================================
 -- Fungsi ini membersihkan room yang sudah ditinggalkan atau tidak aktif lebih dari X jam.
 -- Karena tabel room_messages, room_participants, dan room_queue memiliki 

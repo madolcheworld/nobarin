@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../../core/constants/api_constants.dart';
+import '../../../../core/network/webrtc_signaling_helper.dart';
 import '../../room/controllers/unified_player_controller.dart';
 
 typedef DisplayMediaFunction = Future<MediaStream> Function(
@@ -27,6 +27,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
   final UnifiedPlayerController? playerController;
   final SupabaseClient? supabase;
   final Map<String, dynamic>? iceConfiguration;
+  final RealtimeChannel? sharedChannel;
   final bool Function()? isHostProvider;
   final bool Function()? isCollaborativeProvider;
 
@@ -52,7 +53,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
   // Active peer connections for screen sharing: peerId -> RTCPeerConnection
   final Map<String, RTCPeerConnection> _peerConnections = {};
   // Pending ICE candidates: peerId -> List<RTCIceCandidate>
-  final Map<String, List<RTCIceCandidate>> _pendingCandidates = {};
+  final IceCandidateBuffer _candidateBuffer = IceCandidateBuffer();
 
   bool get isSharing => _isSharing;
   String? get sharerId => _sharerId;
@@ -74,6 +75,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
     this.playerController,
     this.supabase,
     this.iceConfiguration,
+    this.sharedChannel,
     this.isHostProvider,
     this.isCollaborativeProvider,
     DisplayMediaFunction? displayMediaFunction,
@@ -173,26 +175,21 @@ class WebRtcScreenShareController extends ChangeNotifier {
   }
 
   void _setupSignaling() {
-    if (supabase == null) return;
-
-    try {
+    if (sharedChannel != null) {
+      _screenChannel = sharedChannel;
+    } else if (supabase != null) {
       final channelName = 'screenshare_$roomId';
       _screenChannel = supabase!.channel(channelName);
+    } else {
+      return;
+    }
 
-      Map<String, dynamic> extractPayload(Map<String, dynamic> raw) {
-        if (raw['payload'] is Map<String, dynamic>) {
-          return raw['payload'] as Map<String, dynamic>;
-        } else if (raw['payload'] is Map) {
-          return Map<String, dynamic>.from(raw['payload'] as Map);
-        }
-        return raw;
-      }
-
+    try {
       _screenChannel!.onBroadcast(
         event: 'SCREEN_SHARE_STATE',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleScreenShareState(extractPayload(payload));
+          handleScreenShareState(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -200,7 +197,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
         event: 'SCREEN_OFFER',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleScreenOffer(extractPayload(payload));
+          handleScreenOffer(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -208,7 +205,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
         event: 'SCREEN_ANSWER',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleScreenAnswer(extractPayload(payload));
+          handleScreenAnswer(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -216,14 +213,16 @@ class WebRtcScreenShareController extends ChangeNotifier {
         event: 'SCREEN_ICE',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleScreenIce(extractPayload(payload));
+          handleScreenIce(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
-      _screenChannel!.subscribe((status, error) {
-        debugPrint(
-            '[WebRtcScreenShareController] Realtime status: $status (error: $error)');
-      });
+      if (sharedChannel == null) {
+        _screenChannel!.subscribe((status, error) {
+          debugPrint(
+              '[WebRtcScreenShareController] Realtime status: $status (error: $error)');
+        });
+      }
     } catch (e) {
       debugPrint('[WebRtcScreenShareController] Error setting up signaling: $e');
     }
@@ -340,14 +339,11 @@ class WebRtcScreenShareController extends ChangeNotifier {
         debugPrint('[WebRtcScreenShareController] Error stopping local stream: $e');
       }
 
-      for (final pc in _peerConnections.values) {
-        try {
-          await pc.close();
-          await pc.dispose();
-        } catch (_) {}
-      }
-      _peerConnections.clear();
-      _pendingCandidates.clear();
+      await WebRtcSignalingHelper.closeAndDisposePeers(
+        _peerConnections,
+        tag: 'WebRtcScreenShareController',
+      );
+      _candidateBuffer.clear();
 
       _isSharing = false;
       _sharerId = null;
@@ -430,14 +426,11 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _remoteRenderer.srcObject = null;
     } catch (_) {}
 
-    for (final pc in _peerConnections.values) {
-      try {
-        pc.close();
-        pc.dispose();
-      } catch (_) {}
-    }
-    _peerConnections.clear();
-    _pendingCandidates.clear();
+    WebRtcSignalingHelper.closeAndDisposePeers(
+      _peerConnections,
+      tag: 'WebRtcScreenShareController',
+    );
+    _candidateBuffer.clear();
   }
 
   /// Initiates WebRTC SDP offer to [remotePeerId] containing the screen track
@@ -453,15 +446,15 @@ class WebRtcScreenShareController extends ChangeNotifier {
       });
       await pc.setLocalDescription(offer);
 
-      await _sendSignalingMessage('SCREEN_OFFER', {
-        'sender_id': userId,
-        'sharer_name': userName,
-        'target_id': remotePeerId,
-        'sdp': {
-          'type': offer.type,
-          'sdp': offer.sdp,
-        },
-      });
+      await _sendSignalingMessage(
+        'SCREEN_OFFER',
+        WebRtcSignalingHelper.buildSdpPayload(
+          senderId: userId,
+          targetId: remotePeerId,
+          sdp: offer,
+          extra: {'sharer_name': userName},
+        ),
+      );
     } catch (e) {
       debugPrint(
           '[WebRtcScreenShareController] Error initiating offer to $remotePeerId: $e');
@@ -498,14 +491,14 @@ class WebRtcScreenShareController extends ChangeNotifier {
 
       await _flushPendingCandidates(senderId, pc);
 
-      await _sendSignalingMessage('SCREEN_ANSWER', {
-        'sender_id': userId,
-        'target_id': senderId,
-        'sdp': {
-          'type': answer.type,
-          'sdp': answer.sdp,
-        },
-      });
+      await _sendSignalingMessage(
+        'SCREEN_ANSWER',
+        WebRtcSignalingHelper.buildSdpPayload(
+          senderId: userId,
+          targetId: senderId,
+          sdp: answer,
+        ),
+      );
 
       notifyListeners();
     } catch (e) {
@@ -543,18 +536,12 @@ class WebRtcScreenShareController extends ChangeNotifier {
   Future<void> handleScreenIce(Map<String, dynamic> payload) async {
     final senderId = payload['sender_id'] as String?;
     final targetId = payload['target_id'] as String?;
-    final candMap = payload['candidate'] as Map<String, dynamic>?;
+    final candMap = payload['candidate'];
 
     if (senderId == null || targetId != userId || candMap == null) return;
 
-    final candString = candMap['candidate'] as String?;
-    if (candString == null || candString.isEmpty) return;
-
-    final candidate = RTCIceCandidate(
-      candString,
-      candMap['sdpMid'] as String?,
-      candMap['sdpMLineIndex'] as int?,
-    );
+    final candidate = WebRtcSignalingHelper.parseIceCandidate(candMap);
+    if (candidate == null) return;
 
     final pc = _peerConnections[senderId];
     if (pc != null) {
@@ -567,24 +554,18 @@ class WebRtcScreenShareController extends ChangeNotifier {
       } catch (_) {}
     }
 
-    _pendingCandidates.putIfAbsent(senderId, () => []).add(candidate);
+    _candidateBuffer.enqueue(senderId, candidate);
   }
 
   Future<void> _flushPendingCandidates(
     String remotePeerId,
     RTCPeerConnection pc,
   ) async {
-    final candidates = _pendingCandidates.remove(remotePeerId);
-    if (candidates != null && candidates.isNotEmpty) {
-      for (final candidate in candidates) {
-        try {
-          await pc.addCandidate(candidate);
-        } catch (e) {
-          debugPrint(
-              '[WebRtcScreenShareController] Error adding queued ICE candidate: $e');
-        }
-      }
-    }
+    await _candidateBuffer.flush(
+      remotePeerId,
+      pc,
+      tag: 'WebRtcScreenShareController',
+    );
   }
 
   Future<RTCPeerConnection> _getOrCreatePeerConnection(
@@ -595,13 +576,12 @@ class WebRtcScreenShareController extends ChangeNotifier {
       return _peerConnections[remotePeerId]!;
     }
 
-    final pcConfig = iceConfiguration ?? ApiConstants.rtcIceConfiguration;
-    final pc = await _peerConnectionFunction(pcConfig, {
-      'mandatory': {},
-      'optional': [
-        {'DtlsSrtpKeyAgreement': true},
-      ],
-    });
+    final pcConfig =
+        WebRtcSignalingHelper.defaultPeerConnectionConfig(iceConfiguration);
+    final pc = await _peerConnectionFunction(
+      pcConfig,
+      WebRtcSignalingHelper.defaultPeerConstraints,
+    );
 
     _peerConnections[remotePeerId] = pc;
 
@@ -613,15 +593,14 @@ class WebRtcScreenShareController extends ChangeNotifier {
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      _sendSignalingMessage('SCREEN_ICE', {
-        'sender_id': userId,
-        'target_id': remotePeerId,
-        'candidate': {
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex,
-        },
-      });
+      _sendSignalingMessage(
+        'SCREEN_ICE',
+        WebRtcSignalingHelper.buildIcePayload(
+          senderId: userId,
+          targetId: remotePeerId,
+          candidate: candidate,
+        ),
+      );
     };
 
     pc.onTrack = (event) {
@@ -688,20 +667,17 @@ class WebRtcScreenShareController extends ChangeNotifier {
       } catch (_) {}
     }
 
-    for (final pc in _peerConnections.values) {
-      try {
-        pc.close();
-        pc.dispose();
-      } catch (_) {}
-    }
-    _peerConnections.clear();
-    _pendingCandidates.clear();
+    WebRtcSignalingHelper.closeAndDisposePeers(
+      _peerConnections,
+      tag: 'WebRtcScreenShareController',
+    );
+    _candidateBuffer.clear();
 
-    try {
-      _localStream?.getTracks().forEach((track) => track.stop());
-      _localStream?.dispose();
-      _localStream = null;
-    } catch (_) {}
+    WebRtcSignalingHelper.disposeMediaStream(
+      _localStream,
+      tag: 'WebRtcScreenShareController',
+    );
+    _localStream = null;
 
     try {
       _localRenderer.dispose();
@@ -711,10 +687,12 @@ class WebRtcScreenShareController extends ChangeNotifier {
       _remoteRenderer.dispose();
     } catch (_) {}
 
-    try {
-      _screenChannel?.unsubscribe();
-      _screenChannel = null;
-    } catch (_) {}
+    if (sharedChannel == null) {
+      try {
+        _screenChannel?.unsubscribe();
+      } catch (_) {}
+    }
+    _screenChannel = null;
 
     try {
       _backgroundServiceHandler(false);

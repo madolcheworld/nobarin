@@ -163,32 +163,16 @@ class SyncController extends ChangeNotifier {
       notifyListeners();
 
       final action = syncEngine.evaluateCorrection(payload, player.position);
-      switch (action) {
-        case DriftAction.noAction:
-          // In sync (< 300ms) - keep smooth
-          if (player.playbackSpeed != 1.0) {
-            await player.setPlaybackSpeed(1.0);
-          }
-          break;
+      final double targetSpeed = syncEngine.getRecommendedSpeed(action);
 
-        case DriftAction.microSpeedUp:
-          // Lagging behind (300ms - 2000ms): speed up slightly (1.06x)
-          await player.setPlaybackSpeed(1.06);
-          break;
+      if (action == DriftAction.hardSeek) {
+        // Major desync (>= 2000ms): hard seek to target position
+        final target = syncEngine.calculateTargetPosition(payload);
+        await player.seekTo(target);
+      }
 
-        case DriftAction.microSlowDown:
-          // Ahead of host (300ms - 2000ms): slow down slightly (0.94x)
-          await player.setPlaybackSpeed(0.94);
-          break;
-
-        case DriftAction.hardSeek:
-          // Major desync (>= 2000ms): hard seek to target position
-          final target = syncEngine.calculateTargetPosition(payload);
-          await player.seekTo(target);
-          if (player.playbackSpeed != 1.0) {
-            await player.setPlaybackSpeed(1.0);
-          }
-          break;
+      if (player.playbackSpeed != targetSpeed) {
+        await player.setPlaybackSpeed(targetSpeed);
       }
     } finally {
       // Delay releasing flag briefly to avoid local echo

@@ -22,10 +22,18 @@ void main() {
       expect(TimeFormatter.formatDuration(7322), '02:02:02');
     });
 
-    test('handles edge cases: negative, NaN, infinity', () {
+    test('handles edge cases: negative, NaN, infinity with custom fallback', () {
       expect(TimeFormatter.formatDuration(-10), '00:00');
-      expect(TimeFormatter.formatDuration(double.nan), '00:00');
+      expect(TimeFormatter.formatDuration(0, fallback: 'HD'), 'HD');
+      expect(TimeFormatter.formatDuration(double.nan, fallback: 'LIVE'), 'LIVE');
       expect(TimeFormatter.formatDuration(double.infinity), '00:00');
+    });
+
+    test('supports unpadded hours with padHours: false', () {
+      expect(TimeFormatter.formatDuration(3600, padHours: false), '1:00:00');
+      expect(TimeFormatter.formatDuration(3665, padHours: false), '1:01:05');
+      expect(TimeFormatter.formatDuration(7322, padHours: false), '2:02:02');
+      expect(TimeFormatter.formatDuration(36000, padHours: false), '10:00:00');
     });
 
     test('formats chat timestamp', () {

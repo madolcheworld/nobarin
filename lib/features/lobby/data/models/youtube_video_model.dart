@@ -1,9 +1,19 @@
-class YouTubeVideo {
+import 'playable_media_item.dart';
+
+class YouTubeVideo implements PlayableMediaItem {
+  @override
   final String id;
+  @override
   final String title;
   final String channelTitle;
+  @override
+  String get author => channelTitle;
+  @override
   final String thumbnailUrl;
+  @override
   final String duration;
+  @override
+  String get mediaType => 'youtube';
 
   const YouTubeVideo({
     required this.id,
@@ -13,6 +23,7 @@ class YouTubeVideo {
     required this.duration,
   });
 
+  @override
   String get url => 'https://www.youtube.com/watch?v=$id';
 
   factory YouTubeVideo.fromId({

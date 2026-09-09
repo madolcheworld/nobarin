@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../../core/constants/api_constants.dart';
+import '../../../../core/network/webrtc_signaling_helper.dart';
 import '../../room/controllers/unified_player_controller.dart';
 
 enum VoiceStatus {
@@ -32,6 +32,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   final UnifiedPlayerController? playerController;
   final SupabaseClient? supabase;
   final Map<String, dynamic>? iceConfiguration;
+  final RealtimeChannel? sharedChannel;
 
   final UserMediaFunction _userMediaFunction;
   final PeerConnectionFunction _peerConnectionFunction;
@@ -62,7 +63,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   // Remote audio tracks: remotePeerId -> Set<MediaStreamTrack>
   final Map<String, Set<MediaStreamTrack>> _remoteAudioTracks = {};
   // Queued ICE candidates for peers whose remote descriptions are not yet set
-  final Map<String, List<RTCIceCandidate>> _pendingCandidates = {};
+  final IceCandidateBuffer _candidateBuffer = IceCandidateBuffer();
   // Set of user IDs currently speaking (local and/or remote)
   final Set<String> _activeSpeakerIds = {};
   // Set of user IDs currently muted (local and/or remote)
@@ -98,11 +99,9 @@ class WebRtcVoiceController extends ChangeNotifier {
       'googNoiseSuppression2': true,
       'googHighpassFilter': true,
       'googTypingNoiseDetection': true,
-      'googAudioMirroring': false,
       'channelCount': 1,
       'sampleRate': 48000,
       'sampleSize': 16,
-      'latency': 0,
     },
     'video': false,
   };
@@ -114,6 +113,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     this.playerController,
     this.supabase,
     this.iceConfiguration,
+    this.sharedChannel,
     bool? autoCaptureMic,
     UserMediaFunction? userMediaFunction,
     PeerConnectionFunction? peerConnectionFunction,
@@ -265,26 +265,21 @@ class WebRtcVoiceController extends ChangeNotifier {
   }
 
   void _setupSignaling() {
-    if (supabase == null) return;
-
-    try {
+    if (sharedChannel != null) {
+      _voiceChannel = sharedChannel;
+    } else if (supabase != null) {
       final channelName = 'voice_$roomId';
       _voiceChannel = supabase!.channel(channelName);
+    } else {
+      return;
+    }
 
-      Map<String, dynamic> extractPayload(Map<String, dynamic> raw) {
-        if (raw['payload'] is Map<String, dynamic>) {
-          return raw['payload'] as Map<String, dynamic>;
-        } else if (raw['payload'] is Map) {
-          return Map<String, dynamic>.from(raw['payload'] as Map);
-        }
-        return raw;
-      }
-
+    try {
       _voiceChannel!.onBroadcast(
         event: 'VOICE_STATE',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleVoiceState(extractPayload(payload));
+          handleVoiceState(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -292,7 +287,7 @@ class WebRtcVoiceController extends ChangeNotifier {
         event: 'VOICE_OFFER',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleVoiceOffer(extractPayload(payload));
+          handleVoiceOffer(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -300,7 +295,7 @@ class WebRtcVoiceController extends ChangeNotifier {
         event: 'VOICE_ANSWER',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleVoiceAnswer(extractPayload(payload));
+          handleVoiceAnswer(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
@@ -308,14 +303,16 @@ class WebRtcVoiceController extends ChangeNotifier {
         event: 'VOICE_ICE',
         callback: (Map<String, dynamic> payload) {
           if (_isDisposed) return;
-          handleVoiceIce(extractPayload(payload));
+          handleVoiceIce(WebRtcSignalingHelper.extractPayload(payload));
         },
       );
 
-      _voiceChannel!.subscribe((status, error) {
-        debugPrint(
-            '[WebRtcVoiceController] Realtime status: $status (error: $error)');
-      });
+      if (sharedChannel == null) {
+        _voiceChannel!.subscribe((status, error) {
+          debugPrint(
+              '[WebRtcVoiceController] Realtime status: $status (error: $error)');
+        });
+      }
     } catch (e) {
       debugPrint('[WebRtcVoiceController] Error setting up signaling: $e');
     }
@@ -432,14 +429,14 @@ class WebRtcVoiceController extends ChangeNotifier {
       final optimizedOffer = RTCSessionDescription(optimizedSdp, offer.type);
       await pc.setLocalDescription(optimizedOffer);
 
-      await _sendSignalingMessage('VOICE_OFFER', {
-        'sender_id': userId,
-        'target_id': remotePeerId,
-        'sdp': {
-          'type': optimizedOffer.type,
-          'sdp': optimizedOffer.sdp,
-        },
-      });
+      await _sendSignalingMessage(
+        'VOICE_OFFER',
+        WebRtcSignalingHelper.buildSdpPayload(
+          senderId: userId,
+          targetId: remotePeerId,
+          sdp: optimizedOffer,
+        ),
+      );
     } catch (e) {
       debugPrint(
           '[WebRtcVoiceController] Error initiating offer to $remotePeerId: $e');
@@ -476,14 +473,14 @@ class WebRtcVoiceController extends ChangeNotifier {
       // Flush any queued ICE candidates after local description is set (state is stable)
       await _flushPendingCandidates(senderId, pc);
 
-      await _sendSignalingMessage('VOICE_ANSWER', {
-        'sender_id': userId,
-        'target_id': senderId,
-        'sdp': {
-          'type': optimizedAnswer.type,
-          'sdp': optimizedAnswer.sdp,
-        },
-      });
+      await _sendSignalingMessage(
+        'VOICE_ANSWER',
+        WebRtcSignalingHelper.buildSdpPayload(
+          senderId: userId,
+          targetId: senderId,
+          sdp: optimizedAnswer,
+        ),
+      );
     } catch (e) {
       debugPrint(
           '[WebRtcVoiceController] Error handling offer from $senderId: $e');
@@ -520,18 +517,12 @@ class WebRtcVoiceController extends ChangeNotifier {
   Future<void> handleVoiceIce(Map<String, dynamic> payload) async {
     final senderId = payload['sender_id'] as String?;
     final targetId = payload['target_id'] as String?;
-    final candMap = payload['candidate'] as Map<String, dynamic>?;
+    final candMap = payload['candidate'];
 
     if (senderId == null || targetId != userId || candMap == null) return;
 
-    final candString = candMap['candidate'] as String?;
-    if (candString == null || candString.isEmpty) return;
-
-    final candidate = RTCIceCandidate(
-      candString,
-      candMap['sdpMid'] as String?,
-      candMap['sdpMLineIndex'] as int?,
-    );
+    final candidate = WebRtcSignalingHelper.parseIceCandidate(candMap);
+    if (candidate == null) return;
 
     final pc = _peerConnections[senderId];
     if (pc != null) {
@@ -545,24 +536,18 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
 
     // Queue candidate until remote description is set
-    _pendingCandidates.putIfAbsent(senderId, () => []).add(candidate);
+    _candidateBuffer.enqueue(senderId, candidate);
   }
 
   Future<void> _flushPendingCandidates(
     String remotePeerId,
     RTCPeerConnection pc,
   ) async {
-    final candidates = _pendingCandidates.remove(remotePeerId);
-    if (candidates != null && candidates.isNotEmpty) {
-      for (final candidate in candidates) {
-        try {
-          await pc.addCandidate(candidate);
-        } catch (e) {
-          debugPrint(
-              '[WebRtcVoiceController] Error adding queued ICE candidate: $e');
-        }
-      }
-    }
+    await _candidateBuffer.flush(
+      remotePeerId,
+      pc,
+      tag: 'WebRtcVoiceController',
+    );
   }
 
   /// Safely attaches local audio tracks to [pc], reusing existing audio senders if present
@@ -609,16 +594,12 @@ class WebRtcVoiceController extends ChangeNotifier {
     _creatingPeerConnections[remotePeerId] = completer.future;
 
     try {
-      final pcConfig = <String, dynamic>{
-        ...iceConfiguration ?? ApiConstants.rtcIceConfiguration,
-        'sdpSemantics': 'unified-plan',
-      };
-      final pc = await _peerConnectionFunction(pcConfig, {
-        'mandatory': {},
-        'optional': [
-          {'DtlsSrtpKeyAgreement': true},
-        ],
-      });
+      final pcConfig =
+          WebRtcSignalingHelper.defaultPeerConnectionConfig(iceConfiguration);
+      final pc = await _peerConnectionFunction(
+        pcConfig,
+        WebRtcSignalingHelper.defaultPeerConstraints,
+      );
 
       _peerConnections[remotePeerId] = pc;
 
@@ -630,15 +611,14 @@ class WebRtcVoiceController extends ChangeNotifier {
       // Send local ICE candidates to peer
       pc.onIceCandidate = (candidate) {
         if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-        _sendSignalingMessage('VOICE_ICE', {
-          'sender_id': userId,
-          'target_id': remotePeerId,
-          'candidate': {
-            'candidate': candidate.candidate,
-            'sdpMid': candidate.sdpMid,
-            'sdpMLineIndex': candidate.sdpMLineIndex,
-          },
-        });
+        _sendSignalingMessage(
+          'VOICE_ICE',
+          WebRtcSignalingHelper.buildIcePayload(
+            senderId: userId,
+            targetId: remotePeerId,
+            candidate: candidate,
+          ),
+        );
       };
 
       // Track remote audio stream and tracks with deduplication
@@ -703,7 +683,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
     _remoteStreams.remove(remotePeerId);
     _remoteAudioTracks.remove(remotePeerId);
-    _pendingCandidates.remove(remotePeerId);
+    _candidateBuffer.clear(remotePeerId);
   }
 
   /// Toggles microphone mute state and broadcasts updated VOICE_STATE
@@ -967,34 +947,33 @@ class WebRtcVoiceController extends ChangeNotifier {
       'action': 'leave',
     });
 
-    for (final pc in _peerConnections.values) {
-      try {
-        await pc.close();
-        await pc.dispose();
-      } catch (_) {}
-    }
-    _peerConnections.clear();
+    await WebRtcSignalingHelper.closeAndDisposePeers(
+      _peerConnections,
+      tag: 'WebRtcVoiceController',
+    );
     _creatingPeerConnections.clear();
     _inFlightOffers.clear();
     _remoteStreams.clear();
     _remoteAudioTracks.clear();
-    _pendingCandidates.clear();
+    _candidateBuffer.clear();
     _activeSpeakerIds.clear();
     _mutedUserIds.clear();
     _mutedUserIds.add(userId);
 
     await _audioRouteHandler(false);
 
-    try {
-      _localStream?.getTracks().forEach((t) => t.stop());
-      await _localStream?.dispose();
-      _localStream = null;
-    } catch (_) {}
+    await WebRtcSignalingHelper.disposeMediaStream(
+      _localStream,
+      tag: 'WebRtcVoiceController',
+    );
+    _localStream = null;
 
-    try {
-      await _voiceChannel?.unsubscribe();
-      _voiceChannel = null;
-    } catch (_) {}
+    if (sharedChannel == null) {
+      try {
+        await _voiceChannel?.unsubscribe();
+      } catch (_) {}
+    }
+    _voiceChannel = null;
 
     if (_isDucking && playerController != null) {
       _isDucking = false;
@@ -1045,20 +1024,22 @@ class WebRtcVoiceController extends ChangeNotifier {
     _creatingPeerConnections.clear();
     _remoteStreams.clear();
     _remoteAudioTracks.clear();
-    _pendingCandidates.clear();
+    _candidateBuffer.clear();
     _activeSpeakerIds.clear();
     _mutedUserIds.clear();
 
-    try {
-      _localStream?.getTracks().forEach((t) => t.stop());
-      _localStream?.dispose();
-      _localStream = null;
-    } catch (_) {}
+    WebRtcSignalingHelper.disposeMediaStream(
+      _localStream,
+      tag: 'WebRtcVoiceController',
+    );
+    _localStream = null;
 
-    try {
-      _voiceChannel?.unsubscribe();
-      _voiceChannel = null;
-    } catch (_) {}
+    if (sharedChannel == null) {
+      try {
+        _voiceChannel?.unsubscribe();
+      } catch (_) {}
+    }
+    _voiceChannel = null;
 
     if (_isDucking && playerController != null) {
       _isDucking = false;

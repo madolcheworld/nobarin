@@ -1,8 +1,14 @@
 class TimeFormatter {
-  /// Formats seconds to mm:ss or hh:mm:ss
-  static String formatDuration(double seconds) {
+  /// Formats seconds to mm:ss or hh:mm:ss.
+  /// If seconds <= 0, isNaN, or isInfinite, returns [fallback] (defaults to '00:00').
+  /// [padHours] controls whether single-digit hours are padded with leading zero ('01:00:00' vs '1:00:00').
+  static String formatDuration(
+    double seconds, {
+    String fallback = '00:00',
+    bool padHours = true,
+  }) {
     if (seconds.isNaN || seconds.isInfinite || seconds <= 0) {
-      return '00:00';
+      return fallback;
     }
 
     final int totalSeconds = seconds.floor();
@@ -14,7 +20,8 @@ class TimeFormatter {
     final String secondsStr = remainingSeconds.toString().padLeft(2, '0');
 
     if (hours > 0) {
-      final String hoursStr = hours.toString().padLeft(2, '0');
+      final String hoursStr =
+          padHours ? hours.toString().padLeft(2, '0') : hours.toString();
       return '$hoursStr:$minutesStr:$secondsStr';
     }
 

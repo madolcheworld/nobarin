@@ -1,12 +1,22 @@
-class GoogleDriveVideo {
+import 'playable_media_item.dart';
+
+class GoogleDriveVideo implements PlayableMediaItem {
+  @override
   final String id;
+  @override
   final String title;
   final String ownerName;
+  @override
+  String get author => ownerName;
+  @override
   final String thumbnailUrl;
+  @override
   final String duration;
   final String fileSize;
   final String category;
   final bool isPublic;
+  @override
+  String get mediaType => 'google_drive';
 
   const GoogleDriveVideo({
     required this.id,
@@ -20,6 +30,7 @@ class GoogleDriveVideo {
   });
 
   /// Full shareable Google Drive link
+  @override
   String get url => 'https://drive.google.com/file/d/$id/view?usp=sharing';
 
   /// Embeddable preview link used by iframe / webview

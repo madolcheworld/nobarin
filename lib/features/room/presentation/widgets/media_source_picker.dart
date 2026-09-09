@@ -81,50 +81,12 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
 
   void _onUrlChanged() {
     final text = _urlController.text.trim();
-    final detectedYtId = UnifiedPlayerController.extractYouTubeVideoId(text);
-    final detectedTwitch = UnifiedPlayerController.extractTwitchMedia(text);
-    final detectedVimeo = UnifiedPlayerController.extractVimeoVideoId(text);
-    final detectedDriveId = UnifiedPlayerController.extractGoogleDriveFileId(text);
-    final detectedDmId = UnifiedPlayerController.extractDailymotionVideoId(text);
-    final detectedBstationId = UnifiedPlayerController.extractBstationVideoId(text);
+    final detected = UnifiedPlayerController.detectMediaFromUrl(text);
 
-    if (detectedYtId != null) {
+    if (detected != null) {
       setState(() {
-        _selectedType = 'youtube';
-        _thumbnailUrl = 'https://img.youtube.com/vi/$detectedYtId/mqdefault.jpg';
-      });
-    } else if (detectedTwitch != null) {
-      setState(() {
-        _selectedType = 'twitch';
-        _thumbnailUrl = null;
-      });
-    } else if (detectedVimeo != null) {
-      setState(() {
-        _selectedType = 'vimeo';
-        _thumbnailUrl = null;
-      });
-    } else if (detectedDriveId != null) {
-      setState(() {
-        _selectedType = 'google_drive';
-        _thumbnailUrl = 'https://drive.google.com/thumbnail?id=$detectedDriveId&sz=w640';
-      });
-    } else if (detectedDmId != null) {
-      setState(() {
-        _selectedType = 'dailymotion';
-        _thumbnailUrl = 'https://www.dailymotion.com/thumbnail/video/$detectedDmId';
-      });
-    } else if (detectedBstationId != null) {
-      setState(() {
-        _selectedType = 'bstation';
-        _thumbnailUrl = null;
-      });
-    } else if ((text.endsWith('.mp4') ||
-            text.endsWith('.m3u8') ||
-            text.endsWith('.webm')) &&
-        _selectedType != 'direct_url') {
-      setState(() {
-        _selectedType = 'direct_url';
-        _thumbnailUrl = null;
+        _selectedType = detected.mediaType;
+        _thumbnailUrl = detected.thumbnailUrl;
       });
     } else {
       setState(() {});
@@ -145,49 +107,11 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
       final text = data?.text?.trim();
       if (text != null && text.isNotEmpty) {
         _urlController.text = text;
-        final ytId = UnifiedPlayerController.extractYouTubeVideoId(text);
-        final twitch = UnifiedPlayerController.extractTwitchMedia(text);
-        final vimeo = UnifiedPlayerController.extractVimeoVideoId(text);
-        final driveId = UnifiedPlayerController.extractGoogleDriveFileId(text);
-        final dmId = UnifiedPlayerController.extractDailymotionVideoId(text);
-        final bstationId = UnifiedPlayerController.extractBstationVideoId(text);
-
-        if (ytId != null) {
+        final detected = UnifiedPlayerController.detectMediaFromUrl(text);
+        if (detected != null) {
           setState(() {
-            _selectedType = 'youtube';
-            _thumbnailUrl = 'https://img.youtube.com/vi/$ytId/mqdefault.jpg';
-          });
-        } else if (twitch != null) {
-          setState(() {
-            _selectedType = 'twitch';
-            _thumbnailUrl = null;
-          });
-        } else if (vimeo != null) {
-          setState(() {
-            _selectedType = 'vimeo';
-            _thumbnailUrl = null;
-          });
-        } else if (driveId != null) {
-          setState(() {
-            _selectedType = 'google_drive';
-            _thumbnailUrl = 'https://drive.google.com/thumbnail?id=$driveId&sz=w640';
-          });
-        } else if (dmId != null) {
-          setState(() {
-            _selectedType = 'dailymotion';
-            _thumbnailUrl = 'https://www.dailymotion.com/thumbnail/video/$dmId';
-          });
-        } else if (bstationId != null) {
-          setState(() {
-            _selectedType = 'bstation';
-            _thumbnailUrl = null;
-          });
-        } else if (text.endsWith('.mp4') ||
-            text.endsWith('.m3u8') ||
-            text.endsWith('.webm')) {
-          setState(() {
-            _selectedType = 'direct_url';
-            _thumbnailUrl = null;
+            _selectedType = detected.mediaType;
+            _thumbnailUrl = detected.thumbnailUrl;
           });
         }
       }
@@ -198,37 +122,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
 
-    var type = _selectedType;
-    final ytId = UnifiedPlayerController.extractYouTubeVideoId(url);
-    final twitch = UnifiedPlayerController.extractTwitchMedia(url);
-    final vimeo = UnifiedPlayerController.extractVimeoVideoId(url);
-    final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url);
-    final dmId = UnifiedPlayerController.extractDailymotionVideoId(url);
-    final bstationId = UnifiedPlayerController.extractBstationVideoId(url);
-
-    if (ytId != null) {
-      type = 'youtube';
-    } else if (twitch != null) {
-      type = 'twitch';
-    } else if (vimeo != null) {
-      type = 'vimeo';
-    } else if (driveId != null) {
-      type = 'google_drive';
-    } else if (dmId != null) {
-      type = 'dailymotion';
-    } else if (bstationId != null) {
-      type = 'bstation';
-    } else if ((type == 'youtube' ||
-            type == 'twitch' ||
-            type == 'vimeo' ||
-            type == 'google_drive' ||
-            type == 'dailymotion' ||
-            type == 'bstation') &&
-        (url.endsWith('.mp4') ||
-            url.endsWith('.m3u8') ||
-            url.endsWith('.webm'))) {
-      type = 'direct_url';
-    }
+    final detected = UnifiedPlayerController.detectMediaFromUrl(url);
+    final type = detected?.mediaType ?? _selectedType;
 
     widget.syncController.requestChangeMedia(type, url);
     widget.chatController?.sendSystemMessage(
@@ -241,70 +136,19 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     final url = _urlController.text.trim();
     if (url.isEmpty || widget.queueController == null) return;
 
-    var type = _selectedType;
-    final ytId = UnifiedPlayerController.extractYouTubeVideoId(url);
-    final twitch = UnifiedPlayerController.extractTwitchMedia(url);
-    final vimeo = UnifiedPlayerController.extractVimeoVideoId(url);
-    final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url);
-    final dmId = UnifiedPlayerController.extractDailymotionVideoId(url);
-    final bstationId = UnifiedPlayerController.extractBstationVideoId(url);
-
-    if (ytId != null) {
-      type = 'youtube';
-    } else if (twitch != null) {
-      type = 'twitch';
-    } else if (vimeo != null) {
-      type = 'vimeo';
-    } else if (driveId != null) {
-      type = 'google_drive';
-    } else if (dmId != null) {
-      type = 'dailymotion';
-    } else if (bstationId != null) {
-      type = 'bstation';
-    } else if ((type == 'youtube' ||
-            type == 'twitch' ||
-            type == 'vimeo' ||
-            type == 'google_drive' ||
-            type == 'dailymotion' ||
-            type == 'bstation') &&
-        (url.endsWith('.mp4') ||
-            url.endsWith('.m3u8') ||
-            url.endsWith('.webm'))) {
-      type = 'direct_url';
-    }
+    final detected = UnifiedPlayerController.detectMediaFromUrl(url);
+    final type = detected?.mediaType ?? _selectedType;
 
     var title = _titleController.text.trim();
     if (title.isEmpty) {
-      if (ytId != null) {
-        title = 'Video YouTube ($ytId)';
-      } else if (twitch != null) {
-        title = twitch.isChannel
-            ? 'Twitch Live (${twitch.id})'
-            : (twitch.isVideo
-                ? 'Twitch Video (${twitch.id})'
-                : 'Twitch Clip (${twitch.id})');
-      } else if (vimeo != null) {
-        title = 'Video Vimeo ($vimeo)';
-      } else if (driveId != null) {
-        title = 'Google Drive Video ($driveId)';
-      } else if (dmId != null) {
-        title = 'Video Dailymotion ($dmId)';
-      } else if (bstationId != null) {
-        title = 'Video Bstation ($bstationId)';
-      } else {
-        final uri = Uri.tryParse(url);
-        final segment = uri?.pathSegments.isNotEmpty == true
-            ? uri!.pathSegments.last
-            : null;
-        title = segment ?? 'Video Direct';
-      }
+      title = detected?.title ?? 'Video Antrean';
     }
 
     widget.queueController!.addToQueue(
       mediaType: type,
       mediaUrl: url,
       title: title,
-      thumbnailUrl: _thumbnailUrl,
+      thumbnailUrl: detected?.thumbnailUrl ?? _thumbnailUrl,
     );
 
     Navigator.of(context).pop();

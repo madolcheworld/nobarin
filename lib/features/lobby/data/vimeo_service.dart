@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/utils/time_formatter.dart';
 import 'models/vimeo_video_model.dart';
 
 class VimeoService {
@@ -151,12 +152,10 @@ class VimeoService {
         final thumb = data['thumbnail_url'] as String?;
         final durationSec = data['duration'] as int?;
 
-        String durationStr = 'HD';
-        if (durationSec != null && durationSec > 0) {
-          final m = (durationSec ~/ 60).toString().padLeft(2, '0');
-          final s = (durationSec % 60).toString().padLeft(2, '0');
-          durationStr = '$m:$s';
-        }
+        final String durationStr = TimeFormatter.formatDuration(
+          (durationSec ?? 0).toDouble(),
+          fallback: 'HD',
+        );
 
         return VimeoVideo(
           id: cleanId,

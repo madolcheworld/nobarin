@@ -10,8 +10,8 @@ class FullscreenHelper {
   static void toggleFullscreen() => impl.toggleFullscreen();
 
   /// Enters full screen mode.
-  static void enterFullscreen() => impl.enterFullscreen();
+  static Future<void> enterFullscreen() => impl.enterFullscreen();
 
   /// Exits full screen mode if currently active.
-  static void exitFullscreen() => impl.exitFullscreen();
+  static Future<void> exitFullscreen() => impl.exitFullscreen();
 }

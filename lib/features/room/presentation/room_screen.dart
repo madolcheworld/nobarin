@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/network/supabase_client.dart';
@@ -64,6 +65,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   WebRtcVoiceController? _voiceController;
   QueueController? _queueController;
   WebRtcScreenShareController? _screenShareController;
+  RealtimeChannel? _signalingChannel;
 
   @override
   void initState() {
@@ -252,12 +254,15 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         _chatController?.sendSystemMessage(msg);
       };
 
+      _signalingChannel = supabase?.channel('signaling_${room.id}');
+
       _voiceController = WebRtcVoiceController(
         roomId: room.id,
         userId: user.id,
         userName: user.username,
         playerController: _player,
         supabase: supabase,
+        sharedChannel: _signalingChannel,
         iceConfiguration: ApiConstants.rtcIceConfiguration,
       );
 
@@ -292,6 +297,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         userName: user.username,
         playerController: _player,
         supabase: supabase,
+        sharedChannel: _signalingChannel,
         iceConfiguration: ApiConstants.rtcIceConfiguration,
         isHostProvider: () => _roomController?.isHost ?? false,
         isCollaborativeProvider: () =>
@@ -299,6 +305,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       );
       _screenShareController!.initialize();
       _screenShareController!.addListener(_onControllerUpdated);
+
+      _signalingChannel?.subscribe((status, error) {
+        debugPrint(
+            '[RoomScreen] Signaling channel status: $status (error: $error)');
+      });
 
       _player.onPlaybackEnded = () {
         if (!mounted) return;
@@ -448,6 +459,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     _queueController?.dispose();
     _screenShareController?.removeListener(_onControllerUpdated);
     _screenShareController?.dispose();
+    try {
+      _signalingChannel?.unsubscribe();
+      _signalingChannel = null;
+    } catch (_) {}
     super.dispose();
   }
 

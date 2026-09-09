@@ -1,13 +1,25 @@
-class BstationVideo {
+import '../../../../core/utils/time_formatter.dart';
+import 'playable_media_item.dart';
+
+class BstationVideo implements PlayableMediaItem {
+  @override
   final String id;
+  @override
   final String title;
   final String description;
   final String uploaderName;
+  @override
+  String get author => uploaderName;
+  @override
   final String thumbnailUrl;
   final int durationSeconds;
+  @override
+  String get duration => durationFormatted;
   final int viewsTotal;
   final String category;
   final String? episodeNumber;
+  @override
+  String get mediaType => 'bstation';
 
   const BstationVideo({
     required this.id,
@@ -22,6 +34,7 @@ class BstationVideo {
   });
 
   /// Canonical watch URL
+  @override
   String get url {
     if (id.startsWith('BV') || id.startsWith('bv')) {
       return 'https://www.bilibili.com/video/$id';
@@ -47,17 +60,11 @@ class BstationVideo {
   String get canonicalThumbnailUrl => effectiveThumbnailUrl;
 
   /// Format duration to mm:ss or hh:mm:ss
-  String get durationFormatted {
-    if (durationSeconds <= 0) return 'HD';
-    final hours = durationSeconds ~/ 3600;
-    final minutes = (durationSeconds % 3600) ~/ 60;
-    final seconds = durationSeconds % 60;
-
-    if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
+  String get durationFormatted => TimeFormatter.formatDuration(
+        durationSeconds.toDouble(),
+        fallback: 'HD',
+        padHours: false,
+      );
 
   /// Alias for durationFormatted
   String get formattedDuration => durationFormatted;

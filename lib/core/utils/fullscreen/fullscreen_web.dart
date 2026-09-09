@@ -12,13 +12,13 @@ void toggleFullscreen() {
   }
 }
 
-void enterFullscreen() {
+Future<void> enterFullscreen() async {
   if (web.document.fullscreenElement == null) {
     web.document.documentElement?.requestFullscreen();
   }
 }
 
-void exitFullscreen() {
+Future<void> exitFullscreen() async {
   if (web.document.fullscreenElement != null) {
     web.document.exitFullscreen();
   }

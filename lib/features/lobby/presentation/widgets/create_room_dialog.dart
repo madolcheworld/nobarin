@@ -6,6 +6,7 @@ import '../../../auth/presentation/auth_controller.dart';
 import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
 import '../../data/models/bstation_video_model.dart';
+import '../../data/models/playable_media_item.dart';
 import '../../data/models/dailymotion_video_model.dart';
 import '../../data/models/google_drive_video_model.dart';
 import '../../data/models/twitch_stream_model.dart';
@@ -364,119 +365,46 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     super.dispose();
   }
 
-  Future<void> _pickAnotherYouTubeVideo() async {
-    final result = await Navigator.of(context).push<YouTubeVideo>(
-      MaterialPageRoute(builder: (_) => const YouTubePickerScreen()),
+  void _applySelectedMedia(PlayableMediaItem item) {
+    setState(() {
+      _selectedYouTubeVideo = item is YouTubeVideo ? item : null;
+      _selectedTwitchStream = item is TwitchStream ? item : null;
+      _selectedVimeoVideo = item is VimeoVideo ? item : null;
+      _selectedGoogleDriveVideo = item is GoogleDriveVideo ? item : null;
+      _selectedDailymotionVideo = item is DailymotionVideo ? item : null;
+      _selectedBstationVideo = item is BstationVideo ? item : null;
+      _mediaType = item.mediaType;
+      _mediaUrlController.text = item.url;
+      _titleController.text = item.title;
+    });
+  }
+
+  Future<void> _pickMedia<T extends PlayableMediaItem>(Widget screen) async {
+    final result = await Navigator.of(context).push<T>(
+      MaterialPageRoute(builder: (_) => screen),
     );
     if (result != null && mounted) {
-      setState(() {
-        _selectedYouTubeVideo = result;
-        _selectedTwitchStream = null;
-        _selectedVimeoVideo = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedDailymotionVideo = null;
-        _selectedBstationVideo = null;
-        _mediaType = 'youtube';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
+      _applySelectedMedia(result);
     }
   }
 
-  Future<void> _pickAnotherTwitchStream() async {
-    final result = await Navigator.of(context).push<TwitchStream>(
-      MaterialPageRoute(builder: (_) => const TwitchPickerScreen()),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _selectedTwitchStream = result;
-        _selectedYouTubeVideo = null;
-        _selectedVimeoVideo = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedDailymotionVideo = null;
-        _selectedBstationVideo = null;
-        _mediaType = 'twitch';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
-    }
-  }
+  Future<void> _pickAnotherYouTubeVideo() =>
+      _pickMedia<YouTubeVideo>(const YouTubePickerScreen());
 
-  Future<void> _pickAnotherVimeoVideo() async {
-    final result = await Navigator.of(context).push<VimeoVideo>(
-      MaterialPageRoute(builder: (_) => const VimeoPickerScreen()),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _selectedVimeoVideo = result;
-        _selectedYouTubeVideo = null;
-        _selectedTwitchStream = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedDailymotionVideo = null;
-        _selectedBstationVideo = null;
-        _mediaType = 'vimeo';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
-    }
-  }
+  Future<void> _pickAnotherTwitchStream() =>
+      _pickMedia<TwitchStream>(const TwitchPickerScreen());
 
-  Future<void> _pickAnotherGoogleDriveVideo() async {
-    final result = await Navigator.of(context).push<GoogleDriveVideo>(
-      MaterialPageRoute(builder: (_) => const GoogleDrivePickerScreen()),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _selectedGoogleDriveVideo = result;
-        _selectedYouTubeVideo = null;
-        _selectedTwitchStream = null;
-        _selectedVimeoVideo = null;
-        _selectedDailymotionVideo = null;
-        _selectedBstationVideo = null;
-        _mediaType = 'google_drive';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
-    }
-  }
+  Future<void> _pickAnotherVimeoVideo() =>
+      _pickMedia<VimeoVideo>(const VimeoPickerScreen());
 
-  Future<void> _pickAnotherDailymotionVideo() async {
-    final result = await Navigator.of(context).push<DailymotionVideo>(
-      MaterialPageRoute(builder: (_) => const DailymotionPickerScreen()),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _selectedDailymotionVideo = result;
-        _selectedYouTubeVideo = null;
-        _selectedTwitchStream = null;
-        _selectedVimeoVideo = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedBstationVideo = null;
-        _mediaType = 'dailymotion';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
-    }
-  }
+  Future<void> _pickAnotherGoogleDriveVideo() =>
+      _pickMedia<GoogleDriveVideo>(const GoogleDrivePickerScreen());
 
-  Future<void> _pickAnotherBstationVideo() async {
-    final result = await Navigator.of(context).push<BstationVideo>(
-      MaterialPageRoute(builder: (_) => const BstationPickerScreen()),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _selectedBstationVideo = result;
-        _selectedYouTubeVideo = null;
-        _selectedTwitchStream = null;
-        _selectedVimeoVideo = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedDailymotionVideo = null;
-        _mediaType = 'bstation';
-        _mediaUrlController.text = result.url;
-        _titleController.text = result.title;
-      });
-    }
-  }
+  Future<void> _pickAnotherDailymotionVideo() =>
+      _pickMedia<DailymotionVideo>(const DailymotionPickerScreen());
+
+  Future<void> _pickAnotherBstationVideo() =>
+      _pickMedia<BstationVideo>(const BstationPickerScreen());
 
   Future<void> _handleCreate() async {
     if (!_formKey.currentState!.validate()) return;

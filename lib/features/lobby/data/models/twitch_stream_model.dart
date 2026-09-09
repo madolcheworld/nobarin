@@ -1,11 +1,22 @@
-class TwitchStream {
+import 'playable_media_item.dart';
+
+class TwitchStream implements PlayableMediaItem {
+  @override
   final String id;
+  @override
   final String title;
   final String channelTitle;
+  @override
+  String get author => channelTitle;
+  @override
   final String thumbnailUrl;
   final String category;
   final String viewerCount;
   final String type; // 'live' | 'channel'
+  @override
+  String get duration => viewerCount.isNotEmpty ? '$viewerCount penonton' : 'LIVE';
+  @override
+  String get mediaType => 'twitch';
 
   const TwitchStream({
     required this.id,
@@ -17,6 +28,7 @@ class TwitchStream {
     this.type = 'live',
   });
 
+  @override
   String get url => 'https://www.twitch.tv/$id';
 
   factory TwitchStream.fromId({

@@ -1,10 +1,20 @@
-class VimeoVideo {
+import 'playable_media_item.dart';
+
+class VimeoVideo implements PlayableMediaItem {
+  @override
   final String id;
+  @override
   final String title;
   final String channelTitle;
+  @override
+  String get author => channelTitle;
+  @override
   final String thumbnailUrl;
+  @override
   final String duration;
   final String category;
+  @override
+  String get mediaType => 'vimeo';
 
   const VimeoVideo({
     required this.id,
@@ -15,6 +25,7 @@ class VimeoVideo {
     this.category = 'Video',
   });
 
+  @override
   String get url => 'https://vimeo.com/$id';
 
   factory VimeoVideo.fromId({
