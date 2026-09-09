@@ -13,6 +13,7 @@ import '../../../../core/utils/time_formatter.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
 import 'twitch_vimeo_embed_player.dart';
+import 'video_quality_sheet.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
   final UnifiedPlayerController player;
@@ -683,6 +684,31 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     },
                                   ),
                                 ),
+                              // Quality Selector button (fullscreen / top bar)
+                              if (widget.player.isLoaded)
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.tune_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    tooltip:
+                                        'Kualitas Video (${widget.player.currentQualityLabel})',
+                                    onPressed: () {
+                                      AppHaptics.selection();
+                                      VideoQualitySheet.show(
+                                        context,
+                                        player: widget.player,
+                                      );
+                                      if (widget.player.isPlaying) {
+                                        _startHideTimerIfNeeded(reset: true);
+                                      }
+                                    },
+                                  ),
+                                ),
                               // Fullscreen toggle button
                               Material(
                                 color: Colors.transparent,
@@ -888,6 +914,68 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     },
                                   ),
                                 ),
+                                if (widget.player.isLoaded) ...[
+                                  const SizedBox(width: 4),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(14),
+                                      onTap: () {
+                                        AppHaptics.selection();
+                                        VideoQualitySheet.show(
+                                          context,
+                                          player: widget.player,
+                                        );
+                                        if (widget.player.isPlaying) {
+                                          _startHideTimerIfNeeded(reset: true);
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(alpha: 0.35),
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: widget.player.selectedQuality != null &&
+                                                    !widget.player.selectedQuality!.isAuto
+                                                ? AppColors.primaryNeon.withValues(alpha: 0.6)
+                                                : Colors.white.withValues(alpha: 0.25),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.tune_rounded,
+                                              size: 12,
+                                              color: widget.player.selectedQuality != null &&
+                                                      !widget.player.selectedQuality!.isAuto
+                                                  ? AppColors.primaryNeon
+                                                  : Colors.white,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              widget.player.currentQualityLabel,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: widget.player.selectedQuality != null &&
+                                                        !widget.player.selectedQuality!.isAuto
+                                                    ? AppColors.primaryNeon
+                                                    : Colors.white,
+                                                letterSpacing: 0.2,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 if (canControl) ...[
                                   const SizedBox(width: 2),
                                   Material(

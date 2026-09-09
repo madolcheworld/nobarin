@@ -83,27 +83,82 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
       if (_isVimeo) {
         switch (action) {
           case 'play':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage("{\\"method\\":\\"play\\"}", "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                if (window.vimeoPlayer) {
+                  window.vimeoPlayer.play();
+                } else {
+                  const f = document.querySelector("iframe");
+                  if (f) f.contentWindow.postMessage('{"method":"play"}', "*");
+                }
+              } catch(e){}
+            ''');
             break;
           case 'pause':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage("{\\"method\\":\\"pause\\"}", "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                if (window.vimeoPlayer) {
+                  window.vimeoPlayer.pause();
+                } else {
+                  const f = document.querySelector("iframe");
+                  if (f) f.contentWindow.postMessage('{"method":"pause"}', "*");
+                }
+              } catch(e){}
+            ''');
             break;
           case 'seek':
             if (arg is num) {
-              _webViewController!.runJavaScript(
-                'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({method:"setCurrentTime", value: $arg}), "*"); } catch(e){}',
-              );
+              _webViewController!.runJavaScript('''
+                try {
+                  if (window.vimeoPlayer) {
+                    window.vimeoPlayer.setCurrentTime($arg);
+                  } else {
+                    const f = document.querySelector("iframe");
+                    if (f) f.contentWindow.postMessage(JSON.stringify({method:"setCurrentTime", value: $arg}), "*");
+                  }
+                } catch(e){}
+              ''');
             }
             break;
           case 'setMuted':
             final bool muted = arg == true;
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({method:"setVolume", value: ${muted ? 0 : 1}}), "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                if (window.vimeoPlayer) {
+                  window.vimeoPlayer.setMuted($muted);
+                } else {
+                  const f = document.querySelector("iframe");
+                  if (f) f.contentWindow.postMessage(JSON.stringify({method:"setVolume", value: ${muted ? 0 : 1}}), "*");
+                }
+              } catch(e){}
+            ''');
+            break;
+          case 'setVolume':
+            if (arg is num) {
+              _webViewController!.runJavaScript('''
+                try {
+                  if (window.vimeoPlayer) {
+                    window.vimeoPlayer.setVolume($arg);
+                  } else {
+                    const f = document.querySelector("iframe");
+                    if (f) f.contentWindow.postMessage(JSON.stringify({method:"setVolume", value: $arg}), "*");
+                  }
+                } catch(e){}
+              ''');
+            }
+            break;
+          case 'setQuality':
+            final q = arg?.toString() ?? 'auto';
+            _webViewController!.runJavaScript('''
+              try {
+                if (window.vimeoPlayer) {
+                  window.vimeoPlayer.setQuality('$q');
+                } else {
+                  const f = document.querySelector("iframe");
+                  if (f) f.contentWindow.postMessage(JSON.stringify({method:"setQuality", value: "$q"}), "*");
+                }
+              } catch(e){}
+            ''');
             break;
         }
       } else if (_isTwitch) {
@@ -128,34 +183,76 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
       } else if (_isDailymotion) {
         switch (action) {
           case 'play':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({command:"play"}), "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                const f = document.querySelector("iframe");
+                if (f) {
+                  f.contentWindow.postMessage(JSON.stringify({command:"play"}), "*");
+                  f.contentWindow.postMessage("play", "*");
+                }
+              } catch(e){}
+            ''');
             break;
           case 'pause':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({command:"pause"}), "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                const f = document.querySelector("iframe");
+                if (f) {
+                  f.contentWindow.postMessage(JSON.stringify({command:"pause"}), "*");
+                  f.contentWindow.postMessage("pause", "*");
+                }
+              } catch(e){}
+            ''');
             break;
           case 'seek':
             if (arg is num) {
-              _webViewController!.runJavaScript(
-                'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({command:"seek", parameters: [$arg]}), "*"); } catch(e){}',
-              );
+              _webViewController!.runJavaScript('''
+                try {
+                  const f = document.querySelector("iframe");
+                  if (f) {
+                    f.contentWindow.postMessage(JSON.stringify({command:"seek", parameters: [$arg]}), "*");
+                    f.contentWindow.postMessage("seek:$arg", "*");
+                  }
+                } catch(e){}
+              ''');
             }
             break;
           case 'setMuted':
             final bool muted = arg == true;
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({command:"volume", parameters: [${muted ? 0 : 1}]}), "*"); } catch(e){}',
-            );
+            _webViewController!.runJavaScript('''
+              try {
+                const f = document.querySelector("iframe");
+                if (f) {
+                  f.contentWindow.postMessage(JSON.stringify({command:"volume", parameters: [${muted ? 0 : 1}]}), "*");
+                  f.contentWindow.postMessage("volume:${muted ? 0 : 1}", "*");
+                }
+              } catch(e){}
+            ''');
             break;
           case 'setVolume':
             if (arg is num) {
-              _webViewController!.runJavaScript(
-                'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({command:"volume", parameters: [$arg]}), "*"); } catch(e){}',
-              );
+              _webViewController!.runJavaScript('''
+                try {
+                  const f = document.querySelector("iframe");
+                  if (f) {
+                    f.contentWindow.postMessage(JSON.stringify({command:"volume", parameters: [$arg]}), "*");
+                    f.contentWindow.postMessage("volume:$arg", "*");
+                  }
+                } catch(e){}
+              ''');
             }
+            break;
+          case 'setQuality':
+            final q = arg?.toString() ?? 'auto';
+            _webViewController!.runJavaScript('''
+              try {
+                const f = document.querySelector("iframe");
+                if (f) {
+                  f.contentWindow.postMessage(JSON.stringify({command:"quality", parameters: ["$q"]}), "*");
+                  f.contentWindow.postMessage("quality:$q", "*");
+                }
+              } catch(e){}
+            ''');
             break;
         }
       } else if (_isBstation) {
@@ -228,11 +325,13 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
               final uri = Uri.tryParse(request.url);
               if (uri != null) {
                 final scheme = uri.scheme.toLowerCase();
-                // Block external app schemes (intent:, bstar:, bilibili:, market:)
+                // Block external app schemes (intent:, bstar:, bilibili:, market:, vimeo:, dailymotion:)
                 if (scheme == 'intent' ||
                     scheme == 'bstar' ||
                     scheme == 'bilibili' ||
-                    scheme == 'market') {
+                    scheme == 'market' ||
+                    scheme == 'vimeo' ||
+                    scheme == 'dailymotion') {
                   return NavigationDecision.prevent;
                 }
               }
@@ -255,6 +354,15 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
             onWebResourceError: (error) {
               debugPrint(
                   '[TwitchVimeoEmbedPlayer] Web error: ${error.description} (${error.errorCode})');
+              if (_isVimeo && (error.errorCode == -2 || error.errorCode == -6)) {
+                if (mounted && (error.url?.contains('vimeo') ?? false)) {
+                  widget.player.updateEmbedPlaybackState(
+                    isPlaying: false,
+                    error:
+                        'Akses ke Vimeo diblokir ISP/DNS. Gunakan Private DNS (dns.google) atau VPN untuk memutar.',
+                  );
+                }
+              }
             },
           ),
         );
@@ -430,14 +538,14 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
     } else if (_isVimeo) {
       final vimeoId = UnifiedPlayerController.extractVimeoVideoId(url) ?? url;
       embedSrc =
-          'https://player.vimeo.com/video/$vimeoId?autoplay=1&title=0&byline=0&portrait=0&badge=0';
+          'https://player.vimeo.com/video/$vimeoId?autoplay=1&title=0&byline=0&portrait=0&badge=0&api=1&player_id=embedFrame&autopause=0&responsive=1';
     } else if (_isGoogleDrive) {
       final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url) ?? url;
       embedSrc = 'https://drive.google.com/file/d/$driveId/preview';
     } else if (_isDailymotion) {
       final dmId = UnifiedPlayerController.extractDailymotionVideoId(url) ?? url;
       embedSrc =
-          'https://www.dailymotion.com/embed/video/$dmId?autoplay=1&ui-logo=0&sharing-enable=0';
+          'https://www.dailymotion.com/embed/video/$dmId?autoplay=1&ui-logo=0&sharing-enable=0&api=postMessage';
     } else if (_isBstation) {
       final bId = UnifiedPlayerController.extractBstationVideoId(url) ?? url;
       embedSrc =
@@ -446,13 +554,40 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
 
     if (embedSrc.isEmpty) return;
 
+    final String baseUrl;
+    final String referrerPolicy;
+    if (_isTwitch) {
+      baseUrl = 'https://localhost';
+      referrerPolicy = 'origin';
+    } else if (_isVimeo) {
+      baseUrl = 'https://player.vimeo.com';
+      referrerPolicy = 'origin';
+    } else if (_isDailymotion) {
+      baseUrl = 'https://www.dailymotion.com';
+      referrerPolicy = 'no-referrer-when-downgrade';
+    } else if (_isGoogleDrive) {
+      baseUrl = 'https://drive.google.com';
+      referrerPolicy = 'origin';
+    } else if (_isBstation) {
+      baseUrl = 'https://www.bilibili.com';
+      referrerPolicy = 'no-referrer';
+    } else {
+      baseUrl = 'https://localhost';
+      referrerPolicy = 'no-referrer';
+    }
+
+    final vimeoSdkScript = _isVimeo
+        ? '<script src="https://player.vimeo.com/api/player.js"></script>'
+        : '';
+
     final htmlContent = '''
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="referrer" content="no-referrer">
+  <meta name="referrer" content="$referrerPolicy">
+  $vimeoSdkScript
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
@@ -463,16 +598,139 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   <iframe
     id="embedFrame"
     src="$embedSrc"
-    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+    allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
     allowfullscreen="true"
-    referrerpolicy="no-referrer"
+    referrerpolicy="$referrerPolicy"
     scrolling="no">
   </iframe>
+  <script>
+    function notifyFlutter(evt, extra) {
+      if (window.FlutterEmbedChannel) {
+        var payload = Object.assign({ event: evt }, extra || {});
+        window.FlutterEmbedChannel.postMessage(JSON.stringify(payload));
+      }
+    }
+
+    ${_isVimeo ? '''
+    function setupVimeo() {
+      var iframe = document.getElementById('embedFrame');
+      if (!iframe) return;
+
+      if (window.Vimeo && window.Vimeo.Player) {
+        try {
+          var player = new window.Vimeo.Player(iframe);
+          window.vimeoPlayer = player;
+          player.on('play', function() { notifyFlutter('play'); });
+          player.on('pause', function() { notifyFlutter('pause'); });
+          var lastReport = 0;
+          player.on('timeupdate', function(data) {
+            var now = Date.now();
+            if (now - lastReport >= 500) {
+              lastReport = now;
+              notifyFlutter('timeupdate', { currentTime: data.seconds, duration: data.duration });
+            }
+          });
+          player.on('ended', function() { notifyFlutter('ended'); });
+          player.ready().then(function() {
+            player.play().catch(function(){});
+          });
+          return;
+        } catch(e) {}
+      }
+
+      window.addEventListener('message', function(e) {
+        try {
+          var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+          if (!data) return;
+          if (data.event === 'ready') {
+            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"play"}', '*');
+            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"pause"}', '*');
+            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"timeupdate"}', '*');
+            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"finish"}', '*');
+            iframe.contentWindow.postMessage('{"method":"play"}', '*');
+          } else if (data.event === 'play') {
+            notifyFlutter('play');
+          } else if (data.event === 'pause') {
+            notifyFlutter('pause');
+          } else if (data.event === 'timeupdate') {
+            notifyFlutter('timeupdate', {
+              currentTime: data.data ? data.data.seconds : 0,
+              duration: data.data ? data.data.duration : 0
+            });
+          } else if (data.event === 'finish') {
+            notifyFlutter('ended');
+          }
+        } catch(err) {}
+      });
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setupVimeo();
+    } else {
+      window.addEventListener('DOMContentLoaded', setupVimeo);
+    }
+    setTimeout(setupVimeo, 1000);
+    ''' : ''}
+
+    ${_isDailymotion ? '''
+    window.addEventListener('message', function(e) {
+      try {
+        var data = e.data;
+        if (typeof data === 'string') {
+          if (data.indexOf('=') !== -1 && data.indexOf('{') === -1) {
+            var parts = data.split('&');
+            var parsed = {};
+            for (var i = 0; i < parts.length; i++) {
+              var kv = parts[i].split('=');
+              if (kv.length === 2) parsed[kv[0]] = decodeURIComponent(kv[1]);
+            }
+            data = parsed;
+          } else {
+            data = JSON.parse(data);
+          }
+        }
+        if (!data) return;
+        var evt = data.event;
+        if (evt === 'playbackReady' || evt === 'video_start') {
+          var iframe = document.getElementById('embedFrame');
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(JSON.stringify({ command: 'play' }), '*');
+          }
+        }
+        if (evt === 'play' || evt === 'playing') {
+          notifyFlutter('play');
+        } else if (evt === 'pause') {
+          notifyFlutter('pause');
+        } else if (evt === 'timeupdate' || evt === 'progress') {
+          notifyFlutter('timeupdate', {
+            currentTime: parseFloat(data.time || data.currentTime || 0),
+            duration: parseFloat(data.duration || 0)
+          });
+        } else if (evt === 'end' || evt === 'video_end') {
+          notifyFlutter('ended');
+        }
+      } catch(err) {}
+    });
+    ''' : ''}
+
+    ${_isTwitch ? '''
+    window.addEventListener('message', function(e) {
+      try {
+        var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (!data) return;
+        if (data.namespace === 'twitch-embed') {
+          if (data.eventName === 'video.play') notifyFlutter('play');
+          if (data.eventName === 'video.pause') notifyFlutter('pause');
+          if (data.eventName === 'video.ended') notifyFlutter('ended');
+        }
+      } catch(err) {}
+    });
+    ''' : ''}
+  </script>
 </body>
 </html>
 ''';
 
-    final baseUrl = _isBstation ? 'https://www.bilibili.com' : 'https://localhost';
     _webViewController!.loadHtmlString(htmlContent, baseUrl: baseUrl);
   }
 

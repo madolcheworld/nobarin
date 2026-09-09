@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
+import '../models/video_quality.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
 /// Metadata for Twitch streams, VODs, or clips
@@ -28,10 +28,35 @@ class TwitchMedia {
           id == other.id;
 
   @override
-  int get hashCode => Object.hash(type, id);
+  int get hashCode => type.hashCode ^ id.hashCode;
 
   @override
   String toString() => 'TwitchMedia(type: $type, id: $id)';
+}
+
+/// Normalized result of detecting media platform, URLs, and IDs
+class DetectedMedia {
+  final String mediaType; // 'youtube', 'twitch', 'vimeo', 'google_drive', 'dailymotion', 'bstation', 'direct_url'
+  final String mediaUrl;
+  final String? mediaId;
+  final String title;
+  final String? thumbnailUrl;
+
+  const DetectedMedia({
+    required this.mediaType,
+    required this.mediaUrl,
+    this.mediaId,
+    required this.title,
+    this.thumbnailUrl,
+  });
+
+  bool get isYouTube => mediaType == 'youtube';
+  bool get isTwitch => mediaType == 'twitch';
+  bool get isVimeo => mediaType == 'vimeo';
+  bool get isGoogleDrive => mediaType == 'google_drive';
+  bool get isDailymotion => mediaType == 'dailymotion';
+  bool get isBstation => mediaType == 'bstation';
+  bool get isDirectUrl => mediaType == 'direct_url';
 }
 
 class UnifiedPlayerController extends ChangeNotifier {
@@ -46,6 +71,11 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool _isMuted = false;
   bool _isDisposed = false;
   String? _errorMessage;
+
+  // Video Quality Management
+  List<VideoQuality> _availableQualities = [VideoQuality.auto()];
+  VideoQuality? _selectedQuality;
+  String? _detectedYtQuality;
 
   // HTML5 Web Video Player (Web direct URL)
   WebVideoAdapter? _webVideoAdapter;
@@ -95,6 +125,8 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   String get mediaType => _mediaType;
   String get mediaUrl => _mediaUrl;
+  bool get isLoaded => _mediaUrl.isNotEmpty;
+  bool get hasMedia => _mediaUrl.isNotEmpty;
   bool get isPlaying => _isPlaying;
   bool get isFullscreen => _isFullscreen;
   double get position => _position;
@@ -106,6 +138,57 @@ class UnifiedPlayerController extends ChangeNotifier {
   VideoController? get mkVideoController => _mkVideoController;
   YoutubePlayerController? get ytController => _ytController;
   Widget? get webVideoWidget => _webVideoAdapter?.buildVideoWidget();
+
+  List<VideoQuality> get availableQualities =>
+      List.unmodifiable(_availableQualities);
+  VideoQuality? get selectedQuality => _selectedQuality;
+  bool get hasMultipleQualities => _availableQualities.length > 1;
+
+  bool get supportsQualitySelection {
+    return _mediaType == 'direct_url' ||
+        _mediaType == 'youtube' ||
+        _mediaType == 'vimeo' ||
+        _mediaType == 'dailymotion';
+  }
+
+  String get currentQualityLabel {
+    if (_selectedQuality != null && !_selectedQuality!.isAuto) {
+      return _selectedQuality!.shortLabel;
+    }
+    if (_mediaType == 'youtube' && _detectedYtQuality != null) {
+      return 'Auto (${_mapYtQualityLabel(_detectedYtQuality!)})';
+    }
+    if (_mediaType == 'direct_url' && _mkPlayer != null) {
+      try {
+        final currentTrack = _mkPlayer!.state.track.video;
+        if (currentTrack.h != null && currentTrack.h! > 0) {
+          return 'Auto (${currentTrack.h}p)';
+        }
+      } catch (_) {}
+    }
+    return _selectedQuality?.shortLabel ?? 'Auto';
+  }
+
+  static String _mapYtQualityLabel(String qId) {
+    switch (qId) {
+      case 'hd1080':
+        return '1080p';
+      case 'hd720':
+        return '720p';
+      case 'large':
+        return '480p';
+      case 'medium':
+        return '360p';
+      case 'small':
+        return '240p';
+      case 'tiny':
+        return '144p';
+      case 'highres':
+        return '4K';
+      default:
+        return qId;
+    }
+  }
 
   void clearError() {
     _errorMessage = null;
@@ -220,9 +303,88 @@ class UnifiedPlayerController extends ChangeNotifier {
         _isPlaying = false;
         notifyListeners();
       }));
+
+      // Listen to available video tracks for quality selection
+      _subscriptions.add(_mkPlayer!.stream.tracks.listen((tracks) {
+        if (_isDisposed || _mediaType != 'direct_url') return;
+        _updateMediaKitQualities(tracks.video);
+      }));
+
+      // Listen to active video track
+      _subscriptions.add(_mkPlayer!.stream.track.listen((track) {
+        if (_isDisposed || _mediaType != 'direct_url') return;
+        _updateSelectedMediaKitQuality(track.video);
+      }));
     } catch (e) {
       debugPrint('[UnifiedPlayerController] Error init media_kit: $e');
     }
+  }
+
+  void _updateMediaKitQualities(List<VideoTrack> videoTracks) {
+    final List<VideoQuality> list = [VideoQuality.auto()];
+    final Set<String> seen = {'auto'};
+
+    final validTracks = videoTracks
+        .where((t) => t.id != 'no' && t.id != 'auto')
+        .toList();
+
+    validTracks.sort((a, b) {
+      final hA = a.h ?? 0;
+      final hB = b.h ?? 0;
+      if (hA != hB) return hB.compareTo(hA);
+      return (b.bitrate ?? 0).compareTo(a.bitrate ?? 0);
+    });
+
+    for (final track in validTracks) {
+      String label;
+      if (track.h != null && track.h! > 0) {
+        label = '${track.h}p';
+        if (track.fps != null && track.fps! > 30) {
+          label += '${track.fps!.round()}';
+        }
+      } else if (track.title != null && track.title!.isNotEmpty) {
+        label = track.title!;
+      } else {
+        label = 'Track ${track.id}';
+      }
+
+      if (!seen.contains(track.id)) {
+        seen.add(track.id);
+        list.add(
+          VideoQuality(
+            id: track.id,
+            label: label,
+            height: track.h,
+            bitrate: track.bitrate,
+            rawTrack: track,
+          ),
+        );
+      }
+    }
+
+    _availableQualities = list;
+    notifyListeners();
+  }
+
+  void _updateSelectedMediaKitQuality(VideoTrack currentTrack) {
+    if (currentTrack.id == 'auto' || currentTrack.id == 'no') {
+      _selectedQuality = _availableQualities.firstWhere(
+        (q) => q.isAuto,
+        orElse: () => VideoQuality.auto(),
+      );
+    } else {
+      _selectedQuality = _availableQualities.firstWhere(
+        (q) => q.id == currentTrack.id,
+        orElse: () => VideoQuality(
+          id: currentTrack.id,
+          label: currentTrack.h != null ? '${currentTrack.h}p' : currentTrack.id,
+          height: currentTrack.h,
+          bitrate: currentTrack.bitrate,
+          rawTrack: currentTrack,
+        ),
+      );
+    }
+    notifyListeners();
   }
 
   /// Extracts YouTube video ID from URL or raw 11-char ID
@@ -390,6 +552,91 @@ class UnifiedPlayerController extends ChangeNotifier {
     return null;
   }
 
+  /// Centralized detection of platform, ID, title, and thumbnail from any URL or ID
+  static DetectedMedia? detectMediaFromUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    final ytId = extractYouTubeVideoId(trimmed);
+    if (ytId != null) {
+      return DetectedMedia(
+        mediaType: 'youtube',
+        mediaUrl: 'https://www.youtube.com/watch?v=$ytId',
+        mediaId: ytId,
+        title: 'Video YouTube ($ytId)',
+        thumbnailUrl: 'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
+      );
+    }
+
+    final twitch = extractTwitchMedia(trimmed);
+    if (twitch != null) {
+      return DetectedMedia(
+        mediaType: 'twitch',
+        mediaUrl: trimmed.startsWith('http') ? trimmed : 'https://www.twitch.tv/${twitch.id}',
+        mediaId: twitch.id,
+        title: 'Twitch ${twitch.type.toUpperCase()}: ${twitch.id}',
+      );
+    }
+
+    final vimeoId = extractVimeoVideoId(trimmed);
+    if (vimeoId != null) {
+      return DetectedMedia(
+        mediaType: 'vimeo',
+        mediaUrl: 'https://vimeo.com/$vimeoId',
+        mediaId: vimeoId,
+        title: 'Vimeo Video ($vimeoId)',
+        thumbnailUrl: 'https://vumbnail.com/$vimeoId.jpg',
+      );
+    }
+
+    final driveId = extractGoogleDriveFileId(trimmed);
+    if (driveId != null) {
+      return DetectedMedia(
+        mediaType: 'google_drive',
+        mediaUrl: trimmed.startsWith('http') ? trimmed : 'https://drive.google.com/file/d/$driveId/view?usp=sharing',
+        mediaId: driveId,
+        title: 'Google Drive Video ($driveId)',
+        thumbnailUrl: 'https://drive.google.com/thumbnail?id=$driveId&sz=w640',
+      );
+    }
+
+    final dmId = extractDailymotionVideoId(trimmed);
+    if (dmId != null) {
+      return DetectedMedia(
+        mediaType: 'dailymotion',
+        mediaUrl: 'https://www.dailymotion.com/video/$dmId',
+        mediaId: dmId,
+        title: 'Dailymotion Video ($dmId)',
+        thumbnailUrl: 'https://www.dailymotion.com/thumbnail/video/$dmId',
+      );
+    }
+
+    final bstationId = extractBstationVideoId(trimmed);
+    if (bstationId != null) {
+      final bstationUrl = bstationId.startsWith('BV') || bstationId.startsWith('bv')
+          ? 'https://www.bilibili.com/video/$bstationId'
+          : 'https://www.bilibili.tv/id/play/$bstationId';
+      return DetectedMedia(
+        mediaType: 'bstation',
+        mediaUrl: trimmed.startsWith('http') ? trimmed : bstationUrl,
+        mediaId: bstationId,
+        title: 'Bstation Video ($bstationId)',
+      );
+    }
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      final uri = Uri.tryParse(trimmed);
+      final filename = uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'Direct Video';
+      return DetectedMedia(
+        mediaType: 'direct_url',
+        mediaUrl: trimmed,
+        title: filename.isNotEmpty ? filename : 'Direct Video Stream',
+      );
+    }
+
+    return null;
+  }
+
   /// Loads media into player
   Future<void> loadMedia(
     String type,
@@ -444,18 +691,62 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
     }
 
+    if (effectiveType == 'vimeo') {
+      _availableQualities = const [
+        VideoQuality.auto(label: 'Auto (Rekomendasi)'),
+        VideoQuality(id: '1080p', label: '1080p Full HD', height: 1080),
+        VideoQuality(id: '720p', label: '720p HD', height: 720),
+        VideoQuality(id: '540p', label: '540p', height: 540),
+        VideoQuality(id: '360p', label: '360p Hemat Kuota', height: 360),
+        VideoQuality(id: '240p', label: '240p', height: 240),
+      ];
+      _selectedQuality = _availableQualities.first;
+      _isPlaying = autoPlay;
+      notifyListeners();
+      return;
+    }
+
+    if (effectiveType == 'dailymotion') {
+      _availableQualities = const [
+        VideoQuality.auto(label: 'Auto (Rekomendasi)'),
+        VideoQuality(id: '1080', label: '1080p Full HD', height: 1080),
+        VideoQuality(id: '720', label: '720p HD', height: 720),
+        VideoQuality(id: '480', label: '480p SD', height: 480),
+        VideoQuality(id: '380', label: '380p', height: 380),
+        VideoQuality(id: '240', label: '240p Hemat Kuota', height: 240),
+      ];
+      _selectedQuality = _availableQualities.first;
+      _isPlaying = autoPlay;
+      notifyListeners();
+      return;
+    }
+
     if (effectiveType == 'twitch' ||
-        effectiveType == 'vimeo' ||
         effectiveType == 'google_drive' ||
-        effectiveType == 'dailymotion' ||
         effectiveType == 'bstation' ||
         effectiveType == 'bilibili') {
+      _availableQualities = [
+        VideoQuality.auto(label: 'Auto (Kontrol Bawaan Player)'),
+      ];
+      _selectedQuality = _availableQualities.first;
       _isPlaying = autoPlay;
       notifyListeners();
       return;
     }
 
     if (effectiveType == 'youtube') {
+      _availableQualities = const [
+        VideoQuality.auto(label: 'Auto (Rekomendasi)'),
+        VideoQuality(id: 'hd1080', label: '1080p Full HD', height: 1080),
+        VideoQuality(id: 'hd720', label: '720p HD', height: 720),
+        VideoQuality(id: 'large', label: '480p SD', height: 480),
+        VideoQuality(id: 'medium', label: '360p Hemat Kuota', height: 360),
+        VideoQuality(id: 'small', label: '240p', height: 240),
+        VideoQuality(id: 'tiny', label: '144p', height: 144),
+      ];
+      _selectedQuality = _availableQualities.first;
+      _detectedYtQuality = null;
+
       final videoId = extractYouTubeVideoId(url) ?? 'aqz-KE-bpKQ';
 
       // If YouTube controller already exists for this video ID, reuse it
@@ -565,6 +856,13 @@ class UnifiedPlayerController extends ChangeNotifier {
           onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
         }
 
+        if (value.playbackQuality != null && value.playbackQuality!.isNotEmpty) {
+          if (_detectedYtQuality != value.playbackQuality) {
+            _detectedYtQuality = value.playbackQuality;
+            notifyListeners();
+          }
+        }
+
         if (ytState == PlayerState.ended) {
           onPlaybackEnded?.call();
         }
@@ -574,31 +872,18 @@ class UnifiedPlayerController extends ChangeNotifier {
         if (isYtFullscreen != _isFullscreen) {
           _isFullscreen = isYtFullscreen;
           notifyListeners();
-          if (!kIsWeb) {
-            try {
-              if (isYtFullscreen) {
-                SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-                SystemChrome.setPreferredOrientations([
-                  DeviceOrientation.landscapeLeft,
-                  DeviceOrientation.landscapeRight,
-                ]);
-              } else {
-                SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-                SystemChrome.setPreferredOrientations([
-                  DeviceOrientation.portraitUp,
-                  DeviceOrientation.portraitDown,
-                ]);
-                Future.delayed(const Duration(milliseconds: 600), () {
-                  SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-                });
-              }
-            } catch (_) {}
+          if (isYtFullscreen) {
+            FullscreenHelper.enterFullscreen();
+          } else {
+            FullscreenHelper.exitFullscreen();
           }
         }
       }));
     } else {
       // Direct URL
       _ytController?.pauseVideo();
+      _availableQualities = [VideoQuality.auto()];
+      _selectedQuality = _availableQualities.first;
 
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter!.load(
@@ -821,22 +1106,49 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
   }
 
+  /// Sets video playback quality (local client preference).
+  Future<void> setVideoQuality(VideoQuality quality) async {
+    _selectedQuality = quality;
+    notifyListeners();
+
+    try {
+      if (_mediaType == 'direct_url') {
+        if (_mkPlayer != null) {
+          if (quality.isAuto) {
+            await _mkPlayer!.setVideoTrack(VideoTrack.auto());
+          } else if (quality.rawTrack is VideoTrack) {
+            await _mkPlayer!.setVideoTrack(quality.rawTrack as VideoTrack);
+          } else {
+            final track = _mkPlayer!.state.tracks.video.firstWhere(
+              (t) => t.id == quality.id,
+              orElse: () => VideoTrack.auto(),
+            );
+            await _mkPlayer!.setVideoTrack(track);
+          }
+        }
+      } else if (_mediaType == 'youtube') {
+        final qId = quality.isAuto ? 'default' : quality.id;
+        try {
+          await _ytController?.webViewController.runJavaScript(
+            'try { player.setPlaybackQuality("$qId"); } catch(e){}',
+          );
+        } catch (e) {
+          debugPrint('[UnifiedPlayerController] YouTube setQuality error: $e');
+        }
+      } else if (_mediaType == 'vimeo' || _mediaType == 'dailymotion') {
+        onEmbedPlayerCommand?.call('setQuality', quality.id);
+      }
+    } catch (e) {
+      debugPrint('[UnifiedPlayerController] setVideoQuality error: $e');
+    }
+  }
+
   Future<void> enterFullscreen() async {
     if (_isFullscreen) return;
     _isFullscreen = true;
     notifyListeners();
 
-    if (kIsWeb) {
-      FullscreenHelper.enterFullscreen();
-    } else {
-      try {
-        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-      } catch (_) {}
-    }
+    await FullscreenHelper.enterFullscreen();
 
     if (_mediaType == 'youtube' && _ytController != null) {
       if (!_ytController!.value.fullScreenOption.enabled) {
@@ -849,20 +1161,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     _isFullscreen = false;
     notifyListeners();
 
-    if (kIsWeb) {
-      FullscreenHelper.exitFullscreen();
-    } else {
-      try {
-        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-        ]);
-        Future.delayed(const Duration(milliseconds: 600), () {
-          SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-        });
-      } catch (_) {}
-    }
+    await FullscreenHelper.exitFullscreen();
 
     if (_mediaType == 'youtube' && _ytController != null) {
       if (_ytController!.value.fullScreenOption.enabled) {
