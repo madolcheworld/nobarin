@@ -66,6 +66,103 @@ class GoogleDriveVideo implements PlayableMediaItem {
     );
   }
 
+  GoogleDriveVideo copyWith({
+    String? id,
+    String? title,
+    String? ownerName,
+    String? thumbnailUrl,
+    String? duration,
+    String? fileSize,
+    String? category,
+    bool? isPublic,
+  }) {
+    return GoogleDriveVideo(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      ownerName: ownerName ?? this.ownerName,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      duration: duration ?? this.duration,
+      fileSize: fileSize ?? this.fileSize,
+      category: category ?? this.category,
+      isPublic: isPublic ?? this.isPublic,
+    );
+  }
+
+  factory GoogleDriveVideo.fromDriveApiJson(
+    Map<String, dynamic> json, {
+    String owner = 'Google Drive Saya',
+  }) {
+    final fileId = json['id'] as String? ?? '';
+    final fileName = json['name'] as String? ?? 'Video Google Drive';
+
+    // Parse thumbnail link
+    String thumb = json['thumbnailLink'] as String? ?? '';
+    if (thumb.isEmpty && fileId.isNotEmpty) {
+      thumb = 'https://drive.google.com/thumbnail?id=$fileId&sz=w640';
+    }
+
+    // Parse duration from videoMediaMetadata
+    String dur = '';
+    final videoMeta = json['videoMediaMetadata'] as Map<String, dynamic>?;
+    if (videoMeta != null && videoMeta['durationMillis'] != null) {
+      final millis = int.tryParse(videoMeta['durationMillis'].toString()) ?? 0;
+      dur = _formatDuration(millis);
+    }
+
+    // Parse size
+    String formattedSize = '';
+    if (json['size'] != null) {
+      final bytes = int.tryParse(json['size'].toString()) ?? 0;
+      formattedSize = _formatFileSize(bytes);
+    }
+
+    // Check if permission includes 'anyone'
+    bool publicAccess = false;
+    final perms = json['permissions'] as List<dynamic>?;
+    if (perms != null) {
+      publicAccess = perms.any((p) {
+        if (p is Map<String, dynamic>) {
+          return p['type'] == 'anyone';
+        }
+        return false;
+      });
+    }
+
+    return GoogleDriveVideo(
+      id: fileId,
+      title: fileName,
+      ownerName: owner,
+      thumbnailUrl: thumb,
+      duration: dur.isNotEmpty ? dur : 'Drive Video',
+      fileSize: formattedSize.isNotEmpty ? formattedSize : 'Cloud Media',
+      category: 'Drive Saya',
+      isPublic: publicAccess,
+    );
+  }
+
+  static String _formatDuration(int millis) {
+    if (millis <= 0) return '00:00';
+    final duration = Duration(milliseconds: millis);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  static String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    }
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

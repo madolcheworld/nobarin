@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'models/google_drive_video_model.dart';
 
 class GoogleDriveService {
@@ -173,5 +176,225 @@ class GoogleDriveService {
     }).toList();
 
     return results;
+  }
+
+  // ---------------------------------------------------------------------------
+  // User Personal Drive Videos & Permissions APIs
+  // ---------------------------------------------------------------------------
+
+  /// Stateful in-memory mock videos for demo/testing mode
+  static List<GoogleDriveVideo> _mockUserVideos = [
+    const GoogleDriveVideo(
+      id: 'mock_v1_liburan_bali_2026',
+      title: 'Liburan_Keluarga_Bali_2026.mp4',
+      ownerName: 'Saya (Drive Pribadi)',
+      thumbnailUrl:
+          'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=640&q=80',
+      duration: '14:30',
+      fileSize: '420 MB',
+      category: 'Drive Saya',
+      isPublic: false,
+    ),
+    const GoogleDriveVideo(
+      id: 'mock_v2_tugas_akhir_fhd',
+      title: 'Video_Presentasi_Tugas_Akhir.mp4',
+      ownerName: 'Saya (Drive Pribadi)',
+      thumbnailUrl:
+          'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=640&q=80',
+      duration: '22:40',
+      fileSize: '310 MB',
+      category: 'Drive Saya',
+      isPublic: false,
+    ),
+    const GoogleDriveVideo(
+      id: 'mock_v3_cinematic_sunset_4k',
+      title: 'Cinematic_Drone_Sunset_4K.mov',
+      ownerName: 'Saya (Drive Pribadi)',
+      thumbnailUrl:
+          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=640&q=80',
+      duration: '04:55',
+      fileSize: '850 MB',
+      category: 'Drive Saya',
+      isPublic: false,
+    ),
+    const GoogleDriveVideo(
+      id: 'mock_v4_watch_party_shared',
+      title: 'Watch_Party_Highlight_Community.mp4',
+      ownerName: 'Saya (Drive Pribadi)',
+      thumbnailUrl:
+          'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=640&q=80',
+      duration: '08:15',
+      fileSize: '195 MB',
+      category: 'Drive Saya',
+      isPublic: true,
+    ),
+  ];
+
+  /// Reset mock videos to default state (useful for tests)
+  static void resetMockVideos() {
+    _mockUserVideos = [
+      const GoogleDriveVideo(
+        id: 'mock_v1_liburan_bali_2026',
+        title: 'Liburan_Keluarga_Bali_2026.mp4',
+        ownerName: 'Saya (Drive Pribadi)',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=640&q=80',
+        duration: '14:30',
+        fileSize: '420 MB',
+        category: 'Drive Saya',
+        isPublic: false,
+      ),
+      const GoogleDriveVideo(
+        id: 'mock_v2_tugas_akhir_fhd',
+        title: 'Video_Presentasi_Tugas_Akhir.mp4',
+        ownerName: 'Saya (Drive Pribadi)',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=640&q=80',
+        duration: '22:40',
+        fileSize: '310 MB',
+        category: 'Drive Saya',
+        isPublic: false,
+      ),
+      const GoogleDriveVideo(
+        id: 'mock_v3_cinematic_sunset_4k',
+        title: 'Cinematic_Drone_Sunset_4K.mov',
+        ownerName: 'Saya (Drive Pribadi)',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=640&q=80',
+        duration: '04:55',
+        fileSize: '850 MB',
+        category: 'Drive Saya',
+        isPublic: false,
+      ),
+      const GoogleDriveVideo(
+        id: 'mock_v4_watch_party_shared',
+        title: 'Watch_Party_Highlight_Community.mp4',
+        ownerName: 'Saya (Drive Pribadi)',
+        thumbnailUrl:
+            'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=640&q=80',
+        duration: '08:15',
+        fileSize: '195 MB',
+        category: 'Drive Saya',
+        isPublic: true,
+      ),
+    ];
+  }
+
+  /// Fetches videos from user's Google Drive via v3 REST API (or returns mock list if demo/no token)
+  static Future<List<GoogleDriveVideo>> fetchUserVideos({
+    String? accessToken,
+    String? query,
+    http.Client? client,
+    bool isMock = false,
+  }) async {
+    // If running in mock mode or without valid access token, use mock items
+    if (isMock || accessToken == null || accessToken.isEmpty) {
+      if (query == null || query.trim().isEmpty) {
+        return List.unmodifiable(_mockUserVideos);
+      }
+      final clean = query.trim().toLowerCase();
+      return _mockUserVideos
+          .where((v) => v.title.toLowerCase().contains(clean))
+          .toList();
+    }
+
+    // Call live Google Drive v3 REST API
+    final httpClient = client ?? http.Client();
+    try {
+      String searchParam = "mimeType contains 'video/' and trashed = false";
+      if (query != null && query.trim().isNotEmpty) {
+        final escaped = query.trim().replaceAll("'", "\\'");
+        searchParam += " and name contains '$escaped'";
+      }
+
+      final uri = Uri.https('www.googleapis.com', '/drive/v3/files', {
+        'q': searchParam,
+        'fields':
+            'nextPageToken, files(id, name, mimeType, thumbnailLink, size, videoMediaMetadata, permissions, webViewLink)',
+        'pageSize': '50',
+        'orderBy': 'modifiedTime desc',
+      });
+
+      final response = await httpClient.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final fileList = data['files'] as List<dynamic>? ?? [];
+        return fileList
+            .map((item) => GoogleDriveVideo.fromDriveApiJson(
+                item as Map<String, dynamic>))
+            .toList();
+      } else {
+        debugPrint(
+            '[GoogleDriveService] fetchUserVideos status ${response.statusCode}: ${response.body}');
+        // If error (e.g. 401 token expired or 403 quota), fallback gracefully to mock videos
+        return List.unmodifiable(_mockUserVideos);
+      }
+    } catch (e) {
+      debugPrint('[GoogleDriveService] fetchUserVideos error: $e');
+      return List.unmodifiable(_mockUserVideos);
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+  }
+
+  /// Grants "anyone with link can view" permission via Google Drive v3 API
+  /// so that all participants in the Watch Party room can load the video preview.
+  static Future<bool> makeFileAccessibleToRoom(
+    String fileId, {
+    String? accessToken,
+    http.Client? client,
+    bool isMock = false,
+  }) async {
+    // If mock, update in-memory mock item
+    if (isMock || accessToken == null || accessToken.isEmpty) {
+      final index = _mockUserVideos.indexWhere((v) => v.id == fileId);
+      if (index != -1) {
+        _mockUserVideos[index] = _mockUserVideos[index].copyWith(isPublic: true);
+      }
+      return true;
+    }
+
+    final httpClient = client ?? http.Client();
+    try {
+      final uri = Uri.https(
+        'www.googleapis.com',
+        '/drive/v3/files/$fileId/permissions',
+      );
+
+      final response = await httpClient.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'role': 'reader',
+          'type': 'anyone',
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final success = response.statusCode == 200 || response.statusCode == 201;
+      if (!success) {
+        debugPrint(
+            '[GoogleDriveService] makeFileAccessibleToRoom failed: ${response.statusCode} - ${response.body}');
+      }
+      return success;
+    } catch (e) {
+      debugPrint('[GoogleDriveService] makeFileAccessibleToRoom error: $e');
+      return false;
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
   }
 }

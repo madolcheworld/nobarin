@@ -832,7 +832,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    'Pilih film, trailer 4K, demo atau link file Drive',
+                                    'Buka Drive Saya (Login Akun) atau Koleksi Publik',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary,
