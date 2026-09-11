@@ -663,52 +663,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                 )
                               else
                                 const Spacer(),
-                              const SizedBox(width: 4),
-                              // Explicit Exit Room button
-                              if (widget.onExit != null)
-                                Material(
-                                  color: Colors.transparent,
-                                  shape: const CircleBorder(),
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.exit_to_app_rounded,
-                                      color: Colors.white,
-                                      size: 22,
-                                    ),
-                                    tooltip: 'Keluar dari Room',
-                                    onPressed: () {
-                                      if (isFs) {
-                                        widget.player.exitFullscreen();
-                                      }
-                                      widget.onExit?.call();
-                                    },
-                                  ),
-                                ),
-                              // Quality Selector button (fullscreen / top bar)
-                              if (widget.player.isLoaded)
-                                Material(
-                                  color: Colors.transparent,
-                                  shape: const CircleBorder(),
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.tune_rounded,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                    tooltip:
-                                        'Kualitas Video (${widget.player.currentQualityLabel})',
-                                    onPressed: () {
-                                      AppHaptics.selection();
-                                      VideoQualitySheet.show(
-                                        context,
-                                        player: widget.player,
-                                      );
-                                      if (widget.player.isPlaying) {
-                                        _startHideTimerIfNeeded(reset: true);
-                                      }
-                                    },
-                                  ),
-                                ),
                               // Fullscreen toggle button
                               Material(
                                 color: Colors.transparent,
@@ -973,27 +927,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                           ],
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                                if (canControl) ...[
-                                  const SizedBox(width: 2),
-                                  Material(
-                                    color: Colors.transparent,
-                                    shape: const CircleBorder(),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.video_collection_outlined,
-                                        size: 18,
-                                        color: Colors.white,
-                                      ),
-                                      padding: const EdgeInsets.all(4),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 28,
-                                        minHeight: 28,
-                                      ),
-                                      tooltip: 'Pilih / Ganti Video',
-                                      onPressed: widget.onOpenMediaPicker,
                                     ),
                                   ),
                                 ],

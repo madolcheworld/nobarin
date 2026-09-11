@@ -424,29 +424,11 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     var mediaType = _mediaType;
     final mediaUrl = _mediaUrlController.text.trim();
-    if (UnifiedPlayerController.extractYouTubeVideoId(mediaUrl) != null) {
-      mediaType = 'youtube';
-    } else if (UnifiedPlayerController.extractTwitchMedia(mediaUrl) != null) {
-      mediaType = 'twitch';
-    } else if (UnifiedPlayerController.extractVimeoVideoId(mediaUrl) != null) {
-      mediaType = 'vimeo';
-    } else if (UnifiedPlayerController.extractGoogleDriveFileId(mediaUrl) != null) {
-      mediaType = 'google_drive';
-    } else if (UnifiedPlayerController.extractDailymotionVideoId(mediaUrl) != null) {
-      mediaType = 'dailymotion';
-    } else if (UnifiedPlayerController.extractBstationVideoId(mediaUrl) != null) {
-      mediaType = 'bstation';
-    } else if ((mediaType == 'youtube' ||
-            mediaType == 'twitch' ||
-            mediaType == 'vimeo' ||
-            mediaType == 'google_drive' ||
-            mediaType == 'dailymotion' ||
-            mediaType == 'bstation' ||
-            mediaType == 'bilibili') &&
-        (mediaUrl.endsWith('.mp4') ||
-            mediaUrl.endsWith('.m3u8') ||
-            mediaUrl.endsWith('.webm'))) {
-      mediaType = 'direct_url';
+    if (mediaUrl.isNotEmpty) {
+      final detected = UnifiedPlayerController.detectMediaFromUrl(mediaUrl);
+      if (detected != null) {
+        mediaType = detected.mediaType;
+      }
     }
 
     final room = await ref.read(lobbyControllerProvider.notifier).createRoom(

@@ -61,64 +61,50 @@ class VoiceControlBar extends StatelessWidget {
           child: Row(
             children: [
               // Mic Toggle Button
-              InkWell(
-                onTap: () {
-                  AppHaptics.medium();
-                  voiceController.toggleMic();
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isMuted
-                        ? AppColors.surfaceHighlight
-                        : AppColors.accentGreen.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
+              Tooltip(
+                message: isMuted ? 'Nyalakan Mikrofon' : 'Matikan Mikrofon',
+                child: InkWell(
+                  onTap: () {
+                    AppHaptics.medium();
+                    voiceController.toggleMic();
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
                       color: isMuted
-                          ? AppColors.border
-                          : AppColors.accentGreen,
-                      width: 1.5,
-                    ),
-                    boxShadow: !isMuted
-                        ? [
-                            BoxShadow(
-                              color:
-                                  AppColors.accentGreen.withValues(alpha: 0.4),
-                              blurRadius: isSpeaking ? 14 : 8,
-                              spreadRadius: isSpeaking ? 2 : 1,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isMuted
-                            ? Icons.mic_off_rounded
-                            : (isSpeaking
-                                ? Icons.graphic_eq_rounded
-                                : Icons.mic_rounded),
+                          ? AppColors.surfaceHighlight
+                          : AppColors.accentGreen.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(
                         color: isMuted
-                            ? AppColors.textSecondary
+                            ? AppColors.border
                             : AppColors.accentGreen,
-                        size: 16,
+                        width: 1.5,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isMuted ? 'Buka Mic' : 'Mic Nyala',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isMuted
-                              ? AppColors.textSecondary
-                              : AppColors.accentGreen,
-                        ),
-                      ),
-                    ],
+                      boxShadow: !isMuted
+                          ? [
+                              BoxShadow(
+                                color: AppColors.accentGreen
+                                    .withValues(alpha: 0.4),
+                                blurRadius: isSpeaking ? 14 : 8,
+                                spreadRadius: isSpeaking ? 2 : 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Icon(
+                      isMuted
+                          ? Icons.mic_off_rounded
+                          : (isSpeaking
+                              ? Icons.graphic_eq_rounded
+                              : Icons.mic_rounded),
+                      color: isMuted
+                          ? AppColors.textSecondary
+                          : AppColors.accentGreen,
+                      size: 17,
+                    ),
                   ),
                 ),
               ),

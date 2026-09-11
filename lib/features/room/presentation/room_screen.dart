@@ -502,16 +502,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   Future<void> _cleanupAndLeave() async {
     final user = ref.read(authControllerProvider).asData?.value;
-    final isHost = _roomController?.isHost ??
-        (_room?.hostId != null &&
-            _room?.hostId!.isNotEmpty == true &&
-            (_room?.hostId == user?.id ||
-                _room?.hostId == _roomController?.currentUser.id)) ||
-        (user != null &&
-            _room?.hostName != null &&
-            _room?.hostName!.isNotEmpty == true &&
-            _room?.hostName != 'Host' &&
-            _room?.hostName == user.username);
+    final isHost = _roomController?.isHost ?? false;
 
     final otherParticipants = _roomController?.state.participants
             .where((p) =>
@@ -562,16 +553,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     }
 
     final user = ref.read(authControllerProvider).asData?.value;
-    final isHost = _roomController?.isHost ??
-        (_room?.hostId != null &&
-            _room?.hostId!.isNotEmpty == true &&
-            (_room?.hostId == user?.id ||
-                _room?.hostId == _roomController?.currentUser.id)) ||
-        (user != null &&
-            _room?.hostName != null &&
-            _room?.hostName!.isNotEmpty == true &&
-            _room?.hostName != 'Host' &&
-            _room?.hostName == user.username);
+    final isHost = _roomController?.isHost ?? false;
 
     final otherParticipants = _roomController?.state.participants
             .where((p) =>
@@ -889,11 +871,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   _player.exitFullscreen();
                 }
               },
-            ),
-            IconButton(
-              icon: const Icon(Icons.exit_to_app_rounded),
-              tooltip: 'Keluar dari Room',
-              onPressed: _handleExitRoom,
             ),
           ],
         ),

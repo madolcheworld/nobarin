@@ -138,44 +138,7 @@ class RoomControlsBar extends StatelessWidget {
                             _buildScreenShareButton(context, screenShareController!),
                             const SizedBox(width: 4),
                           ],
-                          if (onOpenQueue != null || queueController != null) ...[
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: AppColors.surfaceElevated,
-                                foregroundColor: AppColors.primaryNeon,
-                                side: const BorderSide(color: AppColors.border),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              onPressed: onOpenQueue,
-                              icon: Badge(
-                                isLabelVisible:
-                                    (queueController?.count ?? 0) > 0,
-                                label: Text(
-                                  '${queueController?.count ?? 0}',
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                backgroundColor: AppColors.primaryNeon,
-                                textColor: Colors.black,
-                                child: const Icon(Icons.queue_music_rounded,
-                                    size: 16),
-                              ),
-                              label: Text(
-                                (queueController?.count ?? 0) > 0
-                                    ? 'Antrean (${queueController?.count})'
-                                    : 'Antrean',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
+
                           IconButton(
                             icon: const Icon(Icons.share_rounded, size: 18),
                             tooltip: 'Salin Kode Room',

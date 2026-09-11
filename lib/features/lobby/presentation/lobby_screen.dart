@@ -382,7 +382,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     const Text(
-                                      'Masukkan 6 PIN',
+                                      'Masukkan Kode 6 Digit',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: AppColors.textSecondary,

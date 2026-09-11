@@ -155,7 +155,7 @@ class VideoQualitySheet extends StatelessWidget {
                       final q = qualities[index];
                       final bool isItemActive = isAuto
                           ? q.isAuto
-                          : (selected?.id == q.id);
+                          : (selected.id == q.id);
 
                       return _QualityTile(
                         quality: q,

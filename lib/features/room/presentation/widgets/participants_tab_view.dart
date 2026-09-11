@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../auth/domain/user_profile.dart';
@@ -39,24 +38,6 @@ class ParticipantsTabView extends StatelessWidget {
     this.voiceController,
   });
 
-  void _copyCode(BuildContext context) {
-    AppHaptics.light();
-    Clipboard.setData(ClipboardData(text: roomCode));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded,
-                color: AppColors.accentGreen, size: 18),
-            const SizedBox(width: 8),
-            Text('Kode room "$roomCode" berhasil disalin!'),
-          ],
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUserId = roomController?.currentUser.id;
@@ -92,94 +73,6 @@ class ParticipantsTabView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       children: [
-        // Room Metadata Card
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          roomTitle,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          isHostOnly ? '👑 Mode: Host-Only' : '🤝 Mode: Kolaboratif',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => _copyCode(context),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryNeon.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.primaryNeon.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.copy_rounded,
-                            size: 13,
-                            color: AppColors.primaryNeon,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            roomCode,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryNeon,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
         // Voice VoIP Status Banner if available
         if (voiceController != null)
           ListenableBuilder(

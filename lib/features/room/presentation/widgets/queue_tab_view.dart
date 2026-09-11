@@ -70,63 +70,42 @@ class QueueTabView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           children: [
             // Top Action Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.queue_music_rounded,
-                      size: 16,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Antrean (${items.length})',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                if (canAdd)
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primaryNeon,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      visualDensity: VisualDensity.compact,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () {
-                      AppHaptics.selection();
-                      MediaSourcePicker.show(
-                        context,
-                        syncController: queueController.syncController,
-                        chatController: queueController.chatController,
-                        queueController: queueController,
-                        isAddingToQueueInitial: true,
-                      );
-                    },
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text(
-                      'Tambah Video',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+            if (canAdd) ...[
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryNeon,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
+                  onPressed: () {
+                    AppHaptics.selection();
+                    MediaSourcePicker.show(
+                      context,
+                      syncController: queueController.syncController,
+                      chatController: queueController.chatController,
+                      queueController: queueController,
+                      isAddingToQueueInitial: true,
+                    );
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text(
+                    'Tambah Video',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
 
             // Now Playing Card
             Padding(
