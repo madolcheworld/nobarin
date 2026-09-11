@@ -127,15 +127,14 @@ void main() {
       expect(pickerCalled, isTrue);
     });
 
-    testWidgets('renders Antrean button and triggers onOpenQueue', (tester) async {
+    testWidgets('does NOT render duplicate Antrean button in controls bar',
+        (tester) async {
       final queueController = QueueController(
         roomId: baseRoom.id,
         currentUser: testHost,
         syncController: syncController,
         isHostProvider: () => true,
       );
-
-      bool queueOpened = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -146,9 +145,6 @@ void main() {
               roomController: roomController,
               queueController: queueController,
               onOpenMediaPicker: () {},
-              onOpenQueue: () {
-                queueOpened = true;
-              },
             ),
           ),
         ),
@@ -156,14 +152,72 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Antrean'), findsOneWidget);
-      expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
-
-      await tester.tap(find.text('Antrean'));
-      await tester.pumpAndSettle();
-      expect(queueOpened, isTrue);
+      // Antrean button is omitted from controls bar to avoid duplication with Social Hub tab
+      expect(find.text('Antrean'), findsNothing);
+      expect(find.byIcon(Icons.queue_music_rounded), findsNothing);
 
       queueController.dispose();
     });
+
+    testWidgets('renders Bagikan button and opens share modal with room code',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify Bagikan button exists
+      expect(find.text('Bagikan'), findsOneWidget);
+      expect(find.byIcon(Icons.share_rounded), findsOneWidget);
+
+      // Tap Bagikan button to open modal
+      await tester.tap(find.text('Bagikan'));
+      await tester.pumpAndSettle();
+
+      // Verify share modal contents
+      expect(find.text('Bagikan Room'), findsOneWidget);
+      expect(find.text(baseRoom.code), findsOneWidget);
+      expect(find.text('Salin'), findsOneWidget);
+      expect(find.text('Salin Teks Undangan Lengkap'), findsOneWidget);
+    });
+
+    testWidgets('long pressing Bagikan button copies room code and shows SnackBar',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Long press Bagikan button
+      await tester.longPress(find.text('Bagikan'));
+      await tester.pump();
+
+      // Verify SnackBar appears
+      expect(
+        find.text('Kode room ${baseRoom.code} berhasil disalin!'),
+        findsOneWidget,
+      );
+    });
   });
 }
+

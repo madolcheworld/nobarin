@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
 import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/room/presentation/widgets/participants_header.dart';
 import 'package:watch_party/features/voice/controllers/webrtc_voice_controller.dart';
 import 'package:watch_party/features/voice/presentation/speaking_avatar_indicator.dart';
 import 'package:watch_party/features/voice/presentation/voice_control_bar.dart';
@@ -960,42 +958,6 @@ void main() {
     });
   });
 
-  group('ParticipantsHeader Widget Tests', () {
-    testWidgets('renders mute badge for users in mutedUserIds', (tester) async {
-      final participants = [
-        const UserProfile(
-          id: 'u1',
-          username: 'UserOne',
-          avatarUrl: '🦊',
-        ),
-        const UserProfile(
-          id: 'u2',
-          username: 'UserTwo',
-          avatarUrl: '🐼',
-        ),
-      ];
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ParticipantsHeader(
-              participants: participants,
-              hostId: 'u1',
-              speakingUserIds: const {'u1'},
-              mutedUserIds: const {'u2'},
-            ),
-          ),
-        ),
-      );
-
-      // u1 is speaking -> volume icon
-      expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
-      // u2 is muted -> mic_off icon
-      expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget);
-      // Host crown
-      expect(find.text('👑'), findsOneWidget);
-    });
-  });
 
   group('VoiceControlBar Widget Tests', () {
     late WebRtcVoiceController controller;
@@ -1037,17 +999,17 @@ void main() {
         ),
       );
 
-      // Initially mic is off (Buka Mic)
-      expect(find.text('Buka Mic'), findsOneWidget);
+      // Initially mic is off
+      expect(find.text('Voice Siap'), findsOneWidget);
       expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget);
 
       // Tap mic toggle to turn on
-      await tester.tap(find.text('Buka Mic'));
+      await tester.tap(find.byIcon(Icons.mic_off_rounded));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(controller.isMicMuted, isFalse);
-      expect(find.text('Mic Nyala'), findsOneWidget);
+      expect(find.text('Voice Aktif'), findsOneWidget);
 
       // Tap deafen button
       expect(controller.isDeafened, isFalse);
