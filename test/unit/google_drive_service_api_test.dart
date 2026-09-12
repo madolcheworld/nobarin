@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:watch_party/features/lobby/data/google_drive_service.dart';
-import 'package:watch_party/features/lobby/data/models/google_drive_video_model.dart';
+import 'package:nobarin/features/lobby/data/google_drive_service.dart';
+import 'package:nobarin/features/lobby/data/models/google_drive_video_model.dart';
 
 void main() {
   group('GoogleDriveVideo fromDriveApiJson Tests', () {

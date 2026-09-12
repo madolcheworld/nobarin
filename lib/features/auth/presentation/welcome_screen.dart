@@ -145,7 +145,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                       shaderCallback: (bounds) =>
                           AppColors.primaryGradient.createShader(bounds),
                       child: const Text(
-                        'WatchParty',
+                        'Nobarin',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 38,

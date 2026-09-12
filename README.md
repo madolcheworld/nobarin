@@ -1,6 +1,6 @@
-# watch_party
+# Nobarin
 
-A new Flutter project.
+Aplikasi Watch Party multi-platform (Android, iOS, Web, Desktop) untuk nonton video YouTube dan file streaming bersamaan secara tersinkronisasi (*real-time*), dilengkapi Text Chat dan Voice Chat (VoIP).
 
 ## Getting Started
 

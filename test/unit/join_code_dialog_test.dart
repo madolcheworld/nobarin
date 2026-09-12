@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/lobby_repository.dart';
-import 'package:watch_party/features/lobby/presentation/lobby_controller.dart';
-import 'package:watch_party/features/lobby/presentation/widgets/join_code_dialog.dart';
-import 'package:watch_party/features/room/models/room_model.dart';
+import 'package:nobarin/features/lobby/data/lobby_repository.dart';
+import 'package:nobarin/features/lobby/presentation/lobby_controller.dart';
+import 'package:nobarin/features/lobby/presentation/widgets/join_code_dialog.dart';
+import 'package:nobarin/features/room/models/room_model.dart';
 
 void main() {
   Widget buildTestableDialog({

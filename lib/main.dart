@@ -87,7 +87,7 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: WatchPartyApp(),
+      child: NobarinApp(),
     ),
   );
 }

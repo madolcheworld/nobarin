@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/room/models/video_quality.dart';
+import 'package:nobarin/features/room/models/video_quality.dart';
 
 void main() {
   group('VideoQuality Model & Logic Tests', () {

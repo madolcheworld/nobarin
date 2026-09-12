@@ -160,7 +160,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             ),
             const SizedBox(width: 10),
             const Text(
-              'WatchParty',
+              'Nobarin',
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ],

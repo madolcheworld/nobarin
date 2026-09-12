@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import 'package:watch_party/core/utils/app_haptics.dart';
+import 'package:nobarin/core/utils/app_haptics.dart';
 import '../controllers/webrtc_voice_controller.dart';
 
 class VoiceControlBar extends StatelessWidget {

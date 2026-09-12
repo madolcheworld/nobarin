@@ -100,7 +100,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
         var hasPermissions = await FlutterBackground.hasPermissions;
         if (!hasPermissions) {
           const androidConfig = FlutterBackgroundAndroidConfig(
-            notificationTitle: 'Watch Party - Berbagi Layar',
+            notificationTitle: 'Nobarin - Berbagi Layar',
             notificationText: 'Sedang membagikan layar Anda.',
             notificationImportance: AndroidNotificationImportance.normal,
             notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),

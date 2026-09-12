@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:watch_party/features/lobby/data/google_drive_auth_service.dart';
-import 'package:watch_party/features/lobby/data/models/google_drive_account.dart';
+import 'package:nobarin/features/lobby/data/google_drive_auth_service.dart';
+import 'package:nobarin/features/lobby/data/models/google_drive_account.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

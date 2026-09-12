@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/core/errors/failures.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
-import 'package:watch_party/features/chat/controllers/chat_controller.dart';
-import 'package:watch_party/features/chat/models/chat_message.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/screenshare/controllers/webrtc_screenshare_controller.dart';
-import 'package:watch_party/features/voice/controllers/webrtc_voice_controller.dart';
+import 'package:nobarin/core/errors/failures.dart';
+import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/chat/controllers/chat_controller.dart';
+import 'package:nobarin/features/chat/models/chat_message.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/screenshare/controllers/webrtc_screenshare_controller.dart';
+import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

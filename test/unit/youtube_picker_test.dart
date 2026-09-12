@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/models/youtube_video_model.dart';
-import 'package:watch_party/features/lobby/data/youtube_service.dart';
+import 'package:nobarin/features/lobby/data/models/youtube_video_model.dart';
+import 'package:nobarin/features/lobby/data/youtube_service.dart';
 
 void main() {
   group('YouTubeVideo Model Tests', () {

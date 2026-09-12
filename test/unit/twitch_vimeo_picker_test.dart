@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/models/twitch_stream_model.dart';
-import 'package:watch_party/features/lobby/data/models/vimeo_video_model.dart';
-import 'package:watch_party/features/lobby/data/twitch_service.dart';
-import 'package:watch_party/features/lobby/data/vimeo_service.dart';
+import 'package:nobarin/features/lobby/data/models/twitch_stream_model.dart';
+import 'package:nobarin/features/lobby/data/models/vimeo_video_model.dart';
+import 'package:nobarin/features/lobby/data/twitch_service.dart';
+import 'package:nobarin/features/lobby/data/vimeo_service.dart';
 
 void main() {
   group('TwitchStream Model Tests', () {

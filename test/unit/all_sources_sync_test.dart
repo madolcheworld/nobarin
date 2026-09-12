@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/core/utils/ntp_clock_sync.dart';
-import 'package:watch_party/features/room/controllers/sync_engine.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/room/models/sync_payload.dart';
+import 'package:nobarin/core/utils/ntp_clock_sync.dart';
+import 'package:nobarin/features/room/controllers/sync_engine.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/models/sync_payload.dart';
 
 void main() {
   group('All Media Sources Synchronization Test Suite', () {

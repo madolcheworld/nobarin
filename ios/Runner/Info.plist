@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Watch Party</string>
+	<string>Nobarin</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -67,6 +67,6 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Aplikasi membutuhkan izin mikrofon untuk fitur Voice Chat di Watch Party.</string>
+	<string>Aplikasi membutuhkan izin mikrofon untuk fitur Voice Chat di Nobarin.</string>
 </dict>
 </plist>

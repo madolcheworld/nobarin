@@ -584,7 +584,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       }
     } else {
       title = 'Keluar dari Room?';
-      content = 'Apakah kamu yakin ingin meninggalkan watch party ini?';
+      content = 'Apakah kamu yakin ingin meninggalkan room nobar ini?';
       confirmButtonText = 'Keluar';
     }
 
@@ -628,7 +628,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
     if (_roomController?.isRoomClosed == true && !_roomController!.isHost) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Watch Party')),
+        appBar: AppBar(title: const Text('Nobarin')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -659,7 +659,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
     if (_errorMessage != null || _room == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Watch Party')),
+        appBar: AppBar(title: const Text('Nobarin')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),

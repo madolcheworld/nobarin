@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
-import 'package:watch_party/features/chat/controllers/chat_controller.dart';
-import 'package:watch_party/features/chat/presentation/chat_panel_widget.dart';
+import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/chat/controllers/chat_controller.dart';
+import 'package:nobarin/features/chat/presentation/chat_panel_widget.dart';
 
 void main() {
   group('ChatPanelWidget Tests', () {

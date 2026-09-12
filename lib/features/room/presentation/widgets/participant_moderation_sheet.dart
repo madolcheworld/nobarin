@@ -423,7 +423,7 @@ class ParticipantModerationSheet extends StatelessWidget {
                 ),
               ),
               subtitle: const Text(
-                'Keluarkan peserta dari watch party ini',
+                'Keluarkan peserta dari room nobar ini',
                 style: TextStyle(fontSize: 12, color: AppColors.textMuted),
               ),
               onTap: () async {

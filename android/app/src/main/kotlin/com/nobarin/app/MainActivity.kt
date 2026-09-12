@@ -1,4 +1,4 @@
-package com.watchparty.watch_party
+package com.nobarin.app
 
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
@@ -19,7 +19,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "watch_party/pip"
-    private val ACTION_MEDIA_CONTROL = "com.watchparty.watch_party.MEDIA_CONTROL"
+    private val ACTION_MEDIA_CONTROL = "com.nobarin.app.MEDIA_CONTROL"
     private val EXTRA_CONTROL_TYPE = "control_type"
     private val CONTROL_TYPE_PLAY = 1
     private val CONTROL_TYPE_PAUSE = 2

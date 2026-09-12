@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 // ignore: depend_on_referenced_packages
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 
 class FakeWebViewPlatform extends WebViewPlatform {
   @override

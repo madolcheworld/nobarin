@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/screenshare/controllers/webrtc_screenshare_controller.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/screenshare/controllers/webrtc_screenshare_controller.dart';
 
 // Fake implementations for WebRTC classes
 class FakeVideoTrack implements MediaStreamTrack {

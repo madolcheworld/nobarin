@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:watch_party/app.dart';
+import 'package:nobarin/app.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('WatchPartyApp initial launch renders WelcomeScreen',
+  testWidgets('NobarinApp initial launch renders WelcomeScreen',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
@@ -17,7 +17,7 @@ void main() {
 
     await tester.pumpWidget(
       const ProviderScope(
-        child: WatchPartyApp(),
+        child: NobarinApp(),
       ),
     );
 
@@ -26,7 +26,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     // Verify WelcomeScreen elements
-    expect(find.text('WatchParty'), findsOneWidget);
+    expect(find.text('Nobarin'), findsOneWidget);
     expect(find.text('Pilih Avatar'), findsOneWidget);
     expect(find.text('Nama / Nickname Kamu'), findsOneWidget);
     expect(find.text('Mulai Nonton'), findsOneWidget);
@@ -41,7 +41,7 @@ void main() {
 
     await tester.pumpWidget(
       const ProviderScope(
-        child: WatchPartyApp(),
+        child: NobarinApp(),
       ),
     );
 

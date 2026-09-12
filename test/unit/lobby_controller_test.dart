@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/lobby_repository.dart';
-import 'package:watch_party/features/lobby/presentation/lobby_controller.dart';
+import 'package:nobarin/features/lobby/data/lobby_repository.dart';
+import 'package:nobarin/features/lobby/presentation/lobby_controller.dart';
 
 void main() {
   group('LobbyController Unit Tests', () {

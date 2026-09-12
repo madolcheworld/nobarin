@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/lobby_repository.dart';
-import 'package:watch_party/features/room/models/room_model.dart';
+import 'package:nobarin/features/lobby/data/lobby_repository.dart';
+import 'package:nobarin/features/room/models/room_model.dart';
 
 void main() {
   group('LobbyRepository Tests', () {

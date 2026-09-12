@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:watch_party/core/constants/api_constants.dart';
-import 'package:watch_party/core/network/webrtc_signaling_helper.dart';
+import 'package:nobarin/core/constants/api_constants.dart';
+import 'package:nobarin/core/network/webrtc_signaling_helper.dart';
 
 class TestMediaStreamTrack implements MediaStreamTrack {
   bool isStopped = false;

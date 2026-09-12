@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/constants/api_constants.dart';
 import 'models/google_drive_account.dart';
 
 /// Service managing Google Sign-In and OAuth token for Google Drive integration.
@@ -22,13 +23,45 @@ class GoogleDriveAuthService extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  static GoogleSignIn _createDefaultGoogleSignIn() {
+    String? clientId;
+    if (kIsWeb) {
+      if (ApiConstants.googleWebClientId.isNotEmpty) {
+        clientId = ApiConstants.googleWebClientId;
+      }
+    } else if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      if (ApiConstants.googleIosClientId.isNotEmpty) {
+        clientId = ApiConstants.googleIosClientId;
+      }
+    }
+
+    final serverClientId = ApiConstants.googleWebClientId.isNotEmpty
+        ? ApiConstants.googleWebClientId
+        : null;
+
+    return GoogleSignIn(
+      clientId: clientId,
+      serverClientId: serverClientId,
+      scopes: driveScopes,
+    );
+  }
+
   GoogleDriveAuthService({GoogleSignIn? googleSignIn})
-      : _googleSignIn = googleSignIn ?? GoogleSignIn(scopes: driveScopes);
+      : _googleSignIn = googleSignIn ?? _createDefaultGoogleSignIn();
 
   GoogleDriveAccount? get currentAccount => _currentAccount;
   bool get isSignedIn => _currentAccount != null;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  /// Whether current platform natively supports google_sign_in plugin modal
+  static bool get isPlatformSupported {
+    if (kIsWeb) return true;
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
 
   /// Initializes auth service from local cache and attempts silent sign-in
   Future<void> init({SharedPreferences? prefs}) async {
@@ -42,7 +75,7 @@ class GoogleDriveAuthService extends ChangeNotifier {
       }
 
       // If user was signed in with real Google account, attempt silent refresh
-      if (_currentAccount != null && !_currentAccount!.isMock) {
+      if (_currentAccount != null && !_currentAccount!.isMock && isPlatformSupported) {
         try {
           final account = await _googleSignIn.signInSilently();
           if (account != null) {
@@ -81,6 +114,24 @@ class GoogleDriveAuthService extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
         return mock;
+      }
+
+      if (!isPlatformSupported) {
+        _errorMessage =
+            'Login Google SDK langsung saat ini didukung di Android, iOS, dan Web. '
+            'Di Desktop (Linux/Windows), Anda dapat menggunakan tab "Input Link Drive" untuk memutar link video Google Drive, atau gunakan "Mode Simulasi".';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      if (kIsWeb && ApiConstants.googleWebClientId.isEmpty) {
+        _errorMessage =
+            'GOOGLE_WEB_CLIENT_ID belum diatur untuk Web. '
+            'Tambahkan GOOGLE_WEB_CLIENT_ID di file konfigurasi .env atau gunakan "Mode Simulasi".';
+        _isLoading = false;
+        notifyListeners();
+        return null;
       }
 
       final account = await _googleSignIn.signIn();

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/voice/controllers/webrtc_voice_controller.dart';
-import 'package:watch_party/features/voice/presentation/speaking_avatar_indicator.dart';
-import 'package:watch_party/features/voice/presentation/voice_control_bar.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
+import 'package:nobarin/features/voice/presentation/speaking_avatar_indicator.dart';
+import 'package:nobarin/features/voice/presentation/voice_control_bar.dart';
 
 // Fake implementations for WebRTC classes in unit tests
 class FakeMediaStreamTrack implements MediaStreamTrack {

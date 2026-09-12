@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
-import 'package:watch_party/features/chat/controllers/chat_controller.dart';
+import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/chat/controllers/chat_controller.dart';
 
 void main() {
   group('ChatController Unit Tests', () {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
-import 'package:watch_party/features/room/controllers/sync_controller.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/room/models/room_model.dart';
-import 'package:watch_party/features/room/presentation/widgets/unified_player_view.dart';
+import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/room/controllers/sync_controller.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/models/room_model.dart';
+import 'package:nobarin/features/room/presentation/widgets/unified_player_view.dart';
 
 void main() {
   group('UnifiedPlayerView Widget Tests', () {
@@ -93,16 +93,8 @@ void main() {
       // Top navigation bar elements should be present
       expect(find.text('Awesome Movie Night'), findsOneWidget);
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.exit_to_app_rounded), findsOneWidget);
-
-      // Tap exit button
-      await tester.tap(find.byIcon(Icons.exit_to_app_rounded));
-      await tester.pumpAndSettle();
-
-      expect(exitCalled, isTrue);
 
       // Tap back button
-      exitCalled = false;
       await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
 
@@ -110,7 +102,7 @@ void main() {
     });
 
     testWidgets(
-        'tapping exit button does NOT toggle play/pause and tapping play does NOT trigger onExit',
+        'tapping back/exit button does NOT toggle play/pause and tapping play does NOT trigger onExit',
         (tester) async {
       bool exitCalled = false;
 
@@ -142,8 +134,8 @@ void main() {
       // Ensure initially paused
       expect(playerController.isPlaying, isFalse);
 
-      // Tap exit button: MUST call onExit and must NOT change isPlaying
-      await tester.tap(find.byIcon(Icons.exit_to_app_rounded));
+      // Tap back/exit button: MUST call onExit and must NOT change isPlaying
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
 
       expect(exitCalled, isTrue);

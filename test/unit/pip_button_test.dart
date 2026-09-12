@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/pip/presentation/pip_button.dart';
-import 'package:watch_party/features/pip/services/pip_service.dart';
+import 'package:nobarin/features/pip/presentation/pip_button.dart';
+import 'package:nobarin/features/pip/services/pip_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

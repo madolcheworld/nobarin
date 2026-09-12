@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/auth/domain/user_profile.dart';
-import 'package:watch_party/features/room/controllers/queue_controller.dart';
-import 'package:watch_party/features/room/controllers/sync_controller.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/room/models/queue_item.dart';
-import 'package:watch_party/features/room/models/room_model.dart';
+import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/room/controllers/queue_controller.dart';
+import 'package:nobarin/features/room/controllers/sync_controller.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/models/queue_item.dart';
+import 'package:nobarin/features/room/models/room_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

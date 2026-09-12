@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/core/utils/time_formatter.dart';
+import 'package:nobarin/core/utils/time_formatter.dart';
 
 void main() {
   group('TimeFormatter Tests', () {

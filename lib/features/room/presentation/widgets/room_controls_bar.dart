@@ -66,7 +66,7 @@ class RoomControlsBar extends StatelessWidget {
     AppHaptics.light();
     final currentRoom = roomController.currentRoom;
     final inviteText =
-        'Yuk nonton bareng "${currentRoom.title}" di Watch Party!\nKode Room: ${currentRoom.code}';
+        'Yuk nonton bareng "${currentRoom.title}" di Nobarin!\nKode Room: ${currentRoom.code}';
 
     showModalBottomSheet(
       context: context,

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:watch_party/features/lobby/data/google_drive_service.dart';
-import 'package:watch_party/features/lobby/data/models/google_drive_video_model.dart';
-import 'package:watch_party/features/room/controllers/unified_player_controller.dart';
-import 'package:watch_party/features/room/models/queue_item.dart';
+import 'package:nobarin/features/lobby/data/google_drive_service.dart';
+import 'package:nobarin/features/lobby/data/models/google_drive_video_model.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/models/queue_item.dart';
 
 void main() {
   group('GoogleDriveVideo Model Tests', () {
