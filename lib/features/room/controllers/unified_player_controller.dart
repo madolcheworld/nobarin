@@ -624,6 +624,16 @@ class UnifiedPlayerController extends ChangeNotifier {
       );
     }
 
+    if (trimmed.startsWith('p2p://')) {
+      final uri = Uri.tryParse(trimmed);
+      final title = uri?.queryParameters['title'] ?? 'Video Lokal P2P';
+      return DetectedMedia(
+        mediaType: 'direct_url',
+        mediaUrl: trimmed,
+        title: title,
+      );
+    }
+
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       final uri = Uri.tryParse(trimmed);
       final filename = uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'Direct Video';
@@ -668,9 +678,14 @@ class UnifiedPlayerController extends ChangeNotifier {
     } else if (isBstationUrl) {
       effectiveType = 'bstation';
     } else if (effectiveType == 'direct_url' ||
+        effectiveType == 'local_p2p' ||
+        url.startsWith('p2p://') ||
         url.endsWith('.mp4') ||
         url.endsWith('.m3u8') ||
-        url.endsWith('.webm')) {
+        url.endsWith('.webm') ||
+        url.endsWith('.mkv') ||
+        url.endsWith('.mov') ||
+        url.endsWith('.avi')) {
       effectiveType = 'direct_url';
     }
 
@@ -884,6 +899,12 @@ class UnifiedPlayerController extends ChangeNotifier {
       _ytController?.pauseVideo();
       _availableQualities = [VideoQuality.auto()];
       _selectedQuality = _availableQualities.first;
+
+      if (url.startsWith('p2p://')) {
+        _isPlaying = autoPlay;
+        notifyListeners();
+        return;
+      }
 
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter!.load(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/welcome_screen.dart';
 import '../../features/lobby/presentation/lobby_screen.dart';
+import '../../features/p2p_streaming/models/local_video_file.dart';
 import '../../features/room/models/room_model.dart';
 import '../../features/room/presentation/room_screen.dart';
 
@@ -114,8 +115,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/room/:code',
         builder: (context, state) {
           final code = state.pathParameters['code'] ?? '';
-          final room = state.extra as RoomModel?;
-          return RoomScreen(roomCode: code, initialRoom: room);
+          final extra = state.extra;
+          RoomModel? room;
+          LocalVideoFile? localFile;
+          if (extra is RoomModel) {
+            room = extra;
+          } else if (extra is Map<String, dynamic>) {
+            room = extra['room'] as RoomModel?;
+            localFile = extra['localFile'] as LocalVideoFile?;
+          }
+          return RoomScreen(
+            roomCode: code,
+            initialRoom: room,
+            initialLocalVideoFile: localFile,
+          );
         },
       ),
     ],

@@ -23,6 +23,7 @@ class UnifiedPlayerView extends StatefulWidget {
   final String? title;
   final bool showTopBar;
   final bool isPipMode;
+  final bool isP2pStream;
 
   const UnifiedPlayerView({
     super.key,
@@ -33,6 +34,7 @@ class UnifiedPlayerView extends StatefulWidget {
     this.title,
     this.showTopBar = true,
     this.isPipMode = false,
+    this.isP2pStream = false,
   });
 
   @override
@@ -47,6 +49,62 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   bool _leftDoubleTapActive = false;
   bool _rightDoubleTapActive = false;
   Timer? _doubleTapTimer;
+
+  bool get _isP2pActive =>
+      widget.isP2pStream ||
+      widget.player.mediaUrl.startsWith('p2p://') ||
+      widget.syncController.room.currentMediaUrl?.startsWith('p2p://') == true;
+
+  Widget _buildP2pBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primaryNeon.withValues(alpha: 0.8),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryNeon.withValues(alpha: 0.3),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: AppColors.primaryNeon,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryNeon,
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'P2P Internet Stream',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -658,13 +716,25 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                       ],
                                     ),
                                     maxLines: 1,
-                                    ),
                                   ),
+                                ),
+                              if (_isP2pActive) ...[
+                                const SizedBox(width: 8),
+                                _buildP2pBadge(),
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
+                    ),
+
+                  // Floating P2P badge when top bar is not shown
+                  if (!isFs && !widget.showTopBar && _isP2pActive)
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: _buildP2pBadge(),
+                    ),
 
                   // 4. Bottom Timeline & Controls Bar (positioned strictly at bottom)
                   Positioned(

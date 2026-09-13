@@ -48,6 +48,7 @@ dependencies:
   webview_flutter: ^4.14.1
   webview_flutter_android: ^4.14.1
   google_sign_in: ^6.2.2
+  file_picker: ^12.3.0
 
 dev_dependencies:
   flutter_test:

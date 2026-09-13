@@ -160,6 +160,9 @@ class IceCandidateBuffer {
     _pendingCandidates.putIfAbsent(peerId, () => []).add(candidate);
   }
 
+  /// Alias for [enqueue].
+  void add(String peerId, RTCIceCandidate candidate) => enqueue(peerId, candidate);
+
   /// Flushes all queued candidates for [peerId] into the provided [pc].
   Future<void> flush(
     String peerId,
@@ -178,6 +181,9 @@ class IceCandidateBuffer {
     }
   }
 
+  /// Alias for [flush].
+  Future<void> drain(String peerId, RTCPeerConnection pc) => flush(peerId, pc);
+
   /// Clears candidates for a specific [peerId] or all peers if [peerId] is null.
   void clear([String? peerId]) {
     if (peerId != null) {
@@ -186,4 +192,7 @@ class IceCandidateBuffer {
       _pendingCandidates.clear();
     }
   }
+
+  /// Alias for [clear] clearing all peers.
+  void clearAll() => clear();
 }

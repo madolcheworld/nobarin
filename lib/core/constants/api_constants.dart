@@ -39,7 +39,14 @@ class ApiConstants {
 
   static Map<String, dynamic> get rtcIceConfiguration {
     final List<Map<String, dynamic>> iceServers = [
-      {'urls': webrtcStunServer},
+      {
+        'urls': [
+          webrtcStunServer,
+          'stun:stun1.l.google.com:19302',
+          'stun:stun2.l.google.com:19302',
+          'stun:stun.cloudflare.com:3478',
+        ],
+      },
     ];
     if (webrtcTurnServer.isNotEmpty) {
       final turnConfig = <String, dynamic>{'urls': webrtcTurnServer};

@@ -8,6 +8,7 @@ enum MediaSourceType {
   googleDrive,
   dailymotion,
   bstation,
+  localVideo,
   directUrl,
   disney,
   netflix,
@@ -229,6 +230,20 @@ class MediaSourceDialog extends StatelessWidget {
                 ),
               );
             },
+          ),
+
+          const SizedBox(height: 12),
+
+          _SourceCard(
+            title: 'Video Lokal (P2P Internet)',
+            subtitle: 'Streaming file MP4/MKV langsung dari HP/PC via internet',
+            icon: Icons.wifi_tethering_rounded,
+            iconColor: Colors.white,
+            iconBackground: const Color(0xFF00B4D8),
+            badgeText: 'P2P Internet',
+            badgeColor: const Color(0xFF00B4D8),
+            isAvailable: true,
+            onTap: () => onSourceSelected(MediaSourceType.localVideo),
           ),
 
           const SizedBox(height: 12),

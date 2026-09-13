@@ -18,6 +18,9 @@ import '../../../lobby/presentation/screens/youtube_picker_screen.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
+import '../../../p2p_streaming/controllers/p2p_stream_controller.dart';
+import '../../../p2p_streaming/models/local_video_file.dart';
+import '../../../p2p_streaming/presentation/local_video_picker_sheet.dart';
 
 /// Clean, modern, and user-friendly Media Source Picker.
 /// Can be used as a bottom sheet (recommended) or as a dialog.
@@ -25,6 +28,7 @@ class MediaSourcePicker extends StatefulWidget {
   final SyncController syncController;
   final ChatController? chatController;
   final QueueController? queueController;
+  final P2pStreamController? p2pController;
   final bool isAddingToQueueInitial;
 
   const MediaSourcePicker({
@@ -32,6 +36,7 @@ class MediaSourcePicker extends StatefulWidget {
     required this.syncController,
     this.chatController,
     this.queueController,
+    this.p2pController,
     this.isAddingToQueueInitial = false,
   });
 
@@ -41,6 +46,7 @@ class MediaSourcePicker extends StatefulWidget {
     required SyncController syncController,
     ChatController? chatController,
     QueueController? queueController,
+    P2pStreamController? p2pController,
     bool isAddingToQueueInitial = false,
   }) {
     return showModalBottomSheet<void>(
@@ -51,6 +57,7 @@ class MediaSourcePicker extends StatefulWidget {
         syncController: syncController,
         chatController: chatController,
         queueController: queueController,
+        p2pController: p2pController,
         isAddingToQueueInitial: isAddingToQueueInitial,
       ),
     );
@@ -64,7 +71,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   String? _thumbnailUrl;
-  String _selectedType = 'youtube'; // 'youtube', 'twitch', 'vimeo', 'direct_url'
+  String _selectedType = 'youtube'; // 'youtube', 'twitch', 'vimeo', 'direct_url', 'local_p2p'
+  LocalVideoFile? _selectedLocalFile;
   bool _showPresets = false;
 
   @override
@@ -122,6 +130,22 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
 
+    if (_selectedType == 'local_p2p' && _selectedLocalFile != null) {
+      widget.p2pController?.startHostStreaming(_selectedLocalFile!);
+      final p2pUrl = 'p2p://${_selectedLocalFile!.id}?title=${Uri.encodeComponent(_selectedLocalFile!.name)}';
+      widget.syncController.requestChangeMedia('direct_url', p2pUrl);
+      widget.syncController.player.loadMedia(
+        'direct_url',
+        _selectedLocalFile!.path ?? p2pUrl,
+        autoPlay: true,
+      );
+      widget.chatController?.sendSystemMessage(
+        '${widget.syncController.currentUser.username} memutar video lokal: ${_selectedLocalFile!.name} (P2P Internet)',
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+
     final detected = UnifiedPlayerController.detectMediaFromUrl(url);
     final type = detected?.mediaType ?? _selectedType;
 
@@ -135,6 +159,24 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   void _addToQueue() {
     final url = _urlController.text.trim();
     if (url.isEmpty || widget.queueController == null) return;
+
+    if (_selectedType == 'local_p2p' && _selectedLocalFile != null) {
+      final p2pUrl = 'p2p://${_selectedLocalFile!.id}?title=${Uri.encodeComponent(_selectedLocalFile!.name)}';
+      widget.queueController!.addToQueue(
+        mediaType: 'direct_url',
+        mediaUrl: p2pUrl,
+        title: _selectedLocalFile!.name,
+      );
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${_selectedLocalFile!.name}" ditambahkan ke antrean!'),
+          backgroundColor: AppColors.primaryNeon,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final detected = UnifiedPlayerController.detectMediaFromUrl(url);
     final type = detected?.mediaType ?? _selectedType;
@@ -318,6 +360,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                           label: 'Drive',
                           isSelected: _selectedType == 'google_drive',
                           onTap: () => setState(() => _selectedType = 'google_drive'),
+                        ),
+                        const SizedBox(width: 4),
+                        _PillTabItem(
+                          icon: Icons.wifi_tethering_rounded,
+                          iconColor: const Color(0xFF00B4D8),
+                          label: 'Lokal P2P',
+                          isSelected: _selectedType == 'local_p2p',
+                          onTap: () => setState(() => _selectedType = 'local_p2p'),
                         ),
                         const SizedBox(width: 4),
                         _PillTabItem(
@@ -1189,7 +1239,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                   ),
-                ] else ...[
+                ] else if (_selectedType == 'direct_url') ...[
                   // Direct URL Tab
                   TextField(
                     controller: _urlController,
@@ -1259,6 +1309,122 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                       _FormatBadge(label: 'HLS .m3u8'),
                       SizedBox(width: 4),
                       _FormatBadge(label: 'WEBM'),
+                    ],
+                  ),
+                ] else if (_selectedType == 'local_p2p') ...[
+                  // Local P2P Video Picker Action Card
+                  Material(
+                    color: const Color(0xFF00B4D8).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final file = await LocalVideoPickerSheet.show(
+                          context,
+                          isAddingToQueue: widget.isAddingToQueueInitial,
+                        );
+                        if (file != null && mounted) {
+                          setState(() {
+                            _selectedLocalFile = file;
+                            _urlController.text = file.path ??
+                                'p2p://${file.id}?title=${Uri.encodeComponent(file.name)}';
+                            _titleController.text = file.name;
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00B4D8).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.folder_open_rounded,
+                                color: Color(0xFF00B4D8),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _selectedLocalFile != null
+                                        ? _selectedLocalFile!.name
+                                        : 'Pilih File Video dari HP / PC',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _selectedLocalFile != null
+                                        ? '${_selectedLocalFile!.formattedSize} • Format ${_selectedLocalFile!.extension.toUpperCase()}'
+                                        : 'Streaming via WebRTC Internet langsung tanpa upload',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Optional Title
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Judul Video (Opsional)',
+                      hintText: 'Contoh: Movie Name 1080p',
+                      hintStyle:
+                          TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      prefixIcon: Icon(Icons.title_rounded,
+                          color: AppColors.textSecondary, size: 18),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Row(
+                    children: [
+                      Text(
+                        'Format didukung:',
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.textSecondary),
+                      ),
+                      SizedBox(width: 6),
+                      _FormatBadge(label: 'MP4'),
+                      SizedBox(width: 4),
+                      _FormatBadge(label: 'MKV'),
+                      SizedBox(width: 4),
+                      _FormatBadge(label: 'WEBM'),
+                      SizedBox(width: 4),
+                      _FormatBadge(label: 'MOV'),
                     ],
                   ),
                 ],

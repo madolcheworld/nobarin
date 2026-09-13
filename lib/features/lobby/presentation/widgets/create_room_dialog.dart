@@ -26,6 +26,7 @@ import '../screens/google_drive_picker_screen.dart';
 import '../screens/twitch_picker_screen.dart';
 import '../screens/vimeo_picker_screen.dart';
 import '../screens/youtube_picker_screen.dart';
+import '../../../p2p_streaming/models/local_video_file.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
   final YouTubeVideo? initialYouTubeVideo;
@@ -34,6 +35,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   final GoogleDriveVideo? initialGoogleDriveVideo;
   final DailymotionVideo? initialDailymotionVideo;
   final BstationVideo? initialBstationVideo;
+  final LocalVideoFile? initialLocalVideoFile;
   final String? initialMediaType;
   final String? initialMediaUrl;
   final void Function(PlayableMediaItem item)? onChangeVideo;
@@ -46,6 +48,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
     this.initialGoogleDriveVideo,
     this.initialDailymotionVideo,
     this.initialBstationVideo,
+    this.initialLocalVideoFile,
     this.initialMediaType,
     this.initialMediaUrl,
     this.onChangeVideo,
@@ -60,6 +63,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
     GoogleDriveVideo? initialGoogleDriveVideo,
     DailymotionVideo? initialDailymotionVideo,
     BstationVideo? initialBstationVideo,
+    LocalVideoFile? initialLocalVideoFile,
     String? initialMediaType,
     String? initialMediaUrl,
   }) {
@@ -74,6 +78,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
         initialGoogleDriveVideo: initialGoogleDriveVideo,
         initialDailymotionVideo: initialDailymotionVideo,
         initialBstationVideo: initialBstationVideo,
+        initialLocalVideoFile: initialLocalVideoFile,
         initialMediaType: initialMediaType,
         initialMediaUrl: initialMediaUrl,
       ),
@@ -97,6 +102,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   GoogleDriveVideo? _selectedGoogleDriveVideo;
   DailymotionVideo? _selectedDailymotionVideo;
   BstationVideo? _selectedBstationVideo;
+  LocalVideoFile? _selectedLocalVideoFile;
   String _mediaType = 'direct_url';
   String _controlMode = 'host_only'; // 'host_only' or 'collaborative'
   bool _isPublic = true;
@@ -110,6 +116,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaType = 'youtube';
       _mediaUrlController.text = widget.initialYouTubeVideo!.url;
       _titleController.text = widget.initialYouTubeVideo!.title;
+    } else if (widget.initialLocalVideoFile != null) {
+      _selectedLocalVideoFile = widget.initialLocalVideoFile;
+      _mediaType = 'direct_url';
+      _mediaUrlController.text =
+          'p2p://${widget.initialLocalVideoFile!.id}?title=${Uri.encodeComponent(widget.initialLocalVideoFile!.name)}&path=${Uri.encodeComponent(widget.initialLocalVideoFile!.path ?? '')}';
+      _titleController.text = 'Nobar: ${widget.initialLocalVideoFile!.name}';
     } else if (widget.initialTwitchStream != null) {
       _selectedTwitchStream = widget.initialTwitchStream;
       _mediaType = 'twitch';

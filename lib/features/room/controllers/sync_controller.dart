@@ -140,8 +140,16 @@ class SyncController extends ChangeNotifier {
 
     _isApplyingRemoteSync = true;
     try {
+      final bool isP2pStream = payload.mediaUrl.startsWith('p2p://') ||
+          payload.mediaType == 'local_p2p';
+      final bool isAlreadyPlayingP2p = isP2pStream &&
+          (player.mediaUrl.startsWith('http://127.0.0.1') ||
+              player.mediaUrl.startsWith('http://localhost') ||
+              player.mediaUrl.startsWith('p2p://'));
+
       // 1. Media Type or URL Change
       if (payload.mediaUrl.isNotEmpty &&
+          !isAlreadyPlayingP2p &&
           (payload.mediaUrl != player.mediaUrl ||
               payload.mediaType != player.mediaType)) {
         await player.loadMedia(
@@ -194,7 +202,13 @@ class SyncController extends ChangeNotifier {
     final targetState = state ?? (player.isPlaying ? 'playing' : 'paused');
     final targetPos = position ?? player.position;
     final targetType = mediaType ?? player.mediaType;
-    final targetUrl = mediaUrl ?? player.mediaUrl;
+    final String defaultUrl;
+    if (room.currentMediaUrl?.startsWith('p2p://') == true) {
+      defaultUrl = room.currentMediaUrl!;
+    } else {
+      defaultUrl = player.mediaUrl;
+    }
+    final targetUrl = mediaUrl ?? defaultUrl;
 
     final payload = SyncPayload(
       mediaType: targetType,

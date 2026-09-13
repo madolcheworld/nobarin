@@ -22,6 +22,7 @@ import '../data/models/google_drive_video_model.dart';
 import '../data/models/twitch_stream_model.dart';
 import '../data/models/vimeo_video_model.dart';
 import '../data/models/youtube_video_model.dart';
+import '../../p2p_streaming/presentation/local_video_picker_sheet.dart';
 import '../../room/models/room_model.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -107,6 +108,24 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         context,
         initialBstationVideo: video,
       );
+    } else if (sourceType == MediaSourceType.localVideo) {
+      final file = await LocalVideoPickerSheet.show(context);
+      if (file == null || !mounted) return;
+
+      room = await CreateRoomDialog.show(
+        context,
+        initialLocalVideoFile: file,
+      );
+      if (room != null && mounted) {
+        await context.push(
+          '/room/${room.code}',
+          extra: {'room': room, 'localFile': file},
+        );
+        if (mounted) {
+          ref.read(lobbyControllerProvider.notifier).refreshRooms();
+        }
+        return;
+      }
     } else if (sourceType == MediaSourceType.directUrl) {
       room = await CreateRoomDialog.show(
         context,
