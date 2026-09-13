@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import '../../../core/network/api_cache_manager.dart';
+import '../../../core/network/app_http_client.dart';
 import '../../../core/utils/time_formatter.dart';
 import 'models/vimeo_video_model.dart';
 
@@ -140,11 +141,17 @@ class VimeoService {
   /// Mengambil info detail video via oEmbed API Vimeo
   static Future<VimeoVideo> fetchVideoDetails(String videoId) async {
     final cleanId = extractVideoId(videoId) ?? videoId;
+    final cacheKey = 'vimeo_detail_$cleanId';
+    final cached = ApiCacheManager.instance.get<VimeoVideo>(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+
     try {
       final oembedUrl = Uri.parse(
         'https://vimeo.com/api/oembed.json?url=https://vimeo.com/$cleanId',
       );
-      final res = await http.get(oembedUrl).timeout(const Duration(seconds: 4));
+      final res = await AppHttpClient.get(oembedUrl, timeout: const Duration(seconds: 4));
       if (res.statusCode == 200) {
         final data = json.decode(res.body) as Map<String, dynamic>;
         final title = data['title'] as String?;
@@ -157,7 +164,7 @@ class VimeoService {
           fallback: 'HD',
         );
 
-        return VimeoVideo(
+        final video = VimeoVideo(
           id: cleanId,
           title: title ?? 'Vimeo Video ($cleanId)',
           channelTitle: author ?? 'Vimeo Creator',
@@ -165,6 +172,8 @@ class VimeoService {
           duration: durationStr,
           category: 'Vimeo',
         );
+        ApiCacheManager.instance.set(cacheKey, video, ttl: ApiCacheManager.oEmbedTtl);
+        return video;
       }
     } catch (e) {
       debugPrint('[VimeoService] oEmbed fetch error: $e');
@@ -178,6 +187,12 @@ class VimeoService {
     final clean = query.trim();
     if (clean.isEmpty) {
       return categoryPresets['Staff Picks'] ?? [];
+    }
+
+    final cacheKey = 'vimeo_search_${clean.toLowerCase()}';
+    final cached = ApiCacheManager.instance.get<List<VimeoVideo>>(cacheKey);
+    if (cached != null) {
+      return List<VimeoVideo>.from(cached);
     }
 
     final id = extractVideoId(clean);
@@ -202,6 +217,7 @@ class VimeoService {
       }
     }
 
+    ApiCacheManager.instance.set(cacheKey, results, ttl: ApiCacheManager.searchTtl);
     return results;
   }
 }

@@ -57,12 +57,12 @@ void main() {
       expect(reconstructed.isHostOnly, isTrue);
     });
 
-    test('RoomModel parses host metadata from description when host_name is null', () {
+    test('RoomModel parses host and thumbnail metadata from description when host_name is null', () {
       final json = {
         'id': 'r2',
         'code': 'WP5555',
         'title': 'Metadata Room',
-        'description': '[HOST:name=QueenHost;id=host-queen-99] Nonton seru!',
+        'description': '[HOST:name=QueenHost;id=host-queen-99] [THUMB:https://example.com/thumb.jpg] Nonton seru!',
         'host_id': null,
         'host_name': null,
         'is_public': true,
@@ -71,7 +71,54 @@ void main() {
       final room = RoomModel.fromJson(json);
       expect(room.hostName, 'QueenHost');
       expect(room.hostId, 'host-queen-99');
+      expect(room.thumbnailUrl, 'https://example.com/thumb.jpg');
       expect(room.description, 'Nonton seru!');
+    });
+
+    test('RoomModel.resolveThumbnail correctly extracts thumbnails for various platforms', () {
+      // YouTube
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'),
+        'https://img.youtube.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+      );
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://youtu.be/jfKfPfyJRdk'),
+        'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+      );
+
+      // Vimeo
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://vimeo.com/76979871'),
+        'https://vumbnail.com/76979871.jpg',
+      );
+
+      // Google Drive
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://drive.google.com/file/d/1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8/preview'),
+        'https://drive.google.com/thumbnail?id=1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8&sz=w640',
+      );
+
+      // Dailymotion
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://www.dailymotion.com/video/x7tgad0'),
+        'https://www.dailymotion.com/thumbnail/video/x7tgad0',
+      );
+
+      // Twitch
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://www.twitch.tv/monstercat'),
+        'https://static-cdn.jtvnw.net/previews-ttv/live_user_monstercat-640x360.jpg',
+      );
+
+      // Direct presets
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://vjs.zencdn.net/v/oceans.mp4'),
+        contains('unsplash'),
+      );
+      expect(
+        RoomModel.resolveThumbnail(url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+        'https://peach.blender.org/wp-content/uploads/title_shot.png',
+      );
     });
 
     test('ChatMessage type flags and mapping', () {

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/network/api_cache_manager.dart';
+import '../../../core/network/app_http_client.dart';
 import 'models/google_drive_video_model.dart';
 
 class GoogleDriveService {
@@ -286,6 +288,7 @@ class GoogleDriveService {
     String? query,
     http.Client? client,
     bool isMock = false,
+    bool forceRefresh = false,
   }) async {
     // If running in mock mode or without valid access token, use mock items
     if (isMock || accessToken == null || accessToken.isEmpty) {
@@ -298,12 +301,21 @@ class GoogleDriveService {
           .toList();
     }
 
-    // Call live Google Drive v3 REST API
-    final httpClient = client ?? http.Client();
+    final cleanQuery = query?.trim() ?? '';
+    final cacheKey = 'drive_files_${accessToken.hashCode}_$cleanQuery';
+    if (!forceRefresh) {
+      final cached = ApiCacheManager.instance.get<List<GoogleDriveVideo>>(cacheKey);
+      if (cached != null) {
+        return List<GoogleDriveVideo>.from(cached);
+      }
+    }
+
+    // Call live Google Drive v3 REST API reusing pooled client
+    final httpClient = client ?? AppHttpClient.client;
     try {
       String searchParam = "mimeType contains 'video/' and trashed = false";
-      if (query != null && query.trim().isNotEmpty) {
-        final escaped = query.trim().replaceAll("'", "\\'");
+      if (cleanQuery.isNotEmpty) {
+        final escaped = cleanQuery.replaceAll("'", "\\'");
         searchParam += " and name contains '$escaped'";
       }
 
@@ -326,10 +338,12 @@ class GoogleDriveService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final fileList = data['files'] as List<dynamic>? ?? [];
-        return fileList
+        final videos = fileList
             .map((item) => GoogleDriveVideo.fromDriveApiJson(
                 item as Map<String, dynamic>))
             .toList();
+        ApiCacheManager.instance.set(cacheKey, videos, ttl: ApiCacheManager.driveListTtl);
+        return videos;
       } else {
         debugPrint(
             '[GoogleDriveService] fetchUserVideos status ${response.statusCode}: ${response.body}');
@@ -340,7 +354,7 @@ class GoogleDriveService {
       debugPrint('[GoogleDriveService] fetchUserVideos error: $e');
       return List.unmodifiable(_mockUserVideos);
     } finally {
-      if (client == null) {
+      if (client != null && client != AppHttpClient.client) {
         httpClient.close();
       }
     }
@@ -363,7 +377,7 @@ class GoogleDriveService {
       return true;
     }
 
-    final httpClient = client ?? http.Client();
+    final httpClient = client ?? AppHttpClient.client;
     try {
       final uri = Uri.https(
         'www.googleapis.com',
@@ -386,13 +400,15 @@ class GoogleDriveService {
       if (!success) {
         debugPrint(
             '[GoogleDriveService] makeFileAccessibleToRoom failed: ${response.statusCode} - ${response.body}');
+      } else {
+        ApiCacheManager.instance.invalidatePattern('drive_files_');
       }
       return success;
     } catch (e) {
       debugPrint('[GoogleDriveService] makeFileAccessibleToRoom error: $e');
       return false;
     } finally {
-      if (client == null) {
+      if (client != null && client != AppHttpClient.client) {
         httpClient.close();
       }
     }

@@ -22,7 +22,8 @@ class LobbyRepository {
       isPublic: true,
       controlMode: 'collaborative',
       currentMediaType: 'direct_url',
-      currentMediaUrl: ApiConstants.presetMedia[0]['url'],
+      currentMediaUrl: ApiConstants.presetMedia[1]['url'],
+      thumbnailUrl: 'https://peach.blender.org/wp-content/uploads/title_shot.png',
       currentState: 'playing',
       currentPosition: 12.0,
       livekitRoomName: 'room_WP1001',
@@ -38,7 +39,8 @@ class LobbyRepository {
       isPublic: true,
       controlMode: 'host_only',
       currentMediaType: 'youtube',
-      currentMediaUrl: ApiConstants.presetMedia[3]['url'],
+      currentMediaUrl: ApiConstants.presetMedia[4]['url'],
+      thumbnailUrl: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
       currentState: 'playing',
       currentPosition: 64.0,
       livekitRoomName: 'room_WP2002',
@@ -288,12 +290,48 @@ class LobbyRepository {
               .timeout(const Duration(seconds: 4));
 
           final list = res as List<dynamic>;
+          final idsToDelete = <String>[];
+          final codesToDelete = <String>[];
+
           for (final item in list) {
             final existingId = item['id']?.toString();
             final existingCode = item['code']?.toString();
             if (existingId != null) {
-              await deleteRoom(existingId, code: existingCode);
+              idsToDelete.add(existingId);
+              removeLocalRoom(existingId, code: existingCode);
+            } else if (existingCode != null) {
+              codesToDelete.add(existingCode);
+              removeLocalRoom('', code: existingCode);
             }
+          }
+
+          // Batch cleanup in Supabase instead of sequential N+1 queries
+          if (idsToDelete.isNotEmpty) {
+            try {
+              await supabase!
+                  .from('rooms')
+                  .delete()
+                  .inFilter('id', idsToDelete)
+                  .timeout(const Duration(seconds: 4));
+            } catch (_) {
+              try {
+                await supabase!
+                    .from('rooms')
+                    .update({'is_public': false, 'current_state': 'closed'})
+                    .inFilter('id', idsToDelete)
+                    .timeout(const Duration(seconds: 3));
+              } catch (_) {}
+            }
+          }
+
+          if (codesToDelete.isNotEmpty) {
+            try {
+              await supabase!
+                  .from('rooms')
+                  .delete()
+                  .inFilter('code', codesToDelete)
+                  .timeout(const Duration(seconds: 4));
+            } catch (_) {}
           }
         }
       } catch (e) {
@@ -352,6 +390,7 @@ class LobbyRepository {
     String controlMode = 'host_only',
     String? initialMediaType,
     String? initialMediaUrl,
+    String? initialThumbnailUrl,
   }) async {
     // Proactively cleanup any older rooms by this host before creating a new one
     await cleanupExistingRoomsForHost(hostId: hostId, hostName: hostName);
@@ -359,8 +398,17 @@ class LobbyRepository {
     final String roomId = const Uuid().v4();
     final String livekitRoomName = 'wp_$code';
 
-    // Embed host metadata in description as a resilient fallback
-    final metaHeader = '[HOST:name=$hostName;id=$hostId]';
+    final resolvedThumb = initialThumbnailUrl ??
+        RoomModel.resolveThumbnail(
+          url: initialMediaUrl,
+          type: initialMediaType,
+        );
+
+    // Embed host metadata and thumbnail in description as a resilient fallback
+    final thumbMeta = (resolvedThumb != null && resolvedThumb.isNotEmpty)
+        ? ' [THUMB:$resolvedThumb]'
+        : '';
+    final metaHeader = '[HOST:name=$hostName;id=$hostId]$thumbMeta';
     final dbDescription = (description != null && description.isNotEmpty)
         ? '$metaHeader $description'
         : metaHeader;
@@ -376,6 +424,7 @@ class LobbyRepository {
       controlMode: controlMode,
       currentMediaType: initialMediaType ?? 'direct_url',
       currentMediaUrl: initialMediaUrl ?? ApiConstants.presetMedia[0]['url'],
+      thumbnailUrl: resolvedThumb,
       currentState: 'paused',
       currentPosition: 0.0,
       livekitRoomName: livekitRoomName,
@@ -405,6 +454,8 @@ class LobbyRepository {
         'control_mode': controlMode,
         'current_media_type': newRoom.currentMediaType,
         'current_media_url': newRoom.currentMediaUrl,
+        if (resolvedThumb != null && resolvedThumb.isNotEmpty)
+          'thumbnail_url': resolvedThumb,
         'current_state': 'paused',
         'current_position': 0.0,
         'livekit_room_name': livekitRoomName,
@@ -418,18 +469,21 @@ class LobbyRepository {
         debugPrint('[LobbyRepository] Room successfully created in Supabase with code: $code');
       } catch (e) {
         debugPrint('[LobbyRepository] Supabase createRoom insert failed: $e');
-        // If it failed because host_name column might not exist yet in DB schema, retry without host_name
+        // If it failed because optional columns (thumbnail_url or host_name) might not exist, strip and retry
+        if (roomPayload.containsKey('thumbnail_url')) {
+          roomPayload.remove('thumbnail_url');
+        }
         if (roomPayload.containsKey('host_name')) {
           roomPayload.remove('host_name');
-          try {
-            await supabase!
-                .from('rooms')
-                .insert(roomPayload)
-                .timeout(const Duration(seconds: 5));
-            debugPrint('[LobbyRepository] Room successfully created in Supabase without host_name column, code: $code');
-          } catch (retryColErr) {
-            debugPrint('[LobbyRepository] Supabase retry without host_name failed: $retryColErr');
-          }
+        }
+        try {
+          await supabase!
+              .from('rooms')
+              .insert(roomPayload)
+              .timeout(const Duration(seconds: 5));
+          debugPrint('[LobbyRepository] Room successfully created in Supabase without optional columns, code: $code');
+        } catch (retryColErr) {
+          debugPrint('[LobbyRepository] Supabase retry without optional columns failed: $retryColErr');
         }
 
         // If it still failed and host_id was not null (e.g. FK violation on profiles), retry with host_id: null

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/api_constants.dart';
@@ -35,7 +36,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   final BstationVideo? initialBstationVideo;
   final String? initialMediaType;
   final String? initialMediaUrl;
-  final VoidCallback? onChangeVideo;
+  final void Function(PlayableMediaItem item)? onChangeVideo;
 
   const CreateRoomDialog({
     super.key,
@@ -88,6 +89,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _mediaUrlController = TextEditingController();
+  Timer? _urlDebounceTimer;
 
   YouTubeVideo? _selectedYouTubeVideo;
   TwitchStream? _selectedTwitchStream;
@@ -201,6 +203,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   }
 
   void _onMediaUrlChanged() {
+    _urlDebounceTimer?.cancel();
     final text = _mediaUrlController.text.trim();
     final ytId = UnifiedPlayerController.extractYouTubeVideoId(text);
     final twitchMedia = UnifiedPlayerController.extractTwitchMedia(text);
@@ -221,8 +224,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         });
       }
       if (_selectedYouTubeVideo == null || _selectedYouTubeVideo!.id != ytId) {
-        YouTubeService.fetchVideoDetails(ytId).then((v) {
-          if (mounted) setState(() => _selectedYouTubeVideo = v);
+        _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+          YouTubeService.fetchVideoDetails(ytId).then((v) {
+            if (mounted) setState(() => _selectedYouTubeVideo = v);
+          });
         });
       }
     } else if (twitchMedia != null) {
@@ -259,8 +264,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         });
       }
       if (_selectedVimeoVideo == null || _selectedVimeoVideo!.id != vimeoId) {
-        VimeoService.fetchVideoDetails(vimeoId).then((v) {
-          if (mounted) setState(() => _selectedVimeoVideo = v);
+        _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+          VimeoService.fetchVideoDetails(vimeoId).then((v) {
+            if (mounted) setState(() => _selectedVimeoVideo = v);
+          });
         });
       }
     } else if (driveId != null) {
@@ -308,10 +315,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         if (matched.isNotEmpty) {
           setState(() => _selectedDailymotionVideo = matched.first);
         } else {
-          DailymotionService.fetchVideoDetails(dmId).then((v) {
-            if (mounted && v != null) {
-              setState(() => _selectedDailymotionVideo = v);
-            }
+          _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+            DailymotionService.fetchVideoDetails(dmId).then((v) {
+              if (mounted && v != null) {
+                setState(() => _selectedDailymotionVideo = v);
+              }
+            });
           });
         }
       }
@@ -333,10 +342,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         if (matched.isNotEmpty) {
           setState(() => _selectedBstationVideo = matched.first);
         } else {
-          BstationService.fetchVideoDetails(bsId).then((v) {
-            if (mounted && v != null) {
-              setState(() => _selectedBstationVideo = v);
-            }
+          _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+            BstationService.fetchVideoDetails(bsId).then((v) {
+              if (mounted && v != null) {
+                setState(() => _selectedBstationVideo = v);
+              }
+            });
           });
         }
       }
@@ -358,6 +369,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
   @override
   void dispose() {
+    _urlDebounceTimer?.cancel();
     _mediaUrlController.removeListener(_onMediaUrlChanged);
     _titleController.dispose();
     _descController.dispose();
@@ -424,12 +436,30 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     var mediaType = _mediaType;
     final mediaUrl = _mediaUrlController.text.trim();
+    String? mediaThumbnail;
+
+    if (_selectedYouTubeVideo != null) {
+      mediaThumbnail = _selectedYouTubeVideo!.thumbnailUrl;
+    } else if (_selectedTwitchStream != null) {
+      mediaThumbnail = _selectedTwitchStream!.thumbnailUrl;
+    } else if (_selectedVimeoVideo != null) {
+      mediaThumbnail = _selectedVimeoVideo!.thumbnailUrl;
+    } else if (_selectedGoogleDriveVideo != null) {
+      mediaThumbnail = _selectedGoogleDriveVideo!.thumbnailUrl;
+    } else if (_selectedDailymotionVideo != null) {
+      mediaThumbnail = _selectedDailymotionVideo!.thumbnailUrl;
+    } else if (_selectedBstationVideo != null) {
+      mediaThumbnail = _selectedBstationVideo!.thumbnailUrl;
+    }
+
     if (mediaUrl.isNotEmpty) {
       final detected = UnifiedPlayerController.detectMediaFromUrl(mediaUrl);
       if (detected != null) {
         mediaType = detected.mediaType;
+        mediaThumbnail ??= detected.thumbnailUrl;
       }
     }
+    mediaThumbnail ??= RoomModel.resolveThumbnail(url: mediaUrl, type: mediaType);
 
     final room = await ref.read(lobbyControllerProvider.notifier).createRoom(
           title: _titleController.text.trim(),
@@ -442,6 +472,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           controlMode: _controlMode,
           initialMediaType: mediaType,
           initialMediaUrl: mediaUrl,
+          initialThumbnailUrl: mediaThumbnail,
         );
 
     if (!mounted) return;

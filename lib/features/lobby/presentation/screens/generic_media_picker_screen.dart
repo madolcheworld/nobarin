@@ -56,6 +56,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
   bool _hasMore = true;
   int _currentPage = 1;
   String? _errorMessage;
+  int _searchSequence = 0;
 
   @override
   void initState() {
@@ -88,6 +89,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
   }
 
   void _loadCategory(String category) {
+    _searchSequence++;
     setState(() {
       _selectedCategory = category;
       _isLoading = false;
@@ -113,6 +115,8 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
       return;
     }
 
+    final currentSequence = ++_searchSequence;
+
     setState(() {
       _isLoading = true;
       _isLoadingMore = false;
@@ -123,7 +127,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
 
     try {
       final results = await widget.config.searchFunction(cleanQuery, 1);
-      if (!mounted) return;
+      if (!mounted || currentSequence != _searchSequence) return;
       setState(() {
         _items = results;
         _isLoading = false;
@@ -134,7 +138,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
         }
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || currentSequence != _searchSequence) return;
       setState(() {
         _isLoading = false;
         _errorMessage =
@@ -147,6 +151,8 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
     final cleanQuery = _searchController.text.trim();
     if (cleanQuery.isEmpty) return;
 
+    final currentSequence = _searchSequence;
+
     setState(() {
       _isLoadingMore = true;
     });
@@ -154,7 +160,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
     try {
       final nextPage = _currentPage + 1;
       final results = await widget.config.searchFunction(cleanQuery, nextPage);
-      if (!mounted) return;
+      if (!mounted || currentSequence != _searchSequence) return;
       setState(() {
         _currentPage = nextPage;
         _isLoadingMore = false;
@@ -165,7 +171,7 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
         }
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || currentSequence != _searchSequence) return;
       setState(() {
         _isLoadingMore = false;
         _hasMore = false;

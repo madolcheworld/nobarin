@@ -17,10 +17,12 @@ class AuthRepository {
   Future<UserProfile?> getCachedProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? jsonStr = prefs.getString(_profileKey);
-      if (jsonStr != null) {
-        final Map<String, dynamic> data = jsonDecode(jsonStr);
+      final Object? raw = prefs.get(_profileKey);
+      if (raw is String) {
+        final Map<String, dynamic> data = jsonDecode(raw);
         return UserProfile.fromJson(data);
+      } else if (raw is Map) {
+        return UserProfile.fromJson(Map<String, dynamic>.from(raw));
       }
     } catch (e) {
       debugPrint('[AuthRepository] Error reading cached profile: $e');

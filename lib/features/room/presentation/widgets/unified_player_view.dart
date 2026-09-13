@@ -658,67 +658,13 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                       ],
                                     ),
                                     maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                )
-                              else
-                                const Spacer(),
-                              // Fullscreen toggle button
-                              Material(
-                                color: Colors.transparent,
-                                shape: const CircleBorder(),
-                                child: IconButton(
-                                  icon: Icon(
-                                    (kIsWeb
-                                            ? FullscreenHelper.isFullscreen
-                                            : isFs)
-                                        ? Icons.fullscreen_exit_rounded
-                                        : Icons.fullscreen_rounded,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                  tooltip:
-                                      (kIsWeb
-                                          ? FullscreenHelper.isFullscreen
-                                          : isFs)
-                                      ? 'Keluar Fullscreen'
-                                      : 'Layar Penuh',
-                                  onPressed: () {
-                                    widget.player.toggleFullscreen();
-                                  },
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    )
-                  else
-                    // When top bar is suppressed (screen already has AppBar), provide fullscreen toggle at top-right
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: Material(
-                        color: Colors.transparent,
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          icon: Icon(
-                            (kIsWeb ? FullscreenHelper.isFullscreen : isFs)
-                                ? Icons.fullscreen_exit_rounded
-                                : Icons.fullscreen_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                          tooltip:
-                              (kIsWeb ? FullscreenHelper.isFullscreen : isFs)
-                              ? 'Keluar Fullscreen'
-                              : 'Layar Penuh',
-                          onPressed: () {
-                            widget.player.toggleFullscreen();
-                          },
-                        ),
-                      ),
-                    ),
 
                   // 4. Bottom Timeline & Controls Bar (positioned strictly at bottom)
                   Positioned(
@@ -930,6 +876,39 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ),
                                   ),
                                 ],
+                                // Integrated Fullscreen button
+                                const SizedBox(width: 4),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () {
+                                      AppHaptics.selection();
+                                      widget.player.toggleFullscreen();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.35),
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.25),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        (kIsWeb ? FullscreenHelper.isFullscreen : isFs)
+                                            ? Icons.fullscreen_exit_rounded
+                                            : Icons.fullscreen_rounded,
+                                        size: 15,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
 
@@ -1088,31 +1067,115 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   }
 
   Widget _buildEmptyPlaceholder() {
+    final bool canControl = widget.syncController.canControl;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.movie_creation_outlined,
-            size: 54,
-            color: AppColors.textMuted,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Belum ada media yang dimuat',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primaryNeon.withValues(alpha: 0.12),
+                border: Border.all(
+                  color: AppColors.primaryNeon.withValues(alpha: 0.25),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.movie_creation_outlined,
+                size: 32,
+                color: AppColors.primaryNeon,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: widget.onOpenMediaPicker,
-            icon: const Icon(Icons.add_link_rounded, size: 18),
-            label: const Text('Pilih Video'),
-          ),
-        ],
+            const SizedBox(height: 10),
+            const Text(
+              'Belum ada media yang dimuat',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'Pilih video atau stream untuk mulai nonton bersama',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (canControl)
+              ElevatedButton.icon(
+                onPressed: widget.onOpenMediaPicker,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNeon,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  elevation: 4,
+                  shadowColor: AppColors.primaryNeon.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                icon: const Icon(Icons.video_library_rounded, size: 16),
+                label: const Text(
+                  'Pilih Video',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.accentYellow.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 13,
+                      color: AppColors.accentYellow,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Menunggu Host memilih video...',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.accentYellow,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

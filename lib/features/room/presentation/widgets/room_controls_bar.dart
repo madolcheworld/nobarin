@@ -7,6 +7,7 @@ import '../../controllers/queue_controller.dart';
 import '../../controllers/room_controller.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
+import '../../models/room_model.dart';
 
 class RoomControlsBar extends StatelessWidget {
   final SyncController syncController;
@@ -28,9 +29,9 @@ class RoomControlsBar extends StatelessWidget {
     this.onOpenQueue,
   });
 
-  void _copyRoomCode(BuildContext context) {
+  static void copyRoomCode(BuildContext context, String code) {
     AppHaptics.selection();
-    Clipboard.setData(ClipboardData(text: roomController.currentRoom.code));
+    Clipboard.setData(ClipboardData(text: code));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
@@ -48,7 +49,7 @@ class RoomControlsBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Kode room ${roomController.currentRoom.code} berhasil disalin!',
+              'Kode room $code berhasil disalin!',
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 12,
@@ -62,9 +63,8 @@ class RoomControlsBar extends StatelessWidget {
     );
   }
 
-  void _showShareModal(BuildContext context) {
+  static void showShareModal(BuildContext context, RoomModel currentRoom) {
     AppHaptics.light();
-    final currentRoom = roomController.currentRoom;
     final inviteText =
         'Yuk nonton bareng "${currentRoom.title}" di Nobarin!\nKode Room: ${currentRoom.code}';
 
@@ -148,55 +148,52 @@ class RoomControlsBar extends StatelessWidget {
                   IconButton(
                     icon: const Icon(
                       Icons.close_rounded,
-                      size: 20,
                       color: AppColors.textSecondary,
+                      size: 20,
                     ),
                     onPressed: () => Navigator.of(bottomSheetContext).pop(),
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
-              // Room Code Card
+              // Room Code Card with Copy Action
               Container(
-                width: double.infinity,
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: AppColors.secondaryNeon.withValues(alpha: 0.35),
-                    width: 1.2,
+                    color: AppColors.secondaryNeon.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'KODE ROOM',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.0,
-                              color: AppColors.textSecondary,
-                            ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'KODE ROOM',
+                          style: TextStyle(
+                            fontSize: 10,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            currentRoom.code,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 3.0,
-                              color: AppColors.secondaryNeon,
-                            ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          currentRoom.code,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.secondaryNeon,
+                            letterSpacing: 3,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -209,7 +206,7 @@ class RoomControlsBar extends StatelessWidget {
                         ),
                       ),
                       onPressed: () {
-                        _copyRoomCode(context);
+                        copyRoomCode(context, currentRoom.code);
                         Navigator.of(bottomSheetContext).pop();
                       },
                       icon: const Icon(Icons.copy_rounded, size: 14),
@@ -305,11 +302,10 @@ class RoomControlsBar extends StatelessWidget {
     final isHost = roomController.isHost;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(
-          bottom: BorderSide(color: AppColors.border),
+          bottom: BorderSide(color: AppColors.border, width: 0.8),
         ),
       ),
       child: ListenableBuilder(
@@ -321,173 +317,301 @@ class RoomControlsBar extends StatelessWidget {
         ]),
         builder: (context, _) {
           final bool hasMedia = player.mediaUrl.isNotEmpty;
+          final String mediaType = player.mediaType;
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Left: Change / Select Media button (or Host Only indicator if !canControl)
-                      if (canControl)
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.surfaceElevated,
-                            foregroundColor: AppColors.secondaryNeon,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            visualDensity: VisualDensity.compact,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: const BorderSide(color: AppColors.border),
-                            ),
-                          ),
-                          onPressed: onOpenMediaPicker,
-                          icon: Icon(
-                            hasMedia
-                                ? Icons.video_library_outlined
-                                : Icons.add_link_rounded,
-                            size: 15,
-                          ),
-                          label: Text(
-                            hasMedia ? 'Ganti Video' : 'Pilih Video',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        )
-                      else ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceElevated,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.accentYellow
-                                  .withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.lock_rounded,
-                                size: 14,
-                                color: AppColors.accentYellow,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Mode Host Only',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.accentYellow,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Media Status Badge
+                hasMedia
+                    ? _buildMediaTypeBadge(mediaType)
+                    : _buildReadyStatusBadge(),
+                const SizedBox(width: 6),
 
-                      const SizedBox(width: 8),
+                // 2. Action: Ganti Video (only when media is loaded and canControl)
+                if (hasMedia && canControl) ...[
+                  _buildMediaActionButton(hasMedia),
+                  const SizedBox(width: 6),
+                ],
 
-                      // Controls: Screen Share, Share Room, Settings
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (screenShareController != null) ...[
-                            _buildScreenShareButton(
-                                context, screenShareController!),
-                            const SizedBox(width: 4),
-                          ],
-
-                          // Polished Share Room Button
-                          Tooltip(
-                            message:
-                                'Bagikan Room (${roomController.currentRoom.code})',
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: AppColors.surfaceElevated,
-                                foregroundColor: AppColors.secondaryNeon,
-                                side: const BorderSide(
-                                    color: AppColors.border),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              onPressed: () => _showShareModal(context),
-                              onLongPress: () => _copyRoomCode(context),
-                              icon: const Icon(Icons.share_rounded, size: 15),
-                              label: const Text(
-                                'Bagikan',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // Host Settings: Switch between Host-Only and Collaborative
-                          if (isHost) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceElevated,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              child: PopupMenuButton<String>(
-                                icon: const Icon(
-                                  Icons.settings_outlined,
-                                  size: 16,
-                                  color: AppColors.textSecondary,
-                                ),
-                                padding: const EdgeInsets.all(6),
-                                constraints: const BoxConstraints(
-                                    minWidth: 32, minHeight: 32),
-                                tooltip: 'Pengaturan Kontrol',
-                                color: AppColors.surfaceElevated,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side:
-                                      const BorderSide(color: AppColors.border),
-                                ),
-                                onSelected: (mode) {
-                                  roomController.setControlMode(mode);
-                                },
-                                itemBuilder: (context) => [
-                                  CheckedPopupMenuItem(
-                                    value: 'host_only',
-                                    checked:
-                                        roomController.currentRoom.isHostOnly,
-                                    child: const Text('👑 Host Only'),
-                                  ),
-                                  CheckedPopupMenuItem(
-                                    value: 'collaborative',
-                                    checked: roomController
-                                        .currentRoom.isCollaborative,
-                                    child: const Text('🤝 Kolaboratif'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
+                // Divider
+                Container(
+                  width: 1,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  color: AppColors.borderLight,
                 ),
-              );
-            },
+                const SizedBox(width: 6),
+
+                // 3. Screen share button
+                if (screenShareController != null) ...[
+                  _buildScreenShareButton(context, screenShareController!),
+                  const SizedBox(width: 6),
+                ],
+
+                // 4. Control Mode Pill
+                _buildControlModePill(context, isHost),
+              ],
+            ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildReadyStatusBadge() {
+    return Container(
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.borderLight,
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.accentGreen,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accentGreen.withValues(alpha: 0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 5),
+          const Text(
+            'Panggung Siap',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaTypeBadge(String type) {
+    IconData icon;
+    Color color;
+    String label;
+
+    switch (type.toLowerCase()) {
+      case 'youtube':
+        icon = Icons.smart_display_rounded;
+        color = const Color(0xFFFF0000);
+        label = 'YouTube';
+        break;
+      case 'twitch':
+        icon = Icons.live_tv_rounded;
+        color = const Color(0xFF9146FF);
+        label = 'Twitch';
+        break;
+      case 'vimeo':
+        icon = Icons.video_collection_rounded;
+        color = const Color(0xFF1AB7EA);
+        label = 'Vimeo';
+        break;
+      case 'google_drive':
+        icon = Icons.cloud_outlined;
+        color = const Color(0xFF34A853);
+        label = 'Drive';
+        break;
+      default:
+        icon = Icons.movie_outlined;
+        color = AppColors.secondaryNeon;
+        label = 'Stream';
+    }
+
+    return Container(
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.45),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaActionButton(bool hasMedia) {
+    final label = hasMedia ? 'Ganti' : 'Pilih Video';
+    final icon = hasMedia ? Icons.swap_horiz_rounded : Icons.add_link_rounded;
+    final color = hasMedia ? AppColors.secondaryNeon : AppColors.primaryNeon;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          AppHaptics.light();
+          onOpenMediaPicker();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: color.withValues(alpha: 0.45),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControlModePill(BuildContext context, bool isHost) {
+    final isHostOnly = roomController.currentRoom.isHostOnly;
+
+    if (!isHost) {
+      return Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isHostOnly
+                ? AppColors.accentYellow.withValues(alpha: 0.4)
+                : AppColors.secondaryNeon.withValues(alpha: 0.4),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isHostOnly ? Icons.lock_rounded : Icons.group_rounded,
+              size: 12,
+              color:
+                  isHostOnly ? AppColors.accentYellow : AppColors.secondaryNeon,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              isHostOnly ? 'Host Only' : 'Kolaboratif',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: isHostOnly
+                    ? AppColors.accentYellow
+                    : AppColors.secondaryNeon,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Ubah Mode Kontrol',
+      color: AppColors.surfaceElevated,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      onSelected: (mode) {
+        AppHaptics.selection();
+        roomController.setControlMode(mode);
+      },
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: 'host_only',
+          checked: isHostOnly,
+          child: const Text('👑 Host Only (Hanya host yang kontrol)'),
+        ),
+        CheckedPopupMenuItem(
+          value: 'collaborative',
+          checked: !isHostOnly,
+          child: const Text('🤝 Kolaboratif (Semua peserta kontrol)'),
+        ),
+      ],
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isHostOnly
+                ? AppColors.accentYellow.withValues(alpha: 0.45)
+                : AppColors.secondaryNeon.withValues(alpha: 0.45),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isHostOnly ? '👑 Host Only' : '🤝 Kolaboratif',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: isHostOnly
+                    ? AppColors.accentYellow
+                    : AppColors.secondaryNeon,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 15,
+              color:
+                  isHostOnly ? AppColors.accentYellow : AppColors.secondaryNeon,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -497,151 +621,206 @@ class RoomControlsBar extends StatelessWidget {
     WebRtcScreenShareController controller,
   ) {
     if (controller.isSharing) {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.accentRed,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          visualDensity: VisualDensity.compact,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            AppHaptics.medium();
+            controller.stopScreenShare();
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              color: AppColors.accentRed.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.accentRed.withValues(alpha: 0.6),
+                width: 0.8,
+              ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.stop_screen_share_rounded,
+                    size: 14, color: AppColors.accentRed),
+                SizedBox(width: 4),
+                Text(
+                  'Hentikan Layar',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.accentRed,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        onPressed: () {
-          AppHaptics.medium();
-          controller.stopScreenShare();
-        },
-        icon: const Icon(Icons.stop_screen_share_rounded, size: 15),
-        label: const Text(
-          'Hentikan Layar',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
       );
     }
 
     if (controller.isScreenSharingActive) {
-      return OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: AppColors.surfaceElevated,
-          foregroundColor: AppColors.secondaryNeon,
-          side: const BorderSide(color: AppColors.secondaryNeon),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          visualDensity: VisualDensity.compact,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        onPressed: () {
-          AppHaptics.selection();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: AppColors.surfaceElevated,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: AppColors.secondaryNeon),
-              ),
-              content: Row(
-                children: [
-                  const Icon(Icons.personal_video_rounded,
-                      color: AppColors.secondaryNeon, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${controller.sharerName ?? "Peserta"} sedang berbagi layar.',
-                      style: const TextStyle(
-                          color: AppColors.textPrimary, fontSize: 12),
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            AppHaptics.selection();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.surfaceElevated,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: AppColors.secondaryNeon),
+                ),
+                content: Row(
+                  children: [
+                    const Icon(Icons.personal_video_rounded,
+                        color: AppColors.secondaryNeon, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${controller.sharerName ?? "Peserta"} sedang berbagi layar.',
+                        style: const TextStyle(
+                            color: AppColors.textPrimary, fontSize: 12),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                duration: const Duration(seconds: 2),
               ),
-              duration: const Duration(seconds: 2),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.secondaryNeon.withValues(alpha: 0.5),
+                width: 0.8,
+              ),
             ),
-          );
-        },
-        icon: const Icon(Icons.personal_video_rounded, size: 15),
-        label: Text(
-          'Layar: ${controller.sharerName ?? "Aktif"}',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.personal_video_rounded,
+                    size: 14, color: AppColors.secondaryNeon),
+                const SizedBox(width: 4),
+                Text(
+                  'Layar: ${controller.sharerName ?? "Aktif"}',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.secondaryNeon,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
 
     final bool canShare = controller.canShareScreen;
 
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        backgroundColor: AppColors.surfaceElevated,
-        foregroundColor:
-            canShare ? AppColors.textSecondary : AppColors.textMuted,
-        side: const BorderSide(color: AppColors.border),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      onPressed: canShare
-          ? () async {
-              AppHaptics.medium();
-              final success = await controller.startScreenShare();
-              if (!success && context.mounted) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canShare
+            ? () async {
+                AppHaptics.medium();
+                final success = await controller.startScreenShare();
+                if (!success && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: AppColors.surfaceElevated,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: AppColors.accentRed),
+                      ),
+                      content: Text(
+                        controller.errorMessage ??
+                            'Tidak dapat memulai berbagi layar.',
+                        style: const TextStyle(
+                            color: AppColors.accentRed, fontSize: 12),
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              }
+            : () {
+                AppHaptics.selection();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     behavior: SnackBarBehavior.floating,
                     backgroundColor: AppColors.surfaceElevated,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppColors.accentRed),
+                      side: const BorderSide(color: AppColors.accentYellow),
                     ),
-                    content: Text(
-                      controller.errorMessage ??
-                          'Tidak dapat memulai berbagi layar.',
-                      style: const TextStyle(
-                          color: AppColors.accentRed, fontSize: 12),
+                    content: const Row(
+                      children: [
+                        Icon(Icons.lock_rounded,
+                            color: AppColors.accentYellow, size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Hanya Host yang dapat membagikan layar pada mode Host Only.',
+                            style: TextStyle(
+                                color: AppColors.textPrimary, fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
                     duration: const Duration(seconds: 2),
                   ),
                 );
-              }
-            }
-          : () {
-              AppHaptics.selection();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: AppColors.surfaceElevated,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: AppColors.accentYellow),
-                  ),
-                  content: const Row(
-                    children: [
-                      Icon(Icons.lock_rounded,
-                          color: AppColors.accentYellow, size: 16),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Hanya Host yang dapat membagikan layar pada mode Host Only.',
-                          style: TextStyle(
-                              color: AppColors.textPrimary, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                  duration: const Duration(seconds: 2),
+              },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: canShare
+                  ? AppColors.border
+                  : AppColors.border.withValues(alpha: 0.5),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                canShare
+                    ? Icons.screen_share_rounded
+                    : Icons.lock_outline_rounded,
+                size: 14,
+                color: canShare ? AppColors.textSecondary : AppColors.textMuted,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Bagi Layar',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      canShare ? AppColors.textSecondary : AppColors.textMuted,
                 ),
-              );
-            },
-      icon: Icon(
-        canShare ? Icons.screen_share_rounded : Icons.lock_outline_rounded,
-        size: 15,
-      ),
-      label: const Text(
-        'Bagi Layar',
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
-

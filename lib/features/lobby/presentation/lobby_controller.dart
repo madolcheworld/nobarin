@@ -150,6 +150,7 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
     String controlMode = 'host_only',
     String? initialMediaType,
     String? initialMediaUrl,
+    String? initialThumbnailUrl,
   }) async {
     try {
       final room = await _repository.createRoom(
@@ -161,6 +162,7 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
         controlMode: controlMode,
         initialMediaType: initialMediaType,
         initialMediaUrl: initialMediaUrl,
+        initialThumbnailUrl: initialThumbnailUrl,
       );
       await refreshRooms();
       return room;

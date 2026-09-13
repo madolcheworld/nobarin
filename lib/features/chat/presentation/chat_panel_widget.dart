@@ -5,6 +5,7 @@ import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/time_formatter.dart';
 import '../controllers/chat_controller.dart';
 import '../models/chat_message.dart';
+import 'widgets/emoji_picker_sheet.dart';
 
 class ChatPanelWidget extends StatefulWidget {
   final ChatController chatController;
@@ -94,6 +95,168 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
     _scrollToBottom();
   }
 
+  void _openEmojiPickerForFloating() {
+    EmojiPickerSheet.show(
+      context,
+      title: 'Kirim Reaksi Nobar',
+      onSelectEmoji: (emoji) {
+        widget.chatController.sendReaction(emoji);
+        _scrollToBottom();
+      },
+      onSelectCallout: (callout) {
+        widget.chatController.sendMessage(callout);
+        _scrollToBottom();
+      },
+    );
+  }
+
+  void _openEmojiPickerForInput() {
+    EmojiPickerSheet.show(
+      context,
+      title: 'Sisipkan Emoticon',
+      onSelectEmoji: (emoji) {
+        _insertEmojiAtCursor(emoji);
+      },
+      onSelectCallout: (callout) {
+        _inputController.text = callout;
+        _inputController.selection =
+            TextSelection.collapsed(offset: callout.length);
+      },
+    );
+  }
+
+  void _insertEmojiAtCursor(String emoji) {
+    final text = _inputController.text;
+    final selection = _inputController.selection;
+    if (selection.start < 0 || selection.end < 0) {
+      _inputController.text = '$text$emoji';
+      _inputController.selection =
+          TextSelection.collapsed(offset: _inputController.text.length);
+    } else {
+      final newText = text.replaceRange(selection.start, selection.end, emoji);
+      _inputController.text = newText;
+      _inputController.selection =
+          TextSelection.collapsed(offset: selection.start + emoji.length);
+    }
+  }
+
+  void _showMessageReactionBar(ChatMessage msg) {
+    if (msg.isSystem || msg.isReaction) return;
+    AppHaptics.medium();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textMuted.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Reaksi untuk ${msg.username}: "${msg.content.length > 25 ? '${msg.content.substring(0, 25)}...' : msg.content}"',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 14),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ...['❤️', '👍', '😂', '🔥', '😮', '😢', '👏', '🎉']
+                        .map((emoji) {
+                      final hasReacted = msg.hasUserReacted(
+                        emoji,
+                        widget.chatController.currentUser.id,
+                      );
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: InkWell(
+                          onTap: () {
+                            AppHaptics.selection();
+                            Navigator.of(ctx).pop();
+                            widget.chatController
+                                .toggleMessageReaction(msg.id, emoji);
+                          },
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: hasReacted
+                                  ? AppColors.primaryNeon.withValues(alpha: 0.25)
+                                  : Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child:
+                                Text(emoji, style: const TextStyle(fontSize: 26)),
+                          ),
+                        ),
+                      );
+                    }),
+                    // More icon
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          EmojiPickerSheet.show(
+                            context,
+                            title: 'Pilih Reaksi Pesan',
+                            onSelectEmoji: (emoji) {
+                              widget.chatController
+                                  .toggleMessageReaction(msg.id, emoji);
+                            },
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.add_rounded,
+                            size: 22,
+                            color: AppColors.secondaryNeon,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -152,36 +315,64 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
               if (widget.showReactions)
                 Container(
                   height: 42,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: const BoxDecoration(
                     color: AppColors.surfaceElevated,
                     border: Border(
                       top: BorderSide(color: AppColors.border, width: 0.8),
                     ),
                   ),
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: ApiConstants.quickReactions.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 4),
-                    itemBuilder: (context, index) {
-                      final emoji = ApiConstants.quickReactions[index];
-                      return InkWell(
-                        onTap: () {
-                          AppHaptics.selection();
-                          widget.chatController.sendReaction(emoji);
-                          _scrollToBottom();
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          child: Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 18),
-                          ),
+                  child: Row(
+                    children: [
+                      // Full Picker Button
+                      IconButton(
+                        icon: const Icon(
+                          Icons.add_reaction_outlined,
+                          size: 18,
+                          color: AppColors.secondaryNeon,
                         ),
-                      );
-                    },
+                        tooltip: 'Koleksi Emoticon & Callouts',
+                        onPressed: _openEmojiPickerForFloating,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                      Container(
+                        height: 18,
+                        width: 1,
+                        color: AppColors.borderLight,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                      Expanded(
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: ApiConstants.quickReactions.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 4),
+                          itemBuilder: (context, index) {
+                            final emoji = ApiConstants.quickReactions[index];
+                            return InkWell(
+                              onTap: () {
+                                AppHaptics.selection();
+                                widget.chatController.sendReaction(emoji);
+                                _scrollToBottom();
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                child: Text(
+                                  emoji,
+                                  style: const TextStyle(fontSize: 18),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -199,6 +390,18 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                 ),
                 child: Row(
                   children: [
+                    // Emoji Picker for text input
+                    IconButton(
+                      icon: const Icon(
+                        Icons.mood_rounded,
+                        size: 22,
+                        color: AppColors.textMuted,
+                      ),
+                      tooltip: 'Sisipkan Emoticon',
+                      onPressed: _openEmojiPickerForInput,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const SizedBox(width: 4),
                     Expanded(
                       child: TextField(
                         controller: _inputController,
@@ -275,6 +478,11 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
     final isCoHost = widget.coHostUserIds.contains(msg.userId) ||
         widget.coHostUserIds.contains(msg.username);
 
+    final trimmedContent = msg.content.trim();
+    final isSingleEmoji = msg.isReaction ||
+        (trimmedContent.characters.length == 1 &&
+            !RegExp(r'[a-zA-Z0-9\s]').hasMatch(trimmedContent));
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -319,68 +527,124 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                       ],
                     ),
                   ),
-                Container(
-                  padding: msg.isReaction
-                      ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
-                      : const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: msg.isReaction
-                        ? Colors.transparent
-                        : (isMe
-                            ? (msg.status == MessageStatus.failed
-                                ? AppColors.accentRed.withValues(alpha: 0.2)
-                                : null)
-                            : AppColors.surfaceElevated),
-                    gradient: (!msg.isReaction &&
-                            isMe &&
-                            msg.status != MessageStatus.failed)
-                        ? const LinearGradient(
-                            colors: [
-                              Color(0xFF6366F1), // Indigo
-                              Color(0xFF00E5FF), // Cyan neon
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMe ? 16 : 3),
-                      bottomRight: Radius.circular(isMe ? 3 : 16),
-                    ),
-                    border: msg.isReaction
-                        ? null
-                        : Border.all(
-                            color: isMe
-                                ? (msg.status == MessageStatus.failed
-                                    ? AppColors.accentRed
-                                    : AppColors.borderLight)
-                                : AppColors.borderLight,
-                            width: 1,
-                          ),
-                    boxShadow: (!msg.isReaction &&
-                            isMe &&
-                            msg.status != MessageStatus.failed)
-                        ? [
-                            BoxShadow(
-                              color: AppColors.primaryNeon.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                GestureDetector(
+                  onLongPress: () => _showMessageReactionBar(msg),
+                  child: Container(
+                    padding: isSingleEmoji
+                        ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
+                        : const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 9.5),
+                    decoration: BoxDecoration(
+                      color: isSingleEmoji
+                          ? Colors.transparent
+                          : (isMe
+                              ? (msg.status == MessageStatus.failed
+                                  ? AppColors.accentRed.withValues(alpha: 0.2)
+                                  : const Color(0xFF2B1F45))
+                              : AppColors.surfaceElevated),
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(16),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: Radius.circular(isMe ? 16 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 16),
+                      ),
+                      border: isSingleEmoji
+                          ? null
+                          : Border.all(
+                              color: isMe
+                                  ? (msg.status == MessageStatus.failed
+                                      ? AppColors.accentRed
+                                      : AppColors.primaryNeon.withValues(alpha: 0.55))
+                                  : AppColors.border,
+                              width: 1,
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    msg.content,
-                    style: TextStyle(
-                      fontSize: msg.isReaction ? 28 : 13,
-                      color: Colors.white,
-                      fontWeight: isMe ? FontWeight.w500 : FontWeight.normal,
+                      boxShadow: (!isSingleEmoji &&
+                              msg.status != MessageStatus.failed)
+                          ? [
+                              BoxShadow(
+                                color: isMe
+                                    ? AppColors.primaryNeon.withValues(alpha: 0.12)
+                                    : Colors.black.withValues(alpha: 0.15),
+                                blurRadius: isMe ? 6 : 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      msg.content,
+                      style: TextStyle(
+                        fontSize: isSingleEmoji ? 30 : 13.5,
+                        color: Colors.white,
+                        fontWeight: isMe ? FontWeight.w500 : FontWeight.w400,
+                        height: isSingleEmoji ? 1.2 : 1.35,
+                      ),
                     ),
                   ),
                 ),
+                // Message Reaction Pills
+                if (msg.hasReactions)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: isMe ? WrapAlignment.end : WrapAlignment.start,
+                      children: msg.reactions.entries.map((entry) {
+                        final emoji = entry.key;
+                        final count = entry.value.length;
+                        if (count == 0) return const SizedBox.shrink();
+                        final hasReacted =
+                            entry.value.contains(widget.chatController.currentUser.id);
+
+                        return Material(
+                          color: hasReacted
+                              ? AppColors.primaryNeon.withValues(alpha: 0.25)
+                              : AppColors.surfaceElevated,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            onTap: () {
+                              AppHaptics.selection();
+                              widget.chatController
+                                  .toggleMessageReaction(msg.id, emoji);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: hasReacted
+                                      ? AppColors.primaryNeon
+                                      : AppColors.borderLight,
+                                  width: hasReacted ? 1.2 : 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(emoji,
+                                      style: const TextStyle(fontSize: 12)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '$count',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: hasReacted
+                                          ? AppColors.primaryNeon
+                                          : Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 Padding(
                   padding:
                       const EdgeInsets.only(top: 2, left: 4, right: 4),

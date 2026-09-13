@@ -642,7 +642,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             (context, index) {
                               final room = displayedRooms[index];
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.only(bottom: 16),
                                 child: RoomCard(
                                   room: room,
                                   onTap: () async {
@@ -663,9 +663,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         gridDelegate:
                             SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                          childAspectRatio: 1.8,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: 1.10,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import '../../../core/network/api_cache_manager.dart';
+import '../../../core/network/app_http_client.dart';
 import 'models/youtube_video_model.dart';
 
 class YouTubeService {
@@ -238,6 +239,12 @@ class YouTubeService {
       return [info];
     }
 
+    final cacheKey = 'yt_search_${cleanQuery.toLowerCase()}_p$page';
+    final cached = ApiCacheManager.instance.get<List<YouTubeVideo>>(cacheKey);
+    if (cached != null) {
+      return List<YouTubeVideo>.from(cached);
+    }
+
     final effectiveQuery = _getQueryForPage(cleanQuery, page);
 
     // Lakukan pencarian live
@@ -246,18 +253,20 @@ class YouTubeService {
         final url = Uri.parse(
           'https://www.youtube.com/results?search_query=${Uri.encodeComponent(effectiveQuery)}',
         );
-        final response = await http.get(
+        final response = await AppHttpClient.get(
           url,
           headers: {
             'User-Agent':
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
           },
-        ).timeout(const Duration(seconds: 6));
+          timeout: const Duration(seconds: 6),
+        );
 
         if (response.statusCode == 200) {
           final results = _parseYouTubeSearchHtml(response.body);
           if (results.isNotEmpty) {
+            ApiCacheManager.instance.set(cacheKey, results, ttl: ApiCacheManager.searchTtl);
             return results;
           }
         }
@@ -275,10 +284,15 @@ class YouTubeService {
     }).toList();
 
     if (matched.isNotEmpty) {
+      ApiCacheManager.instance.set(cacheKey, matched, ttl: ApiCacheManager.searchTtl);
       return matched;
     }
 
-    return page == 1 ? (categoryPresets['Trending'] ?? []) : [];
+    final fallback = page == 1 ? (categoryPresets['Trending'] ?? []) : <YouTubeVideo>[];
+    if (fallback.isNotEmpty) {
+      ApiCacheManager.instance.set(cacheKey, fallback, ttl: ApiCacheManager.searchTtl);
+    }
+    return fallback;
   }
 
   /// Mem-parsing konten HTML YouTube Search untuk mengekstrak videoRenderer
@@ -345,23 +359,31 @@ class YouTubeService {
   /// Mengambil informasi video detail (termasuk judul asli via oEmbed bila tersedia)
   static Future<YouTubeVideo> fetchVideoDetails(String videoId) async {
     final cleanId = extractVideoId(videoId) ?? videoId;
+    final cacheKey = 'yt_detail_$cleanId';
+    final cached = ApiCacheManager.instance.get<YouTubeVideo>(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+
     try {
       final oembedUrl = Uri.parse(
         'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=$cleanId&format=json',
       );
-      final res = await http.get(oembedUrl).timeout(const Duration(seconds: 4));
+      final res = await AppHttpClient.get(oembedUrl, timeout: const Duration(seconds: 4));
       if (res.statusCode == 200) {
         final data = json.decode(res.body) as Map<String, dynamic>;
         final title = data['title'] as String?;
         final author = data['author_name'] as String?;
         final thumb = data['thumbnail_url'] as String?;
-        return YouTubeVideo(
+        final video = YouTubeVideo(
           id: cleanId,
           title: title ?? 'Video YouTube ($cleanId)',
           channelTitle: author ?? 'YouTube',
           thumbnailUrl: thumb ?? 'https://img.youtube.com/vi/$cleanId/hqdefault.jpg',
           duration: '',
         );
+        ApiCacheManager.instance.set(cacheKey, video, ttl: ApiCacheManager.oEmbedTtl);
+        return video;
       }
     } catch (_) {}
 

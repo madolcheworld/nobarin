@@ -13,6 +13,7 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
+import '../../chat/presentation/widgets/fullscreen_reaction_bar.dart';
 import '../../lobby/presentation/lobby_controller.dart';
 import '../../pip/presentation/pip_button.dart';
 import '../../pip/services/pip_service.dart';
@@ -417,8 +418,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   @override
   void dispose() {
-    _player.exitFullscreen();
     _player.removeListener(_onPlayerStateChanged);
+    _player.exitFullscreen();
     _roomController?.removeListener(_onControllerUpdated);
     _voiceController?.removeListener(_onControllerUpdated);
     _queueController?.removeListener(_onControllerUpdated);
@@ -541,9 +542,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       }
     }
 
-    // Disconnect voice & screen share
+    // Disconnect voice & screen share (controller is disposed in dispose())
     _voiceController?.disconnect();
-    _screenShareController?.dispose();
+    _screenShareController?.stopScreenShare();
   }
 
   Future<bool> _onWillPop() async {
@@ -789,12 +790,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 title: currentRoom.title,
                 showTopBar: true,
               ),
-              if (_chatController != null)
+              if (_chatController != null) ...[
                 Positioned.fill(
                   child: FloatingReactionOverlay(
                     chatController: _chatController!,
                   ),
                 ),
+                FullscreenReactionBar(
+                  chatController: _chatController!,
+                ),
+              ],
             ],
           ),
         ),
@@ -831,88 +836,53 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              Row(
-                children: [
-                  InkWell(
-                    onTap: () {
-                      AppHaptics.selection();
-                      Clipboard.setData(ClipboardData(text: currentRoom.code));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: AppColors.surfaceElevated,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: const BorderSide(
-                                color: AppColors.secondaryNeon),
-                          ),
-                          content: Row(
-                            children: [
-                              const Icon(
-                                Icons.check_circle_rounded,
-                                color: AppColors.secondaryNeon,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Kode room ${currentRoom.code} berhasil disalin!',
-                                style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          duration: const Duration(seconds: 2),
+              const SizedBox(height: 2),
+              InkWell(
+                onTap: () =>
+                    RoomControlsBar.copyRoomCode(context, currentRoom.code),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryNeon.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        currentRoom.code,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryNeon,
+                          letterSpacing: 0.8,
                         ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            currentRoom.code,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryNeon,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          const Icon(
-                            Icons.copy_rounded,
-                            size: 10,
-                            color: AppColors.primaryNeon,
-                          ),
-                        ],
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.copy_rounded,
+                        size: 11,
+                        color: AppColors.primaryNeon,
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    currentRoom.isHostOnly
-                        ? '👑 Host Only'
-                        : '🤝 Collaborative',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.share_rounded, size: 20),
+              tooltip: 'Bagikan Room',
+              onPressed: () =>
+                  RoomControlsBar.showShareModal(context, currentRoom),
+            ),
             PipButton(
               onBeforeEnter: () {
                 if (_player.isFullscreen) {
@@ -957,8 +927,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                                   showTopBar: false,
                                 ),
                               if (_chatController != null)
-                                FloatingReactionOverlay(
-                                  chatController: _chatController!,
+                                Positioned.fill(
+                                  child: FloatingReactionOverlay(
+                                    chatController: _chatController!,
+                                  ),
                                 ),
                             ],
                           ),
@@ -1003,11 +975,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             }
 
             // Mobile Portrait Layout: Top video, Middle controls, Bottom Unified Social Hub
-            return Column(
+            return Stack(
               children: [
-                // Top Video or Screen Share with Floating Reactions
-                Stack(
+                Column(
                   children: [
+                    // Top Video or Screen Share
                     if (_screenShareController?.isScreenSharingActive == true)
                       ScreenShareView(
                         key: _screenShareKey,
@@ -1026,40 +998,40 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         title: currentRoom.title,
                         showTopBar: false,
                       ),
-                    if (_chatController != null)
-                      Positioned.fill(
-                        child: FloatingReactionOverlay(
-                          chatController: _chatController!,
-                        ),
+
+                    // Controls Bar
+                    RoomControlsBar(
+                      syncController: _syncController!,
+                      player: _player,
+                      roomController: _roomController!,
+                      queueController: _queueController,
+                      screenShareController: _screenShareController,
+                      onOpenMediaPicker: _openMediaPicker,
+                      onOpenQueue: _openQueueSheet,
+                    ),
+
+                    // Unified Social Hub (fills rest of screen)
+                    Expanded(
+                      child: _buildSocialHub(
+                        currentRoom: currentRoom,
+                        participants: participants,
+                        speakingIds: speakingIds,
+                        mutedIds: mutedIds,
+                      ),
+                    ),
+
+                    // Bottom VoIP Voice Control Bar (hidden while soft keyboard is active)
+                    if (_voiceController != null && !isKeyboardOpen)
+                      VoiceControlBar(
+                        voiceController: _voiceController!,
                       ),
                   ],
                 ),
-
-                // Controls Bar
-                RoomControlsBar(
-                  syncController: _syncController!,
-                  player: _player,
-                  roomController: _roomController!,
-                  queueController: _queueController,
-                  screenShareController: _screenShareController,
-                  onOpenMediaPicker: _openMediaPicker,
-                  onOpenQueue: _openQueueSheet,
-                ),
-
-                // Unified Social Hub (fills rest of screen)
-                Expanded(
-                  child: _buildSocialHub(
-                    currentRoom: currentRoom,
-                    participants: participants,
-                    speakingIds: speakingIds,
-                    mutedIds: mutedIds,
-                  ),
-                ),
-
-                // Bottom VoIP Voice Control Bar (hidden while soft keyboard is active)
-                if (_voiceController != null && !isKeyboardOpen)
-                  VoiceControlBar(
-                    voiceController: _voiceController!,
+                if (_chatController != null)
+                  Positioned.fill(
+                    child: FloatingReactionOverlay(
+                      chatController: _chatController!,
+                    ),
                   ),
               ],
             );
@@ -1083,12 +1055,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       children: [
         // Sleek Cyberpunk TabBar
         Container(
-          height: 40,
+          height: 44,
           decoration: const BoxDecoration(
             color: AppColors.surfaceElevated,
             border: Border(
-              top: BorderSide(color: AppColors.borderLight, width: 0.8),
-              bottom: BorderSide(color: AppColors.borderLight, width: 0.8),
+              bottom: BorderSide(color: AppColors.border, width: 0.8),
             ),
           ),
           child: TabBar(

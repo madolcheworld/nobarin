@@ -444,94 +444,97 @@ class _QueueItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderLight),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canManage)
-              const Padding(
-                padding: EdgeInsets.only(right: 6),
-                child: Icon(
-                  Icons.drag_indicator_rounded,
-                  size: 18,
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canManage)
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Icon(
+                    Icons.drag_indicator_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceHighlight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          title: Text(
+            item.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          subtitle: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: sourceColor.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  item.mediaType.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: sourceColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'oleh ${item.addedByUserName}',
+                style: const TextStyle(
+                  fontSize: 10,
                   color: AppColors.textMuted,
                 ),
               ),
-            Container(
-              width: 24,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceHighlight,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        title: Text(
-          item.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            ],
           ),
-        ),
-        subtitle: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: sourceColor.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text(
-                item.mediaType.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: sourceColor,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canManage && onPlayNow != null)
+                IconButton(
+                  icon: const Icon(Icons.play_arrow_rounded,
+                      color: AppColors.primaryNeon, size: 22),
+                  tooltip: 'Putar Sekarang',
+                  onPressed: onPlayNow,
                 ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'oleh ${item.addedByUserName}',
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canManage && onPlayNow != null)
-              IconButton(
-                icon: const Icon(Icons.play_arrow_rounded,
-                    color: AppColors.primaryNeon, size: 22),
-                tooltip: 'Putar Sekarang',
-                onPressed: onPlayNow,
-              ),
-            if (canManage && onRemove != null)
-              IconButton(
-                icon: const Icon(Icons.close_rounded,
-                    color: AppColors.textMuted, size: 18),
-                tooltip: 'Hapus dari Antrean',
-                onPressed: onRemove,
-              ),
-          ],
+              if (canManage && onRemove != null)
+                IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      color: AppColors.textMuted, size: 18),
+                  tooltip: 'Hapus dari Antrean',
+                  onPressed: onRemove,
+                ),
+            ],
+          ),
         ),
       ),
     );

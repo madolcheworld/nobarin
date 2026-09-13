@@ -213,7 +213,9 @@ class ParticipantsTabView extends StatelessWidget {
                     : AppColors.borderLight,
               ),
             ),
-            child: ListTile(
+            child: Material(
+              color: Colors.transparent,
+              child: ListTile(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               leading: SpeakingAvatarIndicator(
@@ -383,6 +385,7 @@ class ParticipantsTabView extends StatelessWidget {
                       );
                     }
                   : null,
+              ),
             ),
           );
         }),

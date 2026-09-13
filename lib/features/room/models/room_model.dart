@@ -13,6 +13,7 @@ class RoomModel {
   final double currentPosition;
   final String livekitRoomName;
   final int participantCount;
+  final String? thumbnailUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -31,6 +32,7 @@ class RoomModel {
     this.currentPosition = 0.0,
     required this.livekitRoomName,
     this.participantCount = 1,
+    this.thumbnailUrl,
     this.createdAt,
     this.updatedAt,
   });
@@ -39,11 +41,89 @@ class RoomModel {
   bool get isCollaborative => controlMode == 'collaborative';
   bool get isPlaying => currentState == 'playing';
 
+  /// Automatically resolves or extracts a thumbnail URL from video URL and media type
+  static String? resolveThumbnail({String? url, String? type}) {
+    if (url == null || url.trim().isEmpty) return null;
+    final trimmed = url.trim();
+
+    // 1. YouTube
+    final ytMatch = RegExp(
+      r'(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+?&v=|live\/))([a-zA-Z0-9_-]{11})',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (ytMatch != null) {
+      final ytId = ytMatch.group(1);
+      return 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
+    }
+
+    // 2. Vimeo
+    final vimeoMatch = RegExp(
+      r'vimeo\.com\/(?:video\/)?([0-9]+)',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (vimeoMatch != null) {
+      final vimeoId = vimeoMatch.group(1);
+      return 'https://vumbnail.com/$vimeoId.jpg';
+    }
+
+    // 3. Google Drive
+    final driveMatch = RegExp(
+      r'(?:drive\.google\.com\/(?:file\/d\/|open\?id=)|[\?&]id=)([a-zA-Z0-9_-]+)',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (driveMatch != null) {
+      final driveId = driveMatch.group(1);
+      return 'https://drive.google.com/thumbnail?id=$driveId&sz=w640';
+    }
+
+    // 4. Dailymotion
+    final dmMatch = RegExp(
+      r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (dmMatch != null) {
+      final dmId = dmMatch.group(1);
+      return 'https://www.dailymotion.com/thumbnail/video/$dmId';
+    }
+
+    // 5. Twitch
+    final twitchMatch = RegExp(
+      r'twitch\.tv\/([a-zA-Z0-9_]+)',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (twitchMatch != null) {
+      final channel = twitchMatch.group(1);
+      if (channel != null && channel.isNotEmpty && channel != 'directory') {
+        return 'https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel.toLowerCase()}-640x360.jpg';
+      }
+    }
+
+    // 6. Direct preset media fallbacks
+    if (trimmed.contains('oceans.mp4')) {
+      return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=640&q=80';
+    }
+    if (trimmed.contains('x36xhzz') || trimmed.contains('bunny')) {
+      return 'https://peach.blender.org/wp-content/uploads/title_shot.png';
+    }
+    if (trimmed.contains('sintel')) {
+      return 'https://durian.blender.org/wp-content/uploads/2010/05/sintel_poster_small.jpg';
+    }
+
+    // If the URL itself is an image format
+    final lower = trimmed.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
   factory RoomModel.fromJson(Map<String, dynamic> json) {
     final rawDesc = json['description'] as String?;
     String? cleanDesc = rawDesc;
     String? metaHostName;
     String? metaHostId;
+    String? metaThumb;
 
     if (rawDesc != null) {
       final metaMatch = RegExp(r'\[HOST:(?:name=([^;\]]+))?(?:;id=([^\]]+))?\]').firstMatch(rawDesc);
@@ -51,15 +131,23 @@ class RoomModel {
         metaHostName = metaMatch.group(1);
         metaHostId = metaMatch.group(2);
         cleanDesc = rawDesc.replaceAll(RegExp(r'\[HOST:[^\]]+\]\s*'), '').trim();
-        if (cleanDesc.isEmpty) cleanDesc = null;
       } else {
         final simpleMatch = RegExp(r'\[HOST:(.+?)\]').firstMatch(rawDesc);
         if (simpleMatch != null) {
           metaHostName = simpleMatch.group(1);
           cleanDesc = rawDesc.replaceAll(RegExp(r'\[HOST:.+?\]\s*'), '').trim();
-          if (cleanDesc.isEmpty) cleanDesc = null;
         }
       }
+
+      if (cleanDesc != null) {
+        final thumbMatch = RegExp(r'\[THUMB:(.+?)\]').firstMatch(cleanDesc);
+        if (thumbMatch != null) {
+          metaThumb = thumbMatch.group(1)?.trim();
+          cleanDesc = cleanDesc.replaceAll(RegExp(r'\[THUMB:.+?\]\s*'), '').trim();
+        }
+      }
+
+      if (cleanDesc != null && cleanDesc.isEmpty) cleanDesc = null;
     }
 
     String? resolvedHostName = json['host_name'] as String?;
@@ -75,6 +163,11 @@ class RoomModel {
     resolvedHostName ??= metaHostName;
 
     final resolvedHostId = (json['host_id'] as String?) ?? metaHostId;
+    final mediaUrl = json['current_media_url'] as String?;
+    final mediaType = json['current_media_type'] as String?;
+    final resolvedThumb = (json['thumbnail_url'] as String?) ??
+        metaThumb ??
+        resolveThumbnail(url: mediaUrl, type: mediaType);
 
     return RoomModel(
       id: json['id']?.toString() ?? '',
@@ -87,13 +180,14 @@ class RoomModel {
           : 'Host',
       isPublic: json['is_public'] as bool? ?? true,
       controlMode: json['control_mode'] as String? ?? 'host_only',
-      currentMediaType: json['current_media_type'] as String?,
-      currentMediaUrl: json['current_media_url'] as String?,
+      currentMediaType: mediaType,
+      currentMediaUrl: mediaUrl,
       currentState: json['current_state'] as String? ?? 'paused',
       currentPosition: (json['current_position'] as num?)?.toDouble() ?? 0.0,
       livekitRoomName:
           json['livekit_room_name'] as String? ?? 'room_${json['code']}',
       participantCount: (json['participant_count'] as num?)?.toInt() ?? 1,
+      thumbnailUrl: resolvedThumb,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -118,6 +212,7 @@ class RoomModel {
       'current_state': currentState,
       'current_position': currentPosition,
       'livekit_room_name': livekitRoomName,
+      if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     };
@@ -138,6 +233,7 @@ class RoomModel {
     double? currentPosition,
     String? livekitRoomName,
     int? participantCount,
+    String? thumbnailUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -156,6 +252,7 @@ class RoomModel {
       currentPosition: currentPosition ?? this.currentPosition,
       livekitRoomName: livekitRoomName ?? this.livekitRoomName,
       participantCount: participantCount ?? this.participantCount,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

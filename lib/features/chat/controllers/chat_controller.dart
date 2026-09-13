@@ -9,11 +9,15 @@ class FloatingReaction {
   final String id;
   final String emoji;
   final double startX; // Normalized 0.0 to 1.0
+  final int comboCount;
+  final String? senderName;
 
   FloatingReaction({
     required this.id,
     required this.emoji,
     required this.startX,
+    this.comboCount = 1,
+    this.senderName,
   });
 }
 
@@ -44,6 +48,10 @@ class ChatController extends ChangeNotifier {
   final Map<String, Timer> _typingTimers = {};
   Timer? _localTypingDebounceTimer;
   bool _isLocalTyping = false;
+
+  String? _lastReactionEmoji;
+  DateTime? _lastReactionTime;
+  int _localReactionCombo = 1;
 
   List<String> get typingUsernames => _typingUsers.values.toList();
   bool get hasTypingUsers => _typingUsers.isNotEmpty;
@@ -95,13 +103,61 @@ class ChatController extends ChangeNotifier {
                   DateTime.now().difference(m.createdAt).inSeconds.abs() < 6)) {
             return;
           }
+
+          if (message.isReaction) {
+            final combo = (payload['combo'] as num?)?.toInt() ?? 1;
+            final rawEmoji = (payload['raw_emoji'] as String?) ??
+                message.content.split(' ').first;
+            _triggerFloatingReaction(
+              rawEmoji,
+              comboCount: combo,
+              senderName: message.username,
+            );
+
+            // Aggregate consecutive reactions from the same user within 5 seconds
+            if (_messages.isNotEmpty) {
+              final lastMsg = _messages.last;
+              if (lastMsg.isReaction &&
+                  lastMsg.userId == message.userId &&
+                  lastMsg.content.startsWith(rawEmoji) &&
+                  message.createdAt.difference(lastMsg.createdAt).inSeconds.abs() < 5) {
+                _messages[_messages.length - 1] = lastMsg.copyWith(
+                  content: message.content,
+                  createdAt: message.createdAt,
+                );
+                notifyListeners();
+                return;
+              }
+            }
+          }
+
           _messages.add(message);
           _pruneOldMessages();
           notifyListeners();
+        },
+      );
 
-          if (message.isReaction) {
-            _triggerFloatingReaction(message.content);
+      _chatChannel!.onBroadcast(
+        event: 'MESSAGE_REACTION',
+        callback: (payload) {
+          if (_isDisposed) return;
+          final msgId = payload['message_id'] as String?;
+          if (msgId == null) return;
+          final index = _messages.indexWhere((m) => m.id == msgId);
+          if (index == -1) return;
+          final reactionsRaw = payload['reactions'];
+          final Map<String, List<String>> updatedReactions = {};
+          if (reactionsRaw is Map) {
+            reactionsRaw.forEach((k, v) {
+              if (v is List) {
+                updatedReactions[k.toString()] =
+                    v.map((e) => e.toString()).toList();
+              }
+            });
           }
+          _messages[index] =
+              _messages[index].copyWith(reactions: updatedReactions);
+          notifyListeners();
         },
       );
 
@@ -161,11 +217,17 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  void _triggerFloatingReaction(String emoji) {
+  void _triggerFloatingReaction(
+    String emoji, {
+    int comboCount = 1,
+    String? senderName,
+  }) {
     final reaction = FloatingReaction(
       id: const Uuid().v4(),
       emoji: emoji,
-      startX: 0.2 + (DateTime.now().millisecond % 60) / 100.0,
+      startX: 0.15 + (DateTime.now().millisecond % 70) / 100.0,
+      comboCount: comboCount,
+      senderName: senderName,
     );
     _reactionsStreamController.add(reaction);
   }
@@ -335,9 +397,43 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Sends an emoji reaction burst
+  /// Sends an emoji reaction burst with combo tracking and chat aggregation
   Future<void> sendReaction(String emoji) async {
-    _triggerFloatingReaction(emoji);
+    final now = DateTime.now();
+    if (_lastReactionEmoji == emoji &&
+        _lastReactionTime != null &&
+        now.difference(_lastReactionTime!).inMilliseconds < 1400) {
+      _localReactionCombo++;
+    } else {
+      _localReactionCombo = 1;
+    }
+    _lastReactionEmoji = emoji;
+    _lastReactionTime = now;
+
+    final combo = _localReactionCombo;
+    _triggerFloatingReaction(
+      emoji,
+      comboCount: combo,
+      senderName: currentUser.username,
+    );
+
+    // Check if we can aggregate into previous message in chat log
+    if (_messages.isNotEmpty) {
+      final lastMsg = _messages.last;
+      if (lastMsg.isReaction &&
+          lastMsg.userId == currentUser.id &&
+          lastMsg.content.startsWith(emoji) &&
+          now.difference(lastMsg.createdAt).inSeconds < 5) {
+        final updatedContent = '$emoji x$combo';
+        _messages[_messages.length - 1] = lastMsg.copyWith(
+          content: updatedContent,
+          createdAt: now,
+        );
+        notifyListeners();
+        _broadcastReaction(emoji, combo);
+        return;
+      }
+    }
 
     final msg = ChatMessage(
       id: const Uuid().v4(),
@@ -345,27 +441,86 @@ class ChatController extends ChangeNotifier {
       userId: currentUser.id,
       username: currentUser.username,
       avatarUrl: currentUser.avatarUrl,
-      content: emoji,
+      content: combo > 1 ? '$emoji x$combo' : emoji,
       type: 'emoji_reaction',
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
 
     _messages.add(msg);
     _pruneOldMessages();
     notifyListeners();
 
+    _broadcastReaction(emoji, combo, msg: msg);
+  }
+
+  Future<void> _broadcastReaction(
+    String emoji,
+    int combo, {
+    ChatMessage? msg,
+  }) async {
+    if (_chatChannel == null) return;
+    try {
+      await _chatChannel!.sendBroadcastMessage(
+        event: 'NEW_MESSAGE',
+        payload: {
+          if (msg != null) ...msg.toJson(),
+          if (msg == null) ...{
+            'id': const Uuid().v4(),
+            'room_id': roomId,
+            'user_id': currentUser.id,
+            'content': '$emoji x$combo',
+            'type': 'emoji_reaction',
+            'created_at': DateTime.now().toIso8601String(),
+          },
+          'username': currentUser.username,
+          'avatar_url': currentUser.avatarUrl,
+          'combo': combo,
+          'raw_emoji': emoji,
+        },
+      );
+    } catch (e) {
+      debugPrint('[ChatController] Error broadcasting reaction: $e');
+    }
+  }
+
+  /// Toggles an emoji reaction on a specific chat message bubble
+  Future<void> toggleMessageReaction(String messageId, String emoji) async {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    final msg = _messages[index];
+    final currentReactions = Map<String, List<String>>.from(
+      msg.reactions.map((k, v) => MapEntry(k, List<String>.from(v))),
+    );
+    final users = currentReactions[emoji] ?? [];
+    final hasReacted = users.contains(currentUser.id);
+    if (hasReacted) {
+      users.remove(currentUser.id);
+      if (users.isEmpty) {
+        currentReactions.remove(emoji);
+      } else {
+        currentReactions[emoji] = users;
+      }
+    } else {
+      users.add(currentUser.id);
+      currentReactions[emoji] = users;
+    }
+
+    _messages[index] = msg.copyWith(reactions: currentReactions);
+    notifyListeners();
+
     if (_chatChannel != null) {
       try {
         await _chatChannel!.sendBroadcastMessage(
-          event: 'NEW_MESSAGE',
+          event: 'MESSAGE_REACTION',
           payload: {
-            ...msg.toJson(),
-            'username': currentUser.username,
-            'avatar_url': currentUser.avatarUrl,
+            'message_id': messageId,
+            'user_id': currentUser.id,
+            'emoji': emoji,
+            'reactions': currentReactions,
           },
         );
       } catch (e) {
-        debugPrint('[ChatController] Error sending reaction: $e');
+        debugPrint('[ChatController] Error broadcasting message reaction: $e');
       }
     }
   }

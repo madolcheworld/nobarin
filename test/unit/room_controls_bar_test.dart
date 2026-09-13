@@ -57,7 +57,7 @@ void main() {
     });
 
     testWidgets(
-        'does NOT render any duplicate play or pause button in RoomControlsBar when media is empty',
+        'renders clean status indicator in RoomControlsBar when media is empty without redundant play or pick button',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -80,14 +80,13 @@ void main() {
       expect(find.byIcon(Icons.pause_rounded), findsNothing);
       expect(find.byIcon(Icons.pause_circle_rounded), findsNothing);
 
-      // Verify "Pilih Video" button exists
-      expect(find.text('Pilih Video'), findsOneWidget);
-      expect(find.byIcon(Icons.replay_10_rounded), findsNothing);
-      expect(find.byIcon(Icons.forward_10_rounded), findsNothing);
+      // Verify no duplicate "Pilih Video" in controls bar (it is on the player stage)
+      expect(find.text('Pilih Video'), findsNothing);
+      expect(find.text('Panggung Siap'), findsOneWidget);
     });
 
     testWidgets(
-        'renders Ganti Video in RoomControlsBar without duplicate playback controls when media is loaded',
+        'renders compact Ganti button and media badge in RoomControlsBar without duplicate playback controls when media is loaded',
         (tester) async {
       await playerController.loadMedia(
         'direct_url',
@@ -114,15 +113,14 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Per Option 2 (YouTube style), playback controls are centered on video overlay,
-      // not duplicated in RoomControlsBar
+      // Playback controls are centered on video overlay, not duplicated in RoomControlsBar
       expect(find.byIcon(Icons.play_circle_filled_rounded), findsNothing);
       expect(find.byIcon(Icons.replay_10_rounded), findsNothing);
       expect(find.byIcon(Icons.forward_10_rounded), findsNothing);
-      expect(find.text('Ganti Video'), findsOneWidget);
+      expect(find.text('Ganti'), findsOneWidget);
 
-      // Test tapping Ganti Video
-      await tester.tap(find.text('Ganti Video'));
+      // Test tapping Ganti
+      await tester.tap(find.text('Ganti'));
       await tester.pumpAndSettle();
       expect(pickerCalled, isTrue);
     });
@@ -159,16 +157,16 @@ void main() {
       queueController.dispose();
     });
 
-    testWidgets('renders Bagikan button and opens share modal with room code',
+    testWidgets('RoomControlsBar.showShareModal opens bottom sheet with room code and copy action',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: RoomControlsBar(
-              syncController: syncController,
-              player: playerController,
-              roomController: roomController,
-              onOpenMediaPicker: () {},
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => RoomControlsBar.showShareModal(context, baseRoom),
+                child: const Text('Open Share'),
+              ),
             ),
           ),
         ),
@@ -176,12 +174,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify Bagikan button exists
-      expect(find.text('Bagikan'), findsOneWidget);
-      expect(find.byIcon(Icons.share_rounded), findsOneWidget);
-
-      // Tap Bagikan button to open modal
-      await tester.tap(find.text('Bagikan'));
+      await tester.tap(find.text('Open Share'));
       await tester.pumpAndSettle();
 
       // Verify share modal contents
@@ -191,7 +184,34 @@ void main() {
       expect(find.text('Salin Teks Undangan Lengkap'), findsOneWidget);
     });
 
-    testWidgets('long pressing Bagikan button copies room code and shows SnackBar',
+    testWidgets('RoomControlsBar.copyRoomCode copies code and shows SnackBar',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => RoomControlsBar.copyRoomCode(context, baseRoom.code),
+                child: const Text('Copy Code'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Copy Code'));
+      await tester.pump();
+
+      // Verify SnackBar appears
+      expect(
+        find.text('Kode room ${baseRoom.code} berhasil disalin!'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('renders interactive control mode pill for Host',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -208,15 +228,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Long press Bagikan button
-      await tester.longPress(find.text('Bagikan'));
-      await tester.pump();
-
-      // Verify SnackBar appears
-      expect(
-        find.text('Kode room ${baseRoom.code} berhasil disalin!'),
-        findsOneWidget,
-      );
+      // Verify Host Only pill is rendered
+      expect(find.text('👑 Host Only'), findsOneWidget);
     });
   });
 }

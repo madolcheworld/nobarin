@@ -12,6 +12,7 @@ class ChatMessage {
   final String type; // 'text', 'system', 'emoji_reaction'
   final DateTime createdAt;
   final MessageStatus status;
+  final Map<String, List<String>> reactions; // emoji -> list of userIds
 
   const ChatMessage({
     required this.id,
@@ -23,11 +24,19 @@ class ChatMessage {
     this.type = 'text',
     required this.createdAt,
     this.status = MessageStatus.sent,
+    this.reactions = const {},
   });
 
   bool get isSystem => type == 'system';
   bool get isReaction => type == 'emoji_reaction';
   bool get isText => type == 'text';
+  bool get hasReactions => reactions.isNotEmpty;
+  int get totalReactionsCount =>
+      reactions.values.fold(0, (sum, list) => sum + list.length);
+
+  bool hasUserReacted(String emoji, String userId) {
+    return reactions[emoji]?.contains(userId) ?? false;
+  }
 
   ChatMessage copyWith({
     String? id,
@@ -39,6 +48,7 @@ class ChatMessage {
     String? type,
     DateTime? createdAt,
     MessageStatus? status,
+    Map<String, List<String>>? reactions,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -50,6 +60,7 @@ class ChatMessage {
       type: type ?? this.type,
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
+      reactions: reactions ?? this.reactions,
     );
   }
 
@@ -81,6 +92,16 @@ class ChatMessage {
     final rawId = json['id'] as String?;
     final id = (rawId != null && rawId.isNotEmpty) ? rawId : const Uuid().v4();
 
+    final Map<String, List<String>> parsedReactions = {};
+    if (json['reactions'] is Map) {
+      (json['reactions'] as Map).forEach((key, value) {
+        if (value is List) {
+          parsedReactions[key.toString()] =
+              value.map((e) => e.toString()).toList();
+        }
+      });
+    }
+
     return ChatMessage(
       id: id,
       roomId: json['room_id'] as String? ?? '',
@@ -92,6 +113,7 @@ class ChatMessage {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'].toString())
           : DateTime.now(),
+      reactions: parsedReactions,
     );
   }
 
@@ -103,6 +125,7 @@ class ChatMessage {
       'content': content,
       'type': type,
       'created_at': createdAt.toIso8601String(),
+      if (reactions.isNotEmpty) 'reactions': reactions,
     };
   }
 }

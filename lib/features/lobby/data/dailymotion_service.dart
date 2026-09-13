@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import '../../../core/network/api_cache_manager.dart';
+import '../../../core/network/app_http_client.dart';
 import 'models/dailymotion_video_model.dart';
 
 class DailymotionService {
@@ -236,12 +237,18 @@ class DailymotionService {
       return allPresets;
     }
 
+    final cacheKey = 'dm_search_${trimmed.toLowerCase()}_limit$limit';
+    final cached = ApiCacheManager.instance.get<List<DailymotionVideo>>(cacheKey);
+    if (cached != null) {
+      return List<DailymotionVideo>.from(cached);
+    }
+
     try {
       final uri = Uri.parse(
         'https://api.dailymotion.com/videos?fields=id,title,description,duration,thumbnail_720_url,owner.screenname,views_total&search=${Uri.encodeComponent(trimmed)}&limit=$limit',
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      final response = await AppHttpClient.get(uri, timeout: const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -255,6 +262,7 @@ class DailymotionService {
         }
 
         if (results.isNotEmpty) {
+          ApiCacheManager.instance.set(cacheKey, results, ttl: ApiCacheManager.searchTtl);
           return results;
         }
       }
@@ -264,12 +272,18 @@ class DailymotionService {
 
     // Fallback: search locally within presets
     final lower = trimmed.toLowerCase();
-    return allPresets.where((video) {
+    final fallback = allPresets.where((video) {
       return video.title.toLowerCase().contains(lower) ||
           video.description.toLowerCase().contains(lower) ||
           video.uploaderName.toLowerCase().contains(lower) ||
           video.category.toLowerCase().contains(lower);
     }).toList();
+
+    if (fallback.isNotEmpty) {
+      ApiCacheManager.instance.set(cacheKey, fallback, ttl: ApiCacheManager.searchTtl);
+    }
+
+    return fallback;
   }
 
   /// Search alias for consistency with other services
@@ -291,15 +305,23 @@ class DailymotionService {
       }
     }
 
+    final cacheKey = 'dm_detail_$id';
+    final cached = ApiCacheManager.instance.get<DailymotionVideo>(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+
     try {
       final uri = Uri.parse(
         'https://api.dailymotion.com/video/$id?fields=id,title,description,duration,thumbnail_720_url,owner.screenname,views_total',
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      final response = await AppHttpClient.get(uri, timeout: const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-        return DailymotionVideo.fromJson(decoded);
+        final video = DailymotionVideo.fromJson(decoded);
+        ApiCacheManager.instance.set(cacheKey, video, ttl: ApiCacheManager.oEmbedTtl);
+        return video;
       }
     } catch (e) {
       debugPrint('[DailymotionService] Details API error: $e');
