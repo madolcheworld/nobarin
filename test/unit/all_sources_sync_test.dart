@@ -130,78 +130,6 @@ void main() {
       });
     });
 
-    // -------------------------------------------------------------------------
-    // 3. Twitch (Stream, VOD, Clip) Synchronization
-    // -------------------------------------------------------------------------
-    group('3. Twitch Sync', () {
-      const channelUrl = 'https://www.twitch.tv/shroud';
-      const vodUrl = 'https://www.twitch.tv/videos/123456789';
-      const clipUrl = 'https://clips.twitch.tv/GloriousTameBear';
-
-      test('Twitch media detection for channels, VODs, and clips', () {
-        final channel = UnifiedPlayerController.extractTwitchMedia(channelUrl);
-        expect(channel, isNotNull);
-        expect(channel!.isChannel, isTrue);
-        expect(channel.id, 'shroud');
-
-        final vod = UnifiedPlayerController.extractTwitchMedia(vodUrl);
-        expect(vod, isNotNull);
-        expect(vod!.isVideo, isTrue);
-        expect(vod.id, '123456789');
-
-        final clip = UnifiedPlayerController.extractTwitchMedia(clipUrl);
-        expect(clip, isNotNull);
-        expect(clip!.isClip, isTrue);
-        expect(clip.id, 'GloriousTameBear');
-      });
-
-      test('Twitch payload sync maintains mediaType and mediaUrl', () {
-        final payload = SyncPayload(
-          mediaType: 'twitch',
-          mediaUrl: vodUrl,
-          state: 'playing',
-          positionSeconds: 300.0,
-          timestampMs: 3000000,
-          controllerId: 'host-user',
-        );
-
-        expect(payload.mediaType, 'twitch');
-        expect(payload.isPlaying, isTrue);
-        final target = syncEngine.calculateTargetPosition(payload, 3002000);
-        expect(target, closeTo(302.0, 0.01));
-      });
-    });
-
-    // -------------------------------------------------------------------------
-    // 4. Vimeo Video Synchronization
-    // -------------------------------------------------------------------------
-    group('4. Vimeo Sync', () {
-      const vimeoUrl = 'https://vimeo.com/76979871';
-
-      test('Vimeo URL extraction and media detection', () {
-        expect(UnifiedPlayerController.extractVimeoVideoId(vimeoUrl), '76979871');
-        final detected = UnifiedPlayerController.detectMediaFromUrl(vimeoUrl);
-        expect(detected, isNotNull);
-        expect(detected!.mediaType, 'vimeo');
-        expect(detected.mediaId, '76979871');
-      });
-
-      test('Vimeo sync payload propagation', () {
-        final payload = SyncPayload(
-          mediaType: 'vimeo',
-          mediaUrl: vimeoUrl,
-          state: 'playing',
-          positionSeconds: 12.0,
-          timestampMs: 4000000,
-          controllerId: 'host-user',
-        );
-
-        expect(payload.mediaType, 'vimeo');
-        final json = payload.toJson();
-        expect(json['media_type'], 'vimeo');
-        expect(json['media_url'], vimeoUrl);
-      });
-    });
 
     // -------------------------------------------------------------------------
     // 5. Google Drive Video Synchronization
@@ -300,12 +228,10 @@ void main() {
     // 8. Dynamic Source Switching in a Simulated Multi-Client Room
     // -------------------------------------------------------------------------
     group('8. Multi-Source Seamless Switching in Watch Party Room', () {
-      test('Host sequentially changes media sources across all 7 supported types', () {
+      test('Host sequentially changes media sources across all 5 supported types', () {
         const testSources = [
           {'type': 'direct_url', 'url': 'https://example.com/video.mp4'},
           {'type': 'youtube', 'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'},
-          {'type': 'twitch', 'url': 'https://www.twitch.tv/videos/123456789'},
-          {'type': 'vimeo', 'url': 'https://vimeo.com/76979871'},
           {'type': 'google_drive', 'url': 'https://drive.google.com/file/d/1Bxyz987654321_Abcdefghijk/view'},
           {'type': 'dailymotion', 'url': 'https://www.dailymotion.com/video/x7tgad0'},
           {'type': 'bstation', 'url': 'https://www.bilibili.tv/id/play/1004884'},

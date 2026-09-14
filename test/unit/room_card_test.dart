@@ -26,10 +26,10 @@ void main() {
     final testRoomFallback = RoomModel(
       id: 'room-2',
       code: 'WP5678',
-      title: 'Twitch Esports Livestream',
+      title: 'Dailymotion Video Livestream',
       description: 'Championship final watch party',
-      currentMediaUrl: 'https://twitch.tv/esl_csgo',
-      currentMediaType: 'twitch',
+      currentMediaUrl: 'https://dailymotion.com/video/x7tgad0',
+      currentMediaType: 'dailymotion',
       thumbnailUrl: null,
       currentState: 'paused',
       currentPosition: 0,
@@ -90,8 +90,8 @@ void main() {
         ),
       );
 
-      // Verify Twitch source label
-      expect(find.text('Twitch Esports Livestream'), findsOneWidget);
+      // Verify Dailymotion source label
+      expect(find.text('Dailymotion Video Livestream'), findsOneWidget);
       expect(find.text('GamerX'), findsOneWidget);
       expect(find.text('WP5678'), findsOneWidget);
       expect(find.text('42'), findsOneWidget);

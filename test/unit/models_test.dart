@@ -86,11 +86,6 @@ void main() {
         'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
       );
 
-      // Vimeo
-      expect(
-        RoomModel.resolveThumbnail(url: 'https://vimeo.com/76979871'),
-        'https://vumbnail.com/76979871.jpg',
-      );
 
       // Google Drive
       expect(
@@ -102,12 +97,6 @@ void main() {
       expect(
         RoomModel.resolveThumbnail(url: 'https://www.dailymotion.com/video/x7tgad0'),
         'https://www.dailymotion.com/thumbnail/video/x7tgad0',
-      );
-
-      // Twitch
-      expect(
-        RoomModel.resolveThumbnail(url: 'https://www.twitch.tv/monstercat'),
-        'https://static-cdn.jtvnw.net/previews-ttv/live_user_monstercat-640x360.jpg',
       );
 
       // Direct presets

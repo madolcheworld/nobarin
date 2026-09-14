@@ -8,35 +8,9 @@ import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../models/video_quality.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
-/// Metadata for Twitch streams, VODs, or clips
-class TwitchMedia {
-  final String type; // 'channel', 'video', 'clip'
-  final String id;
-
-  const TwitchMedia({required this.type, required this.id});
-
-  bool get isChannel => type == 'channel';
-  bool get isVideo => type == 'video';
-  bool get isClip => type == 'clip';
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is TwitchMedia &&
-          runtimeType == other.runtimeType &&
-          type == other.type &&
-          id == other.id;
-
-  @override
-  int get hashCode => type.hashCode ^ id.hashCode;
-
-  @override
-  String toString() => 'TwitchMedia(type: $type, id: $id)';
-}
-
 /// Normalized result of detecting media platform, URLs, and IDs
 class DetectedMedia {
-  final String mediaType; // 'youtube', 'twitch', 'vimeo', 'google_drive', 'dailymotion', 'bstation', 'direct_url'
+  final String mediaType; // 'youtube', 'google_drive', 'dailymotion', 'bstation', 'direct_url'
   final String mediaUrl;
   final String? mediaId;
   final String title;
@@ -51,8 +25,6 @@ class DetectedMedia {
   });
 
   bool get isYouTube => mediaType == 'youtube';
-  bool get isTwitch => mediaType == 'twitch';
-  bool get isVimeo => mediaType == 'vimeo';
   bool get isGoogleDrive => mediaType == 'google_drive';
   bool get isDailymotion => mediaType == 'dailymotion';
   bool get isBstation => mediaType == 'bstation';
@@ -60,7 +32,7 @@ class DetectedMedia {
 }
 
 class UnifiedPlayerController extends ChangeNotifier {
-  String _mediaType = 'direct_url'; // 'direct_url', 'youtube', 'twitch', 'vimeo'
+  String _mediaType = 'direct_url'; // 'direct_url', 'youtube'
   String _mediaUrl = '';
   bool _isPlaying = false;
   bool _isFullscreen = false;
@@ -89,7 +61,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   YoutubePlayerController? _ytController;
   final List<StreamSubscription> _ytSubscriptions = [];
 
-  // Callbacks for Twitch / Vimeo Embed Player
+  // Callbacks for Embed Player (Google Drive / Dailymotion / Bstation)
   void Function(String action, dynamic argument)? onEmbedPlayerCommand;
 
   // Callbacks for SyncController
@@ -97,7 +69,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   void Function(String state)? onPlaybackStateChanged;
   void Function()? onPlaybackEnded;
 
-  /// Called by embed player widget (Twitch/Vimeo) to update state
+  /// Called by embed player widget to update state
   void updateEmbedPlaybackState({
     required bool isPlaying,
     double? position,
@@ -147,7 +119,6 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool get supportsQualitySelection {
     return _mediaType == 'direct_url' ||
         _mediaType == 'youtube' ||
-        _mediaType == 'vimeo' ||
         _mediaType == 'dailymotion';
   }
 
@@ -405,66 +376,6 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
   }
 
-  /// Extracts Twitch media information (channel, video, or clip) from URL
-  static TwitchMedia? extractTwitchMedia(String url) {
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-
-    try {
-      // 1. Clips: clips.twitch.tv/{clipId} or twitch.tv/{channel}/clip/{clipId}
-      final clipMatch1 = RegExp(r'clips\.twitch\.tv\/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
-      if (clipMatch1 != null) {
-        return TwitchMedia(type: 'clip', id: clipMatch1.group(1)!);
-      }
-      final clipMatch2 = RegExp(r'twitch\.tv\/[a-zA-Z0-9_]+\/clip\/([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(trimmed);
-      if (clipMatch2 != null) {
-        return TwitchMedia(type: 'clip', id: clipMatch2.group(1)!);
-      }
-
-      // 2. Videos / VODs: twitch.tv/videos/{videoId}
-      final videoMatch = RegExp(r'twitch\.tv\/videos\/(\d+)', caseSensitive: false).firstMatch(trimmed);
-      if (videoMatch != null) {
-        return TwitchMedia(type: 'video', id: videoMatch.group(1)!);
-      }
-
-      // 3. Channels: twitch.tv/{channel}
-      final channelMatch = RegExp(r'(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/([a-zA-Z0-9_]{3,25})(?:\/|\?|$)', caseSensitive: false).firstMatch(trimmed);
-      if (channelMatch != null) {
-        final channel = channelMatch.group(1)!.toLowerCase();
-        const reserved = {
-          'directory', 'videos', 'p', 'downloads', 'jobs', 'turbo',
-          'settings', 'friends', 'messages', 'search', 'subscriptions',
-          'wallet', 'drops', 'inventory', 'popout'
-        };
-        if (!reserved.contains(channel)) {
-          return TwitchMedia(type: 'channel', id: channel);
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  /// Extracts Vimeo video ID from URL or raw digits
-  static String? extractVimeoVideoId(String url) {
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-
-    if (RegExp(r'^\d{5,12}$').hasMatch(trimmed)) {
-      return trimmed;
-    }
-
-    try {
-      final regExp = RegExp(
-        r'(?:vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|video\/|)|player\.vimeo\.com\/video\/)(\d+)',
-        caseSensitive: false,
-      );
-      final match = regExp.firstMatch(trimmed);
-      return match?.group(1);
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Extracts Google Drive file ID from URL or raw ID
   static String? extractGoogleDriveFileId(String url) {
     final trimmed = url.trim();
@@ -568,27 +479,6 @@ class UnifiedPlayerController extends ChangeNotifier {
       );
     }
 
-    final twitch = extractTwitchMedia(trimmed);
-    if (twitch != null) {
-      return DetectedMedia(
-        mediaType: 'twitch',
-        mediaUrl: trimmed.startsWith('http') ? trimmed : 'https://www.twitch.tv/${twitch.id}',
-        mediaId: twitch.id,
-        title: 'Twitch ${twitch.type.toUpperCase()}: ${twitch.id}',
-      );
-    }
-
-    final vimeoId = extractVimeoVideoId(trimmed);
-    if (vimeoId != null) {
-      return DetectedMedia(
-        mediaType: 'vimeo',
-        mediaUrl: 'https://vimeo.com/$vimeoId',
-        mediaId: vimeoId,
-        title: 'Vimeo Video ($vimeoId)',
-        thumbnailUrl: 'https://vumbnail.com/$vimeoId.jpg',
-      );
-    }
-
     final driveId = extractGoogleDriveFileId(trimmed);
     if (driveId != null) {
       return DetectedMedia(
@@ -656,21 +546,15 @@ class UnifiedPlayerController extends ChangeNotifier {
   }) async {
     _errorMessage = null;
 
-    // Smart-detect media type if user entered a YouTube, Twitch, Vimeo, Google Drive, Dailymotion, Bstation, or direct media URL
+    // Smart-detect media type if user entered a YouTube, Google Drive, Dailymotion, Bstation, or direct media URL
     var effectiveType = type;
     final isYtUrl = extractYouTubeVideoId(url) != null;
-    final isTwitchUrl = extractTwitchMedia(url) != null;
-    final isVimeoUrl = extractVimeoVideoId(url) != null;
     final isDriveUrl = extractGoogleDriveFileId(url) != null;
     final isDailymotionUrl = extractDailymotionVideoId(url) != null;
     final isBstationUrl = extractBstationVideoId(url) != null;
 
     if (isYtUrl) {
       effectiveType = 'youtube';
-    } else if (isTwitchUrl) {
-      effectiveType = 'twitch';
-    } else if (isVimeoUrl) {
-      effectiveType = 'vimeo';
     } else if (isDriveUrl) {
       effectiveType = 'google_drive';
     } else if (isDailymotionUrl) {
@@ -706,21 +590,6 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
     }
 
-    if (effectiveType == 'vimeo') {
-      _availableQualities = const [
-        VideoQuality.auto(label: 'Auto (Rekomendasi)'),
-        VideoQuality(id: '1080p', label: '1080p Full HD', height: 1080),
-        VideoQuality(id: '720p', label: '720p HD', height: 720),
-        VideoQuality(id: '540p', label: '540p', height: 540),
-        VideoQuality(id: '360p', label: '360p Hemat Kuota', height: 360),
-        VideoQuality(id: '240p', label: '240p', height: 240),
-      ];
-      _selectedQuality = _availableQualities.first;
-      _isPlaying = autoPlay;
-      notifyListeners();
-      return;
-    }
-
     if (effectiveType == 'dailymotion') {
       _availableQualities = const [
         VideoQuality.auto(label: 'Auto (Rekomendasi)'),
@@ -736,8 +605,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       return;
     }
 
-    if (effectiveType == 'twitch' ||
-        effectiveType == 'google_drive' ||
+    if (effectiveType == 'google_drive' ||
         effectiveType == 'bstation' ||
         effectiveType == 'bilibili') {
       _availableQualities = [
@@ -973,9 +841,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           _isMuted = true;
           notifyListeners();
         }
-      } else if (_mediaType == 'twitch' ||
-          _mediaType == 'vimeo' ||
-          _mediaType == 'google_drive' ||
+      } else if (_mediaType == 'google_drive' ||
           _mediaType == 'dailymotion' ||
           _mediaType == 'bstation' ||
           _mediaType == 'bilibili') {
@@ -1003,9 +869,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.pauseVideo();
-      } else if (_mediaType == 'twitch' ||
-          _mediaType == 'vimeo' ||
-          _mediaType == 'google_drive' ||
+      } else if (_mediaType == 'google_drive' ||
           _mediaType == 'dailymotion' ||
           _mediaType == 'bstation' ||
           _mediaType == 'bilibili') {
@@ -1027,9 +891,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.seekTo(seconds: seconds, allowSeekAhead: true);
-      } else if (_mediaType == 'twitch' ||
-          _mediaType == 'vimeo' ||
-          _mediaType == 'google_drive' ||
+      } else if (_mediaType == 'google_drive' ||
           _mediaType == 'dailymotion' ||
           _mediaType == 'bstation' ||
           _mediaType == 'bilibili') {
@@ -1053,9 +915,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       if (_mediaType == 'youtube') {
         await _ytController?.setPlaybackRate(speed);
-      } else if (_mediaType == 'twitch' ||
-          _mediaType == 'vimeo' ||
-          _mediaType == 'google_drive' ||
+      } else if (_mediaType == 'google_drive' ||
           _mediaType == 'dailymotion' ||
           _mediaType == 'bstation' ||
           _mediaType == 'bilibili') {
@@ -1083,9 +943,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           await _ytController?.unMute();
           await _ytController?.setVolume((_volume * 100).toInt());
         }
-      } else if (_mediaType == 'twitch' ||
-          _mediaType == 'vimeo' ||
-          _mediaType == 'google_drive' ||
+      } else if (_mediaType == 'google_drive' ||
           _mediaType == 'dailymotion' ||
           _mediaType == 'bstation' ||
           _mediaType == 'bilibili') {
@@ -1109,9 +967,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       try {
         if (_mediaType == 'youtube') {
           await _ytController?.mute();
-        } else if (_mediaType == 'twitch' ||
-            _mediaType == 'vimeo' ||
-            _mediaType == 'google_drive' ||
+        } else if (_mediaType == 'google_drive' ||
             _mediaType == 'dailymotion' ||
             _mediaType == 'bstation' ||
             _mediaType == 'bilibili') {
@@ -1156,7 +1012,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         } catch (e) {
           debugPrint('[UnifiedPlayerController] YouTube setQuality error: $e');
         }
-      } else if (_mediaType == 'vimeo' || _mediaType == 'dailymotion') {
+      } else if (_mediaType == 'dailymotion') {
         onEmbedPlayerCommand?.call('setQuality', quality.id);
       }
     } catch (e) {

@@ -25,8 +25,6 @@ class QueueItem {
 
   bool get isYouTube => mediaType == 'youtube';
   bool get isDirectUrl => mediaType == 'direct_url';
-  bool get isTwitch => mediaType == 'twitch';
-  bool get isVimeo => mediaType == 'vimeo';
   bool get isGoogleDrive => mediaType == 'google_drive' || mediaType == 'gdrive';
   bool get isDailymotion => mediaType == 'dailymotion';
   bool get isBstation => mediaType == 'bstation' || mediaType == 'bilibili';

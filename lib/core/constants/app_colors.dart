@@ -51,8 +51,6 @@ class AppColors {
 
   // Platform Brand Colors
   static const Color youtubeRed = Color(0xFFFF0000);
-  static const Color twitchPurple = Color(0xFF9146FF);
-  static const Color vimeoBlue = Color(0xFF1AB7EA);
   static const Color googleDriveGreen = Color(0xFF0F9D58);
   static const Color dailymotionBlue = Color(0xFF0066DC);
   static const Color bstationBlue = Color(0xFF00A1D6);

@@ -26,8 +26,6 @@ class QueueTabView extends StatelessWidget {
         final bool canAdd = queueController.canAddToQueue;
         final hasMedia = player.mediaUrl.isNotEmpty;
         final isYouTube = player.mediaType == 'youtube';
-        final isTwitch = player.mediaType == 'twitch';
-        final isVimeo = player.mediaType == 'vimeo';
         final isDailymotion = player.mediaType == 'dailymotion';
         final isBstation = player.mediaType == 'bstation' ||
             player.mediaType == 'bilibili';
@@ -42,29 +40,21 @@ class QueueTabView extends StatelessWidget {
 
         final Color sourceColor = isYouTube
             ? AppColors.youtubeRed
-            : (isTwitch
-                ? AppColors.twitchPurple
-                : (isVimeo
-                    ? AppColors.vimeoBlue
-                    : (isDailymotion
-                        ? AppColors.dailymotionBlue
-                        : (isBstation
-                            ? AppColors.bstationBlue
-                            : (isGoogleDrive
-                                ? AppColors.googleDriveGreen
-                                : AppColors.secondaryNeon)))));
+            : (isDailymotion
+                ? AppColors.dailymotionBlue
+                : (isBstation
+                    ? AppColors.bstationBlue
+                    : (isGoogleDrive
+                        ? AppColors.googleDriveGreen
+                        : AppColors.secondaryNeon)));
 
         final String sourceLabel = isYouTube
             ? 'YouTube'
-            : (isTwitch
-                ? 'Twitch'
-                : (isVimeo
-                    ? 'Vimeo'
-                    : (isDailymotion
-                        ? 'Dailymotion'
-                        : (isBstation
-                            ? 'Bstation'
-                            : (isGoogleDrive ? 'Google Drive' : 'Direct URL')))));
+            : (isDailymotion
+                ? 'Dailymotion'
+                : (isBstation
+                    ? 'Bstation'
+                    : (isGoogleDrive ? 'Google Drive' : 'Direct URL')));
 
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -177,15 +167,11 @@ class QueueTabView extends StatelessWidget {
                                   height: 44,
                                   color: sourceColor.withValues(alpha: 0.15),
                                   child: Icon(
-                                    isTwitch
-                                        ? Icons.videogame_asset_rounded
-                                        : (isVimeo
-                                            ? Icons.ondemand_video_rounded
-                                            : (isBstation
-                                                ? Icons.smart_display_rounded
-                                                : (isGoogleDrive
-                                                    ? Icons.cloud_queue_rounded
-                                                    : Icons.movie_outlined))),
+                                    isBstation
+                                        ? Icons.smart_display_rounded
+                                        : (isGoogleDrive
+                                            ? Icons.cloud_queue_rounded
+                                            : Icons.movie_outlined),
                                     color: sourceColor,
                                     size: 24,
                                   ),
@@ -415,8 +401,6 @@ class _QueueItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isYouTube = item.mediaType == 'youtube';
-    final isTwitch = item.mediaType == 'twitch';
-    final isVimeo = item.mediaType == 'vimeo';
     final isDailymotion = item.mediaType == 'dailymotion';
     final isBstation =
         item.mediaType == 'bstation' || item.mediaType == 'bilibili';
@@ -425,17 +409,13 @@ class _QueueItemCard extends StatelessWidget {
 
     final Color sourceColor = isYouTube
         ? AppColors.youtubeRed
-        : (isTwitch
-            ? AppColors.twitchPurple
-            : (isVimeo
-                ? AppColors.vimeoBlue
-                : (isDailymotion
-                    ? AppColors.dailymotionBlue
-                    : (isBstation
-                        ? AppColors.bstationBlue
-                        : (isGoogleDrive
-                            ? AppColors.googleDriveGreen
-                            : AppColors.secondaryNeon)))));
+        : (isDailymotion
+            ? AppColors.dailymotionBlue
+            : (isBstation
+                ? AppColors.bstationBlue
+                : (isGoogleDrive
+                    ? AppColors.googleDriveGreen
+                    : AppColors.secondaryNeon)));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

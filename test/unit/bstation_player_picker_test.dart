@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:nobarin/core/network/app_http_client.dart';
 import 'package:nobarin/features/lobby/data/bstation_service.dart';
 import 'package:nobarin/features/lobby/data/models/bstation_video_model.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
@@ -130,6 +134,9 @@ void main() {
     });
 
     test('search filters fallback presets correctly', () async {
+      final mock = MockClient((request) async => http.Response('Error', 500));
+      AppHttpClient.setMockClient(mock);
+
       final genshinResults = await BstationService.search('genshin');
       expect(genshinResults, isNotEmpty);
       expect(genshinResults.first.title.toLowerCase(), contains('genshin'));
@@ -139,6 +146,80 @@ void main() {
 
       final emptyResults = await BstationService.search('nonexistentuniquekeyword999');
       expect(emptyResults, isEmpty);
+
+      AppHttpClient.setMockClient(null);
+    });
+
+    test('search parses live API responses correctly', () async {
+      final mock = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'code': 0,
+            'data': {
+              'modules': [
+                {
+                  'type': 'ogv_subject',
+                  'items': [
+                    {
+                      'title': 'Naruto',
+                      'seasons': [
+                        {
+                          'season_id': '1005144',
+                          'title': '<em class="keyword">Naruto</em> Shippuden',
+                          'cover': 'https://pic.bstarstatic.com/test.jpg',
+                          'view': '446.5M Putar',
+                          'description': 'Kisah ninja Naruto &amp; teman-temannya',
+                          'index_show': 'Tamat',
+                          'styles': [
+                            {'title': 'Anime'},
+                            {'title': 'Aksi'}
+                          ],
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  'type': 'ugc',
+                  'items': [
+                    {
+                      'aid': '2044815780',
+                      'title': 'Minato Story &amp; Action',
+                      'cover': 'https://pic.bstarstatic.com/ugc.jpg',
+                      'duration': '10:15',
+                      'view': '6.7K Ditonton',
+                      'author': {'nickname': 'CreatorNinja'}
+                    }
+                  ]
+                }
+              ]
+            }
+          }),
+          200,
+        );
+      });
+
+      AppHttpClient.setMockClient(mock);
+
+      final results = await BstationService.search('naruto');
+      expect(results, hasLength(2));
+
+      // Anime season item
+      expect(results[0].id, '1005144');
+      expect(results[0].title, 'Naruto Shippuden');
+      expect(results[0].viewsTotal, 446500000);
+      expect(results[0].category, 'Anime, Aksi');
+      expect(results[0].episodeNumber, 'Tamat');
+      expect(results[0].description, contains('&'));
+
+      // UGC video item
+      expect(results[1].id, '2044815780');
+      expect(results[1].title, 'Minato Story & Action');
+      expect(results[1].durationSeconds, 615);
+      expect(results[1].uploaderName, 'CreatorNinja');
+      expect(results[1].viewsTotal, 6700);
+
+      AppHttpClient.setMockClient(null);
     });
   });
 
@@ -164,8 +245,6 @@ void main() {
 
       expect(item.isBstation, isTrue);
       expect(item.isYouTube, isFalse);
-      expect(item.isTwitch, isFalse);
-      expect(item.isVimeo, isFalse);
       expect(item.isDailymotion, isFalse);
       expect(item.isGoogleDrive, isFalse);
     });

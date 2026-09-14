@@ -21,8 +21,6 @@ void main() {
     const expectedSources = [
       {'type': 'direct_url', 'url': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'},
       {'type': 'youtube', 'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'},
-      {'type': 'twitch', 'url': 'https://www.twitch.tv/videos/123456789'},
-      {'type': 'vimeo', 'url': 'https://vimeo.com/76979871'},
       {'type': 'google_drive', 'url': 'https://drive.google.com/file/d/1Bxyz987654321_Abcdefghijk/view'},
       {'type': 'dailymotion', 'url': 'https://www.dailymotion.com/video/x7tgad0'},
       {'type': 'bstation', 'url': 'https://www.bilibili.tv/id/play/1004884'},

@@ -74,36 +74,6 @@ void main() {
       expect(find.text('Auto (Otomatis)'), findsOneWidget);
     });
 
-    testWidgets('2. Vimeo quality presets rendered and selectable', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await player.loadMedia('vimeo', 'https://vimeo.com/76979871', autoPlay: false);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: VideoQualitySheet(player: player),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('1080p Full HD'), findsOneWidget);
-      expect(find.text('720p HD'), findsOneWidget);
-      expect(find.text('540p'), findsOneWidget);
-      expect(find.text('360p Hemat Kuota'), findsOneWidget);
-
-      await tester.tap(find.text('720p HD'));
-      await tester.pumpAndSettle();
-
-      expect(player.selectedQuality?.id, '720p');
-      expect(player.currentQualityLabel, '720p');
-    });
 
     testWidgets('3. Dailymotion quality presets rendered and selectable', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
@@ -137,21 +107,5 @@ void main() {
       expect(player.currentQualityLabel, '480p');
     });
 
-    testWidgets('4. Twitch web source shows in-player gear guide notice', (tester) async {
-      await player.loadMedia('twitch', 'https://www.twitch.tv/riotgames', autoPlay: false);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: VideoQualitySheet(player: player),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Guide for Twitch web player
-      expect(find.text('Menu Kualitas Bawaan Twitch'), findsOneWidget);
-      expect(find.textContaining('ikon gerigi pengaturan'), findsOneWidget);
-    });
   });
 }

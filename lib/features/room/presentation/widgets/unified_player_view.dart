@@ -12,7 +12,7 @@ import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../../../../core/utils/time_formatter.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
-import 'twitch_vimeo_embed_player.dart';
+import 'web_embed_player.dart';
 import 'video_quality_sheet.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
@@ -224,14 +224,12 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
       listenable: widget.player,
       builder: (context, _) {
         final bool isYouTube = widget.player.mediaType == 'youtube';
-        final bool isTwitch = widget.player.mediaType == 'twitch';
-        final bool isVimeo = widget.player.mediaType == 'vimeo';
         final bool isGoogleDrive = widget.player.mediaType == 'google_drive';
         final bool isDailymotion = widget.player.mediaType == 'dailymotion';
         final bool isBstation = widget.player.mediaType == 'bstation' ||
             widget.player.mediaType == 'bilibili';
         final bool isEmbed =
-            isTwitch || isVimeo || isGoogleDrive || isDailymotion || isBstation;
+            isGoogleDrive || isDailymotion || isBstation;
         final bool hasMedia = widget.player.mediaUrl.isNotEmpty;
         final bool canControl = widget.syncController.canControl;
         final bool isMobileYouTube = !kIsWeb && isYouTube;
@@ -241,7 +239,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         if (!hasMedia) {
           playerWidget = _buildEmptyPlaceholder();
         } else if (isEmbed) {
-          playerWidget = TwitchVimeoEmbedPlayer(
+          playerWidget = WebEmbedPlayer(
             key: ValueKey(
               'embed_${widget.player.mediaType}_${widget.player.mediaUrl}',
             ),

@@ -13,14 +13,10 @@ import 'widgets/room_card.dart';
 import 'screens/bstation_picker_screen.dart';
 import 'screens/dailymotion_picker_screen.dart';
 import 'screens/google_drive_picker_screen.dart';
-import 'screens/twitch_picker_screen.dart';
-import 'screens/vimeo_picker_screen.dart';
 import 'screens/youtube_picker_screen.dart';
 import '../data/models/bstation_video_model.dart';
 import '../data/models/dailymotion_video_model.dart';
 import '../data/models/google_drive_video_model.dart';
-import '../data/models/twitch_stream_model.dart';
-import '../data/models/vimeo_video_model.dart';
 import '../data/models/youtube_video_model.dart';
 import '../../p2p_streaming/presentation/local_video_picker_sheet.dart';
 import '../../room/models/room_model.dart';
@@ -57,26 +53,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       room = await CreateRoomDialog.show(
         context,
         initialYouTubeVideo: video,
-      );
-    } else if (sourceType == MediaSourceType.twitch) {
-      final stream = await Navigator.of(context).push<TwitchStream>(
-        MaterialPageRoute(builder: (_) => const TwitchPickerScreen()),
-      );
-      if (stream == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialTwitchStream: stream,
-      );
-    } else if (sourceType == MediaSourceType.vimeo) {
-      final video = await Navigator.of(context).push<VimeoVideo>(
-        MaterialPageRoute(builder: (_) => const VimeoPickerScreen()),
-      );
-      if (video == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialVimeoVideo: video,
       );
     } else if (sourceType == MediaSourceType.googleDrive) {
       final video = await Navigator.of(context).push<GoogleDriveVideo>(
@@ -245,12 +221,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             color: AppColors.textPrimary,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.logout_rounded,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
                       ],
                     ),
                   ),
@@ -329,14 +299,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         color: Colors.white,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Mulai pesta nonton',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.white.withValues(alpha: 0.8),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -399,14 +361,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    const Text(
-                                      'Masukkan Kode 6 Digit',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -454,21 +408,17 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
-                          _buildFilterChip('all', 'Semua', Icons.grid_view_rounded),
+                          _buildFilterChip('all', 'Semua'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('youtube', 'YouTube', Icons.play_circle_filled_rounded),
+                          _buildFilterChip('youtube', 'YouTube'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('twitch', 'Twitch', Icons.live_tv_rounded),
+                          _buildFilterChip('bstation', 'Bstation'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('vimeo', 'Vimeo', Icons.video_collection_rounded),
+                          _buildFilterChip('google_drive', 'Drive'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('bstation', 'Bstation', Icons.smart_display_rounded),
+                          _buildFilterChip('dailymotion', 'Dailymotion'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('google_drive', 'Drive', Icons.cloud_queue_rounded),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('dailymotion', 'Dailymotion', Icons.play_circle_filled_rounded),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('direct_url', 'Direct URL', Icons.link_rounded),
+                          _buildFilterChip('direct_url', 'Direct URL'),
                         ],
                       ),
                     ),
@@ -717,8 +667,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     if (_selectedCategory == 'all') return rooms;
     return rooms.where((r) {
       if (_selectedCategory == 'youtube') return r.currentMediaType == 'youtube';
-      if (_selectedCategory == 'twitch') return r.currentMediaType == 'twitch';
-      if (_selectedCategory == 'vimeo') return r.currentMediaType == 'vimeo';
       if (_selectedCategory == 'bstation') {
         return r.currentMediaType == 'bstation' || r.currentMediaType == 'bilibili';
       }
@@ -733,10 +681,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     switch (cat) {
       case 'youtube':
         return 'YouTube';
-      case 'twitch':
-        return 'Twitch';
-      case 'vimeo':
-        return 'Vimeo';
       case 'bstation':
         return 'Bstation';
       case 'google_drive':
@@ -750,7 +694,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     }
   }
 
-  Widget _buildFilterChip(String id, String label, IconData icon) {
+  Widget _buildFilterChip(String id, String label) {
     final isSelected = _selectedCategory == id;
     return Material(
       color: Colors.transparent,
@@ -764,7 +708,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         borderRadius: BorderRadius.circular(20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: isSelected
                 ? AppColors.primaryNeon.withValues(alpha: 0.2)
@@ -777,24 +721,15 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               width: isSelected ? 1.5 : 1,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected ? AppColors.primaryNeon : AppColors.textSecondary,
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : AppColors.textSecondary,
               ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

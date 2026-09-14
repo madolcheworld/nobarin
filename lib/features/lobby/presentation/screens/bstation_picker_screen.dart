@@ -24,9 +24,11 @@ class BstationPickerScreen extends StatelessWidget {
           'AMV & Musik',
         ],
         categoryPresets: BstationService.categoryPresets,
-        searchFunction: (query, _) async => BstationService.search(query),
-        hasPagination: false,
+        searchFunction: (query, page) async =>
+            BstationService.search(query, page: page),
+        hasPagination: true,
         searchHint: 'Cari anime, donghua, atau link Bstation...',
+        searchOnSubmitOnly: true,
       ),
     );
   }

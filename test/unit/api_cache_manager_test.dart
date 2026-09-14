@@ -65,12 +65,12 @@ void main() {
     test('invalidatePattern removes matching keys only', () {
       cache.set('yt_search_lofi', ['res1']);
       cache.set('yt_search_anime', ['res2']);
-      cache.set('vimeo_detail_123', 'vimeo');
+      cache.set('dm_detail_123', 'dailymotion');
 
       cache.invalidatePattern('yt_search_');
       expect(cache.get('yt_search_lofi'), isNull);
       expect(cache.get('yt_search_anime'), isNull);
-      expect(cache.get<String>('vimeo_detail_123'), equals('vimeo'));
+      expect(cache.get<String>('dm_detail_123'), equals('dailymotion'));
     });
 
     test('clear removes all entries', () {

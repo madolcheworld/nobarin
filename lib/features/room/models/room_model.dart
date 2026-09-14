@@ -56,15 +56,6 @@ class RoomModel {
       return 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
     }
 
-    // 2. Vimeo
-    final vimeoMatch = RegExp(
-      r'vimeo\.com\/(?:video\/)?([0-9]+)',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (vimeoMatch != null) {
-      final vimeoId = vimeoMatch.group(1);
-      return 'https://vumbnail.com/$vimeoId.jpg';
-    }
 
     // 3. Google Drive
     final driveMatch = RegExp(
@@ -84,18 +75,6 @@ class RoomModel {
     if (dmMatch != null) {
       final dmId = dmMatch.group(1);
       return 'https://www.dailymotion.com/thumbnail/video/$dmId';
-    }
-
-    // 5. Twitch
-    final twitchMatch = RegExp(
-      r'twitch\.tv\/([a-zA-Z0-9_]+)',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (twitchMatch != null) {
-      final channel = twitchMatch.group(1);
-      if (channel != null && channel.isNotEmpty && channel != 'directory') {
-        return 'https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel.toLowerCase()}-640x360.jpg';
-      }
     }
 
     // 6. Direct preset media fallbacks

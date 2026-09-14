@@ -6,30 +6,28 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../controllers/unified_player_controller.dart';
 
-/// Embedded player widget supporting Twitch and Vimeo media sources.
+/// Embedded player widget supporting Google Drive, Dailymotion, and Bstation media sources.
 /// Utilizes [WebViewController] and [WebViewWidget] on Android/iOS,
 /// with an informative placeholder/fallback on Desktop and Web.
-class TwitchVimeoEmbedPlayer extends StatefulWidget {
+class WebEmbedPlayer extends StatefulWidget {
   final UnifiedPlayerController player;
   final bool isPipMode;
 
-  const TwitchVimeoEmbedPlayer({
+  const WebEmbedPlayer({
     super.key,
     required this.player,
     this.isPipMode = false,
   });
 
   @override
-  State<TwitchVimeoEmbedPlayer> createState() => _TwitchVimeoEmbedPlayerState();
+  State<WebEmbedPlayer> createState() => _WebEmbedPlayerState();
 }
 
-class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
+class _WebEmbedPlayerState extends State<WebEmbedPlayer> {
   WebViewController? _webViewController;
   bool _isLoading = true;
   String _currentLoadedUrl = '';
 
-  bool get _isTwitch => widget.player.mediaType == 'twitch';
-  bool get _isVimeo => widget.player.mediaType == 'vimeo';
   bool get _isGoogleDrive => widget.player.mediaType == 'google_drive';
   bool get _isDailymotion => widget.player.mediaType == 'dailymotion';
   bool get _isBstation =>
@@ -53,7 +51,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   @override
-  void didUpdateWidget(TwitchVimeoEmbedPlayer oldWidget) {
+  void didUpdateWidget(WebEmbedPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.player != widget.player) {
       _setupControllerListeners();
@@ -80,107 +78,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
     if (_webViewController == null) return;
 
     try {
-      if (_isVimeo) {
-        switch (action) {
-          case 'play':
-            _webViewController!.runJavaScript('''
-              try {
-                if (window.vimeoPlayer) {
-                  window.vimeoPlayer.play();
-                } else {
-                  const f = document.querySelector("iframe");
-                  if (f) f.contentWindow.postMessage('{"method":"play"}', "*");
-                }
-              } catch(e){}
-            ''');
-            break;
-          case 'pause':
-            _webViewController!.runJavaScript('''
-              try {
-                if (window.vimeoPlayer) {
-                  window.vimeoPlayer.pause();
-                } else {
-                  const f = document.querySelector("iframe");
-                  if (f) f.contentWindow.postMessage('{"method":"pause"}', "*");
-                }
-              } catch(e){}
-            ''');
-            break;
-          case 'seek':
-            if (arg is num) {
-              _webViewController!.runJavaScript('''
-                try {
-                  if (window.vimeoPlayer) {
-                    window.vimeoPlayer.setCurrentTime($arg);
-                  } else {
-                    const f = document.querySelector("iframe");
-                    if (f) f.contentWindow.postMessage(JSON.stringify({method:"setCurrentTime", value: $arg}), "*");
-                  }
-                } catch(e){}
-              ''');
-            }
-            break;
-          case 'setMuted':
-            final bool muted = arg == true;
-            _webViewController!.runJavaScript('''
-              try {
-                if (window.vimeoPlayer) {
-                  window.vimeoPlayer.setMuted($muted);
-                } else {
-                  const f = document.querySelector("iframe");
-                  if (f) f.contentWindow.postMessage(JSON.stringify({method:"setVolume", value: ${muted ? 0 : 1}}), "*");
-                }
-              } catch(e){}
-            ''');
-            break;
-          case 'setVolume':
-            if (arg is num) {
-              _webViewController!.runJavaScript('''
-                try {
-                  if (window.vimeoPlayer) {
-                    window.vimeoPlayer.setVolume($arg);
-                  } else {
-                    const f = document.querySelector("iframe");
-                    if (f) f.contentWindow.postMessage(JSON.stringify({method:"setVolume", value: $arg}), "*");
-                  }
-                } catch(e){}
-              ''');
-            }
-            break;
-          case 'setQuality':
-            final q = arg?.toString() ?? 'auto';
-            _webViewController!.runJavaScript('''
-              try {
-                if (window.vimeoPlayer) {
-                  window.vimeoPlayer.setQuality('$q');
-                } else {
-                  const f = document.querySelector("iframe");
-                  if (f) f.contentWindow.postMessage(JSON.stringify({method:"setQuality", value: "$q"}), "*");
-                }
-              } catch(e){}
-            ''');
-            break;
-        }
-      } else if (_isTwitch) {
-        switch (action) {
-          case 'play':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage("{\\"event\\":\\"play\\"}", "*"); } catch(e){}',
-            );
-            break;
-          case 'pause':
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage("{\\"event\\":\\"pause\\"}", "*"); } catch(e){}',
-            );
-            break;
-          case 'setMuted':
-            final bool muted = arg == true;
-            _webViewController!.runJavaScript(
-              'try { const f = document.querySelector("iframe"); if(f) f.contentWindow.postMessage(JSON.stringify({event:"setMuted", value: $muted}), "*"); } catch(e){}',
-            );
-            break;
-        }
-      } else if (_isDailymotion) {
+      if (_isDailymotion) {
         switch (action) {
           case 'play':
             _webViewController!.runJavaScript('''
@@ -283,7 +181,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
         }
       }
     } catch (e) {
-      debugPrint('[TwitchVimeoEmbedPlayer] Command $action error: $e');
+      debugPrint('[WebEmbedPlayer] Command $action error: $e');
     }
   }
 
@@ -325,12 +223,11 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
               final uri = Uri.tryParse(request.url);
               if (uri != null) {
                 final scheme = uri.scheme.toLowerCase();
-                // Block external app schemes (intent:, bstar:, bilibili:, market:, vimeo:, dailymotion:)
+                // Block external app schemes (intent:, bstar:, bilibili:, market:, dailymotion:)
                 if (scheme == 'intent' ||
                     scheme == 'bstar' ||
                     scheme == 'bilibili' ||
                     scheme == 'market' ||
-                    scheme == 'vimeo' ||
                     scheme == 'dailymotion') {
                   return NavigationDecision.prevent;
                 }
@@ -353,16 +250,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
             },
             onWebResourceError: (error) {
               debugPrint(
-                  '[TwitchVimeoEmbedPlayer] Web error: ${error.description} (${error.errorCode})');
-              if (_isVimeo && (error.errorCode == -2 || error.errorCode == -6)) {
-                if (mounted && (error.url?.contains('vimeo') ?? false)) {
-                  widget.player.updateEmbedPlaybackState(
-                    isPlaying: false,
-                    error:
-                        'Akses ke Vimeo diblokir ISP/DNS. Gunakan Private DNS (dns.google) atau VPN untuk memutar.',
-                  );
-                }
-              }
+                  '[WebEmbedPlayer] Web error: ${error.description} (${error.errorCode})');
             },
           ),
         );
@@ -375,7 +263,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
       _webViewController = controller;
       _loadContent();
     } catch (e) {
-      debugPrint('[TwitchVimeoEmbedPlayer] Error initializing WebViewController: $e');
+      debugPrint('[WebEmbedPlayer] Error initializing WebViewController: $e');
     }
   }
 
@@ -518,28 +406,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
     }
 
     String embedSrc = '';
-    if (_isTwitch) {
-      final twitchMedia = UnifiedPlayerController.extractTwitchMedia(url);
-      if (twitchMedia != null) {
-        if (twitchMedia.isChannel) {
-          embedSrc =
-              'https://player.twitch.tv/?channel=${twitchMedia.id}&parent=localhost&autoplay=true&muted=false';
-        } else if (twitchMedia.isVideo) {
-          embedSrc =
-              'https://player.twitch.tv/?video=${twitchMedia.id}&parent=localhost&autoplay=true&muted=false';
-        } else if (twitchMedia.isClip) {
-          embedSrc =
-              'https://clips.twitch.tv/embed?clip=${twitchMedia.id}&parent=localhost&autoplay=true&muted=false';
-        }
-      } else {
-        embedSrc =
-            'https://player.twitch.tv/?channel=$url&parent=localhost&autoplay=true&muted=false';
-      }
-    } else if (_isVimeo) {
-      final vimeoId = UnifiedPlayerController.extractVimeoVideoId(url) ?? url;
-      embedSrc =
-          'https://player.vimeo.com/video/$vimeoId?autoplay=1&title=0&byline=0&portrait=0&badge=0&api=1&player_id=embedFrame&autopause=0&responsive=1';
-    } else if (_isGoogleDrive) {
+    if (_isGoogleDrive) {
       final driveId = UnifiedPlayerController.extractGoogleDriveFileId(url) ?? url;
       embedSrc = 'https://drive.google.com/file/d/$driveId/preview';
     } else if (_isDailymotion) {
@@ -556,13 +423,7 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
 
     final String baseUrl;
     final String referrerPolicy;
-    if (_isTwitch) {
-      baseUrl = 'https://localhost';
-      referrerPolicy = 'origin';
-    } else if (_isVimeo) {
-      baseUrl = 'https://player.vimeo.com';
-      referrerPolicy = 'origin';
-    } else if (_isDailymotion) {
+    if (_isDailymotion) {
       baseUrl = 'https://www.dailymotion.com';
       referrerPolicy = 'no-referrer-when-downgrade';
     } else if (_isGoogleDrive) {
@@ -576,10 +437,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
       referrerPolicy = 'no-referrer';
     }
 
-    final vimeoSdkScript = _isVimeo
-        ? '<script src="https://player.vimeo.com/api/player.js"></script>'
-        : '';
-
     final htmlContent = '''
 <!DOCTYPE html>
 <html>
@@ -587,7 +444,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="referrer" content="$referrerPolicy">
-  $vimeoSdkScript
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
@@ -610,67 +466,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
         window.FlutterEmbedChannel.postMessage(JSON.stringify(payload));
       }
     }
-
-    ${_isVimeo ? '''
-    function setupVimeo() {
-      var iframe = document.getElementById('embedFrame');
-      if (!iframe) return;
-
-      if (window.Vimeo && window.Vimeo.Player) {
-        try {
-          var player = new window.Vimeo.Player(iframe);
-          window.vimeoPlayer = player;
-          player.on('play', function() { notifyFlutter('play'); });
-          player.on('pause', function() { notifyFlutter('pause'); });
-          var lastReport = 0;
-          player.on('timeupdate', function(data) {
-            var now = Date.now();
-            if (now - lastReport >= 500) {
-              lastReport = now;
-              notifyFlutter('timeupdate', { currentTime: data.seconds, duration: data.duration });
-            }
-          });
-          player.on('ended', function() { notifyFlutter('ended'); });
-          player.ready().then(function() {
-            player.play().catch(function(){});
-          });
-          return;
-        } catch(e) {}
-      }
-
-      window.addEventListener('message', function(e) {
-        try {
-          var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-          if (!data) return;
-          if (data.event === 'ready') {
-            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"play"}', '*');
-            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"pause"}', '*');
-            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"timeupdate"}', '*');
-            iframe.contentWindow.postMessage('{"method":"addEventListener","value":"finish"}', '*');
-            iframe.contentWindow.postMessage('{"method":"play"}', '*');
-          } else if (data.event === 'play') {
-            notifyFlutter('play');
-          } else if (data.event === 'pause') {
-            notifyFlutter('pause');
-          } else if (data.event === 'timeupdate') {
-            notifyFlutter('timeupdate', {
-              currentTime: data.data ? data.data.seconds : 0,
-              duration: data.data ? data.data.duration : 0
-            });
-          } else if (data.event === 'finish') {
-            notifyFlutter('ended');
-          }
-        } catch(err) {}
-      });
-    }
-
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      setupVimeo();
-    } else {
-      window.addEventListener('DOMContentLoaded', setupVimeo);
-    }
-    setTimeout(setupVimeo, 1000);
-    ''' : ''}
 
     ${_isDailymotion ? '''
     window.addEventListener('message', function(e) {
@@ -712,20 +507,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
       } catch(err) {}
     });
     ''' : ''}
-
-    ${_isTwitch ? '''
-    window.addEventListener('message', function(e) {
-      try {
-        var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (!data) return;
-        if (data.namespace === 'twitch-embed') {
-          if (data.eventName === 'video.play') notifyFlutter('play');
-          if (data.eventName === 'video.pause') notifyFlutter('pause');
-          if (data.eventName === 'video.ended') notifyFlutter('ended');
-        }
-      } catch(err) {}
-    });
-    ''' : ''}
   </script>
 </body>
 </html>
@@ -735,8 +516,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   Color get _themeColor {
-    if (_isTwitch) return const Color(0xFF9146FF);
-    if (_isVimeo) return const Color(0xFF1AB7EA);
     if (_isGoogleDrive) return const Color(0xFF0F9D58);
     if (_isDailymotion) return const Color(0xFF0066DC);
     if (_isBstation) return const Color(0xFF00A1D6);
@@ -744,8 +523,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   String get _loadingText {
-    if (_isTwitch) return 'Memuat Siaran Twitch...';
-    if (_isVimeo) return 'Memuat Video Vimeo...';
     if (_isGoogleDrive) return 'Memuat Video Google Drive...';
     if (_isDailymotion) return 'Memuat Video Dailymotion...';
     if (_isBstation) return 'Memuat Video Bstation...';
@@ -753,8 +530,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   IconData get _sourceIcon {
-    if (_isTwitch) return Icons.live_tv_rounded;
-    if (_isVimeo) return Icons.video_collection_rounded;
     if (_isGoogleDrive) return Icons.cloud_queue_rounded;
     if (_isDailymotion) return Icons.play_circle_outline_rounded;
     if (_isBstation) return Icons.smart_display_rounded;
@@ -762,8 +537,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   String get _sourceTitle {
-    if (_isTwitch) return 'Twitch Live Stream';
-    if (_isVimeo) return 'Vimeo Video Stream';
     if (_isGoogleDrive) return 'Google Drive Video Stream';
     if (_isDailymotion) return 'Dailymotion Video Stream';
     if (_isBstation) return 'Bstation Anime & Video';
@@ -771,8 +544,6 @@ class _TwitchVimeoEmbedPlayerState extends State<TwitchVimeoEmbedPlayer> {
   }
 
   String get _connectedText {
-    if (_isTwitch) return 'Tersambung ke Twitch';
-    if (_isVimeo) return 'Tersambung ke Vimeo';
     if (_isGoogleDrive) return 'Tersambung ke Google Drive';
     if (_isDailymotion) return 'Tersambung ke Dailymotion';
     if (_isBstation) return 'Tersambung ke Bstation';

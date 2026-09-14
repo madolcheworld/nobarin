@@ -10,28 +10,20 @@ import '../../data/models/bstation_video_model.dart';
 import '../../data/models/playable_media_item.dart';
 import '../../data/models/dailymotion_video_model.dart';
 import '../../data/models/google_drive_video_model.dart';
-import '../../data/models/twitch_stream_model.dart';
-import '../../data/models/vimeo_video_model.dart';
 import '../../data/models/youtube_video_model.dart';
 import '../../data/bstation_service.dart';
 import '../../data/dailymotion_service.dart';
 import '../../data/google_drive_service.dart';
-import '../../data/twitch_service.dart';
-import '../../data/vimeo_service.dart';
 import '../../data/youtube_service.dart';
 import '../lobby_controller.dart';
 import '../screens/bstation_picker_screen.dart';
 import '../screens/dailymotion_picker_screen.dart';
 import '../screens/google_drive_picker_screen.dart';
-import '../screens/twitch_picker_screen.dart';
-import '../screens/vimeo_picker_screen.dart';
 import '../screens/youtube_picker_screen.dart';
 import '../../../p2p_streaming/models/local_video_file.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
   final YouTubeVideo? initialYouTubeVideo;
-  final TwitchStream? initialTwitchStream;
-  final VimeoVideo? initialVimeoVideo;
   final GoogleDriveVideo? initialGoogleDriveVideo;
   final DailymotionVideo? initialDailymotionVideo;
   final BstationVideo? initialBstationVideo;
@@ -43,8 +35,6 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   const CreateRoomDialog({
     super.key,
     this.initialYouTubeVideo,
-    this.initialTwitchStream,
-    this.initialVimeoVideo,
     this.initialGoogleDriveVideo,
     this.initialDailymotionVideo,
     this.initialBstationVideo,
@@ -58,8 +48,6 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
   static Future<RoomModel?> show(
     BuildContext context, {
     YouTubeVideo? initialYouTubeVideo,
-    TwitchStream? initialTwitchStream,
-    VimeoVideo? initialVimeoVideo,
     GoogleDriveVideo? initialGoogleDriveVideo,
     DailymotionVideo? initialDailymotionVideo,
     BstationVideo? initialBstationVideo,
@@ -73,8 +61,6 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => CreateRoomDialog(
         initialYouTubeVideo: initialYouTubeVideo,
-        initialTwitchStream: initialTwitchStream,
-        initialVimeoVideo: initialVimeoVideo,
         initialGoogleDriveVideo: initialGoogleDriveVideo,
         initialDailymotionVideo: initialDailymotionVideo,
         initialBstationVideo: initialBstationVideo,
@@ -97,12 +83,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   Timer? _urlDebounceTimer;
 
   YouTubeVideo? _selectedYouTubeVideo;
-  TwitchStream? _selectedTwitchStream;
-  VimeoVideo? _selectedVimeoVideo;
   GoogleDriveVideo? _selectedGoogleDriveVideo;
   DailymotionVideo? _selectedDailymotionVideo;
   BstationVideo? _selectedBstationVideo;
-  LocalVideoFile? _selectedLocalVideoFile;
   String _mediaType = 'direct_url';
   String _controlMode = 'host_only'; // 'host_only' or 'collaborative'
   bool _isPublic = true;
@@ -117,21 +100,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaUrlController.text = widget.initialYouTubeVideo!.url;
       _titleController.text = widget.initialYouTubeVideo!.title;
     } else if (widget.initialLocalVideoFile != null) {
-      _selectedLocalVideoFile = widget.initialLocalVideoFile;
       _mediaType = 'direct_url';
       _mediaUrlController.text =
           'p2p://${widget.initialLocalVideoFile!.id}?title=${Uri.encodeComponent(widget.initialLocalVideoFile!.name)}&path=${Uri.encodeComponent(widget.initialLocalVideoFile!.path ?? '')}';
       _titleController.text = 'Nobar: ${widget.initialLocalVideoFile!.name}';
-    } else if (widget.initialTwitchStream != null) {
-      _selectedTwitchStream = widget.initialTwitchStream;
-      _mediaType = 'twitch';
-      _mediaUrlController.text = widget.initialTwitchStream!.url;
-      _titleController.text = widget.initialTwitchStream!.title;
-    } else if (widget.initialVimeoVideo != null) {
-      _selectedVimeoVideo = widget.initialVimeoVideo;
-      _mediaType = 'vimeo';
-      _mediaUrlController.text = widget.initialVimeoVideo!.url;
-      _titleController.text = widget.initialVimeoVideo!.title;
     } else if (widget.initialGoogleDriveVideo != null) {
       _selectedGoogleDriveVideo = widget.initialGoogleDriveVideo;
       _mediaType = 'google_drive';
@@ -151,28 +123,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaType = widget.initialMediaType ?? 'direct_url';
       _mediaUrlController.text = widget.initialMediaUrl!;
       _titleController.text = 'Nonton Bareng';
-    } else if (widget.initialMediaType == 'twitch') {
-      _mediaType = 'twitch';
-      final twitchPresets = TwitchService.categoryPresets['Populer & Live'] ?? [];
-      if (twitchPresets.isNotEmpty) {
-        _selectedTwitchStream = twitchPresets[0];
-        _mediaUrlController.text = twitchPresets[0].url;
-        _titleController.text = twitchPresets[0].title;
-      } else {
-        _mediaUrlController.text = 'https://www.twitch.tv/monstercat';
-        _titleController.text = 'Nonton Twitch';
-      }
-    } else if (widget.initialMediaType == 'vimeo') {
-      _mediaType = 'vimeo';
-      final vimeoPresets = VimeoService.categoryPresets['Staff Picks'] ?? [];
-      if (vimeoPresets.isNotEmpty) {
-        _selectedVimeoVideo = vimeoPresets[0];
-        _mediaUrlController.text = vimeoPresets[0].url;
-        _titleController.text = vimeoPresets[0].title;
-      } else {
-        _mediaUrlController.text = 'https://vimeo.com/76979871';
-        _titleController.text = 'Nonton Vimeo';
-      }
     } else if (widget.initialMediaType == 'google_drive') {
       _mediaType = 'google_drive';
       final drivePresets = GoogleDriveService.categoryPresets['Film & Animasi Open Source'] ?? [];
@@ -218,8 +168,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     _urlDebounceTimer?.cancel();
     final text = _mediaUrlController.text.trim();
     final ytId = UnifiedPlayerController.extractYouTubeVideoId(text);
-    final twitchMedia = UnifiedPlayerController.extractTwitchMedia(text);
-    final vimeoId = UnifiedPlayerController.extractVimeoVideoId(text);
     final driveId = GoogleDriveService.extractFileId(text);
     final dmId = UnifiedPlayerController.extractDailymotionVideoId(text);
     final bsId = UnifiedPlayerController.extractBstationVideoId(text);
@@ -228,8 +176,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       if (_mediaType != 'youtube') {
         setState(() {
           _mediaType = 'youtube';
-          _selectedTwitchStream = null;
-          _selectedVimeoVideo = null;
           _selectedGoogleDriveVideo = null;
           _selectedDailymotionVideo = null;
           _selectedBstationVideo = null;
@@ -242,53 +188,11 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           });
         });
       }
-    } else if (twitchMedia != null) {
-      if (_mediaType != 'twitch') {
-        setState(() {
-          _mediaType = 'twitch';
-          _selectedYouTubeVideo = null;
-          _selectedVimeoVideo = null;
-          _selectedGoogleDriveVideo = null;
-          _selectedDailymotionVideo = null;
-          _selectedBstationVideo = null;
-        });
-      }
-      final channel = twitchMedia.id;
-      if (_selectedTwitchStream == null ||
-          _selectedTwitchStream!.id.toLowerCase() != channel.toLowerCase()) {
-        setState(() {
-          _selectedTwitchStream = TwitchStream.fromId(
-            id: channel,
-            title: 'Twitch Channel ($channel)',
-            channelTitle: channel,
-          );
-        });
-      }
-    } else if (vimeoId != null) {
-      if (_mediaType != 'vimeo') {
-        setState(() {
-          _mediaType = 'vimeo';
-          _selectedYouTubeVideo = null;
-          _selectedTwitchStream = null;
-          _selectedGoogleDriveVideo = null;
-          _selectedDailymotionVideo = null;
-          _selectedBstationVideo = null;
-        });
-      }
-      if (_selectedVimeoVideo == null || _selectedVimeoVideo!.id != vimeoId) {
-        _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
-          VimeoService.fetchVideoDetails(vimeoId).then((v) {
-            if (mounted) setState(() => _selectedVimeoVideo = v);
-          });
-        });
-      }
     } else if (driveId != null) {
       if (_mediaType != 'google_drive') {
         setState(() {
           _mediaType = 'google_drive';
           _selectedYouTubeVideo = null;
-          _selectedTwitchStream = null;
-          _selectedVimeoVideo = null;
           _selectedDailymotionVideo = null;
           _selectedBstationVideo = null;
         });
@@ -314,8 +218,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         setState(() {
           _mediaType = 'dailymotion';
           _selectedYouTubeVideo = null;
-          _selectedTwitchStream = null;
-          _selectedVimeoVideo = null;
           _selectedGoogleDriveVideo = null;
           _selectedBstationVideo = null;
         });
@@ -341,8 +243,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         setState(() {
           _mediaType = 'bstation';
           _selectedYouTubeVideo = null;
-          _selectedTwitchStream = null;
-          _selectedVimeoVideo = null;
           _selectedGoogleDriveVideo = null;
           _selectedDailymotionVideo = null;
         });
@@ -370,8 +270,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       setState(() {
         _mediaType = 'direct_url';
         _selectedYouTubeVideo = null;
-        _selectedTwitchStream = null;
-        _selectedVimeoVideo = null;
         _selectedGoogleDriveVideo = null;
         _selectedDailymotionVideo = null;
         _selectedBstationVideo = null;
@@ -392,8 +290,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   void _applySelectedMedia(PlayableMediaItem item) {
     setState(() {
       _selectedYouTubeVideo = item is YouTubeVideo ? item : null;
-      _selectedTwitchStream = item is TwitchStream ? item : null;
-      _selectedVimeoVideo = item is VimeoVideo ? item : null;
       _selectedGoogleDriveVideo = item is GoogleDriveVideo ? item : null;
       _selectedDailymotionVideo = item is DailymotionVideo ? item : null;
       _selectedBstationVideo = item is BstationVideo ? item : null;
@@ -414,12 +310,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
   Future<void> _pickAnotherYouTubeVideo() =>
       _pickMedia<YouTubeVideo>(const YouTubePickerScreen());
-
-  Future<void> _pickAnotherTwitchStream() =>
-      _pickMedia<TwitchStream>(const TwitchPickerScreen());
-
-  Future<void> _pickAnotherVimeoVideo() =>
-      _pickMedia<VimeoVideo>(const VimeoPickerScreen());
 
   Future<void> _pickAnotherGoogleDriveVideo() =>
       _pickMedia<GoogleDriveVideo>(const GoogleDrivePickerScreen());
@@ -452,10 +342,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     if (_selectedYouTubeVideo != null) {
       mediaThumbnail = _selectedYouTubeVideo!.thumbnailUrl;
-    } else if (_selectedTwitchStream != null) {
-      mediaThumbnail = _selectedTwitchStream!.thumbnailUrl;
-    } else if (_selectedVimeoVideo != null) {
-      mediaThumbnail = _selectedVimeoVideo!.thumbnailUrl;
     } else if (_selectedGoogleDriveVideo != null) {
       mediaThumbnail = _selectedGoogleDriveVideo!.thumbnailUrl;
     } else if (_selectedDailymotionVideo != null) {
@@ -557,25 +443,13 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                     ),
                     const SizedBox(width: 12),
                     const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Buat Room Nonton',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            'Atur detail room sebelum mulai',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'Buat Room Nonton',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -772,480 +646,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                           const SizedBox(height: 14),
                         ],
 
-                        // Twitch options
-                        if (_mediaType == 'twitch') ...[
-                          // Selected Twitch Stream Preview Card
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceElevated,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFF9146FF).withValues(alpha: 0.5),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Stack(
-                                    children: [
-                                      Image.network(
-                                        _selectedTwitchStream?.thumbnailUrl ??
-                                            'https://static-cdn.jtvnw.net/previews-ttv/live_user_${_selectedTwitchStream?.id ?? "monstercat"}-640x360.jpg',
-                                        width: 106,
-                                        height: 60,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) => Container(
-                                          width: 106,
-                                          height: 60,
-                                          color: Colors.black26,
-                                          child: const Icon(
-                                            Icons.live_tv_rounded,
-                                            color: Color(0xFF9146FF),
-                                            size: 28,
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: 3,
-                                        left: 3,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF9146FF),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                          ),
-                                          child: const Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.circle,
-                                                  size: 6, color: Colors.white),
-                                              SizedBox(width: 2),
-                                              Text(
-                                                'Twitch',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        bottom: 3,
-                                        right: 3,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFE91916),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                          ),
-                                          child: const Text(
-                                            'LIVE',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 8.5,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _selectedTwitchStream?.title ??
-                                            'Twitch Live Stream',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimary,
-                                          height: 1.25,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              _selectedTwitchStream?.channelTitle ??
-                                                  'Twitch Channel',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.verified,
-                                              size: 11,
-                                              color: Color(0xFF9146FF)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: _pickAnotherTwitchStream,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 9, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF9146FF).withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF9146FF).withValues(alpha: 0.4)),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.swap_horiz_rounded,
-                                            size: 15,
-                                            color: Color(0xFF9146FF)),
-                                        SizedBox(width: 3),
-                                        Text(
-                                          'Ganti',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.textPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'Link Channel / Video / Clip Twitch *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://twitch.tv/monstercat',
-                              prefixIcon: Icon(
-                                Icons.videogame_asset_rounded,
-                                color: Color(0xFF9146FF),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL Twitch tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'twitch')
-                                .map((media) {
-                              return ActionChip(
-                                avatar: const Icon(
-                                  Icons.videogame_asset_rounded,
-                                  size: 14,
-                                  color: Color(0xFF9146FF),
-                                ),
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                    final twitchPresets = TwitchService.categoryPresets['Populer & Live'] ?? [];
-                                    final matched = twitchPresets.where((s) => s.url == media['url'] || s.id == media['title']?.toLowerCase());
-                                    if (matched.isNotEmpty) {
-                                      _selectedTwitchStream = matched.first;
-                                    } else {
-                                      final channel = UnifiedPlayerController.extractTwitchMedia(media['url']!)?.id;
-                                      if (channel != null) {
-                                        _selectedTwitchStream = TwitchStream.fromId(
-                                          id: channel,
-                                          title: media['title'] ?? channel,
-                                          channelTitle: channel,
-                                        );
-                                      }
-                                    }
-                                    if (_titleController.text.isEmpty ||
-                                        _titleController.text == 'Nonton Bareng' ||
-                                        _titleController.text == 'Nonton Twitch') {
-                                      _titleController.text = 'Nonton ${media['title']}';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-
-                        // Vimeo options
-                        if (_mediaType == 'vimeo') ...[
-                          // Selected Vimeo Video Preview Card
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceElevated,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFF1AB7EA).withValues(alpha: 0.5),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Stack(
-                                    children: [
-                                      Image.network(
-                                        _selectedVimeoVideo?.thumbnailUrl ??
-                                            'https://vumbnail.com/${UnifiedPlayerController.extractVimeoVideoId(_mediaUrlController.text) ?? "76979871"}.jpg',
-                                        width: 106,
-                                        height: 60,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) => Container(
-                                          width: 106,
-                                          height: 60,
-                                          color: Colors.black26,
-                                          child: const Icon(
-                                            Icons.video_collection_rounded,
-                                            color: Color(0xFF1AB7EA),
-                                            size: 28,
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: 3,
-                                        left: 3,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF1AB7EA),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                          ),
-                                          child: const Text(
-                                            'Vimeo',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 8.5,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      if (_selectedVimeoVideo != null &&
-                                          _selectedVimeoVideo!.duration.isNotEmpty)
-                                        Positioned(
-                                          bottom: 3,
-                                          right: 3,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 4, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.8),
-                                              borderRadius: BorderRadius.circular(3),
-                                            ),
-                                            child: Text(
-                                              _selectedVimeoVideo!.duration,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _selectedVimeoVideo?.title ??
-                                            'Vimeo Video',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimary,
-                                          height: 1.25,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              _selectedVimeoVideo?.channelTitle ??
-                                                  'Vimeo Creator',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.verified,
-                                              size: 11,
-                                              color: Color(0xFF1AB7EA)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: _pickAnotherVimeoVideo,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 9, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1AB7EA).withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF1AB7EA).withValues(alpha: 0.4)),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.swap_horiz_rounded,
-                                            size: 15,
-                                            color: Color(0xFF1AB7EA)),
-                                        SizedBox(width: 3),
-                                        Text(
-                                          'Ganti',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.textPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'Link Video Vimeo *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://vimeo.com/76979871',
-                              prefixIcon: Icon(
-                                Icons.ondemand_video_rounded,
-                                color: Color(0xFF1AB7EA),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL Vimeo tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'vimeo')
-                                .map((media) {
-                              return ActionChip(
-                                avatar: const Icon(
-                                  Icons.ondemand_video_rounded,
-                                  size: 14,
-                                  color: Color(0xFF1AB7EA),
-                                ),
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                    final vimeoPresets = VimeoService.categoryPresets['Staff Picks'] ?? [];
-                                    final matched = vimeoPresets.where((v) => v.url == media['url'] || v.title == media['title']);
-                                    if (matched.isNotEmpty) {
-                                      _selectedVimeoVideo = matched.first;
-                                    } else {
-                                      final id = UnifiedPlayerController.extractVimeoVideoId(media['url']!);
-                                      if (id != null) {
-                                        _selectedVimeoVideo = VimeoVideo(
-                                          id: id,
-                                          title: media['title'] ?? 'Vimeo Video ($id)',
-                                          channelTitle: 'Vimeo Creator',
-                                          thumbnailUrl: 'https://vumbnail.com/$id.jpg',
-                                          duration: 'HD',
-                                        );
-                                      }
-                                    }
-                                    if (_titleController.text.isEmpty ||
-                                        _titleController.text == 'Nonton Bareng' ||
-                                        _titleController.text == 'Nonton Vimeo') {
-                                      _titleController.text = 'Nonton ${media['title']}';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
 
                         // Google Drive options (if Google Drive)
                         if (_mediaType == 'google_drive') ...[
@@ -2155,18 +1555,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                           ],
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 5, left: 4),
-                        child: Text(
-                          _controlMode == 'host_only'
-                              ? '🔒 Hanya host yang dapat memutar, menjeda, dan mengatur waktu.'
-                              : '🤝 Semua peserta di dalam room bebas mengontrol video.',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
 
                       const SizedBox(height: 14),
 
@@ -2202,27 +1590,13 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isPublic ? 'Room Publik' : 'Room Privat',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  Text(
-                                    _isPublic
-                                        ? 'Dapat ditemukan di lobby'
-                                        : 'Hanya via kode room',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                _isPublic ? 'Room Publik' : 'Room Privat',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ),
                             Switch(
@@ -2305,19 +1679,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.rocket_launch_rounded, size: 18),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Mulai Room Nonton',
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                            : const Text(
+                                'Mulai Room Nonton',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                       ),
                     ),

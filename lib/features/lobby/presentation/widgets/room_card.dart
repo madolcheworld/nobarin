@@ -21,18 +21,6 @@ class RoomCard extends StatelessWidget {
           icon: Icons.play_circle_filled_rounded,
           color: AppColors.youtubeRed,
         );
-      case 'twitch':
-        return (
-          label: 'Twitch',
-          icon: Icons.live_tv_rounded,
-          color: AppColors.twitchPurple,
-        );
-      case 'vimeo':
-        return (
-          label: 'Vimeo',
-          icon: Icons.video_collection_rounded,
-          color: AppColors.vimeoBlue,
-        );
       case 'bstation':
       case 'bilibili':
         return (
@@ -338,31 +326,6 @@ class RoomCard extends StatelessWidget {
             ),
           ),
 
-          // 4. Center Play Button Accent
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
 
           // 5. Top-Left: Media Platform Badge
           Positioned(

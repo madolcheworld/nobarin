@@ -276,10 +276,6 @@ class VideoQualitySheet extends StatelessWidget {
     switch (type) {
       case 'youtube':
         return AppColors.youtubeRed;
-      case 'twitch':
-        return AppColors.twitchPurple;
-      case 'vimeo':
-        return AppColors.vimeoBlue;
       case 'dailymotion':
         return AppColors.dailymotionBlue;
       case 'bstation':
@@ -296,10 +292,6 @@ class VideoQualitySheet extends StatelessWidget {
     switch (type) {
       case 'youtube':
         return 'YouTube';
-      case 'twitch':
-        return 'Twitch';
-      case 'vimeo':
-        return 'Vimeo';
       case 'dailymotion':
         return 'Dailymotion';
       case 'bstation':

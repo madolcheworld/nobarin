@@ -91,26 +91,6 @@ class ApiConstants {
       'url': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     },
     {
-      'title': 'Monstercat 24/7 Live (Twitch)',
-      'type': 'twitch',
-      'url': 'https://www.twitch.tv/monstercat',
-    },
-    {
-      'title': 'Riot Games Channel (Twitch)',
-      'type': 'twitch',
-      'url': 'https://www.twitch.tv/riotgames',
-    },
-    {
-      'title': 'Tears of Steel Sci-Fi (Vimeo)',
-      'type': 'vimeo',
-      'url': 'https://vimeo.com/76979871',
-    },
-    {
-      'title': 'Big Buck Bunny (Vimeo)',
-      'type': 'vimeo',
-      'url': 'https://vimeo.com/1084537',
-    },
-    {
       'title': 'Big Buck Bunny (Google Drive)',
       'type': 'google_drive',
       'url': 'https://drive.google.com/file/d/1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8/preview',

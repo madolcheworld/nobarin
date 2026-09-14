@@ -6,14 +6,10 @@ import '../../../chat/controllers/chat_controller.dart';
 import '../../../lobby/data/models/bstation_video_model.dart';
 import '../../../lobby/data/models/dailymotion_video_model.dart';
 import '../../../lobby/data/models/google_drive_video_model.dart';
-import '../../../lobby/data/models/twitch_stream_model.dart';
-import '../../../lobby/data/models/vimeo_video_model.dart';
 import '../../../lobby/data/models/youtube_video_model.dart';
 import '../../../lobby/presentation/screens/bstation_picker_screen.dart';
 import '../../../lobby/presentation/screens/dailymotion_picker_screen.dart';
 import '../../../lobby/presentation/screens/google_drive_picker_screen.dart';
-import '../../../lobby/presentation/screens/twitch_picker_screen.dart';
-import '../../../lobby/presentation/screens/vimeo_picker_screen.dart';
 import '../../../lobby/presentation/screens/youtube_picker_screen.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/sync_controller.dart';
@@ -71,7 +67,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   String? _thumbnailUrl;
-  String _selectedType = 'youtube'; // 'youtube', 'twitch', 'vimeo', 'direct_url', 'local_p2p'
+  String _selectedType = 'youtube'; // 'youtube', 'direct_url', 'local_p2p'
   LocalVideoFile? _selectedLocalFile;
   bool _showPresets = false;
 
@@ -321,22 +317,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                           isSelected: _selectedType == 'youtube',
                           onTap: () => setState(() => _selectedType = 'youtube'),
                         ),
-                        const SizedBox(width: 4),
-                        _PillTabItem(
-                          icon: Icons.live_tv_rounded,
-                          iconColor: const Color(0xFF9146FF),
-                          label: 'Twitch',
-                          isSelected: _selectedType == 'twitch',
-                          onTap: () => setState(() => _selectedType = 'twitch'),
-                        ),
-                        const SizedBox(width: 4),
-                        _PillTabItem(
-                          icon: Icons.video_collection_rounded,
-                          iconColor: const Color(0xFF1AB7EA),
-                          label: 'Vimeo',
-                          isSelected: _selectedType == 'vimeo',
-                          onTap: () => setState(() => _selectedType = 'vimeo'),
-                        ),
+
                         const SizedBox(width: 4),
                         _PillTabItem(
                           icon: Icons.play_circle_filled_rounded,
@@ -578,256 +559,6 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                       ),
                     ),
                   ],
-                ] else if (_selectedType == 'twitch') ...[
-                  // Twitch Browse / Search Action Card
-                  Material(
-                    color: const Color(0xFF9146FF).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
-                        final stream = await Navigator.of(context).push<TwitchStream>(
-                          MaterialPageRoute(
-                            builder: (_) => const TwitchPickerScreen(),
-                          ),
-                        );
-                        if (stream != null && mounted) {
-                          setState(() {
-                            _urlController.text = stream.url;
-                            _titleController.text = stream.title;
-                            _thumbnailUrl = stream.thumbnailUrl;
-                            _selectedType = 'twitch';
-                          });
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF9146FF).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFF9146FF),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Jelajahi Stream Twitch',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Pilih siaran live, musik 24/7, esports, gaming',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Twitch URL Input
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Tautan Channel atau Video Twitch',
-                      hintText: 'https://twitch.tv/monstercat atau /videos/...',
-                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                      prefixIcon: const Icon(
-                        Icons.live_tv_rounded,
-                        color: Color(0xFF9146FF),
-                        size: 18,
-                      ),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded, size: 14),
-                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFF9146FF),
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Siaran (Opsional)',
-                      hintText: 'Contoh: Nonton Bareng Streamer Favorit',
-                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                ] else if (_selectedType == 'vimeo') ...[
-                  // Vimeo Browse / Search Action Card
-                  Material(
-                    color: const Color(0xFF1AB7EA).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
-                        final video = await Navigator.of(context).push<VimeoVideo>(
-                          MaterialPageRoute(
-                            builder: (_) => const VimeoPickerScreen(),
-                          ),
-                        );
-                        if (video != null && mounted) {
-                          setState(() {
-                            _urlController.text = video.url;
-                            _titleController.text = video.title;
-                            _thumbnailUrl = video.thumbnailUrl;
-                            _selectedType = 'vimeo';
-                          });
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1AB7EA).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFF1AB7EA),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Jelajahi Video Vimeo',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Pilih Staff Picks, film pendek, animasi 3D',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Vimeo URL Input
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Tautan Video Vimeo',
-                      hintText: 'https://vimeo.com/76979871',
-                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                      prefixIcon: const Icon(
-                        Icons.video_collection_rounded,
-                        color: Color(0xFF1AB7EA),
-                        size: 18,
-                      ),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded, size: 14),
-                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFF1AB7EA),
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Tears of Steel 4K',
-                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
                 ] else if (_selectedType == 'google_drive') ...[
                   // Google Drive Browse / Search Action Card
                   Material(
@@ -1475,31 +1206,23 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                               avatar: Icon(
                                 m['type'] == 'youtube'
                                     ? Icons.play_arrow_rounded
-                                    : (m['type'] == 'twitch'
-                                        ? Icons.live_tv_rounded
-                                        : (m['type'] == 'vimeo'
-                                            ? Icons.video_collection_rounded
-                                            : (m['type'] == 'google_drive'
-                                                ? Icons.cloud_queue_rounded
-                                                : (m['type'] == 'dailymotion'
-                                                    ? Icons.play_circle_filled_rounded
-                                                    : (m['type'] == 'bstation'
-                                                        ? Icons.smart_display_rounded
-                                                        : Icons.movie_rounded))))),
+                                    : (m['type'] == 'google_drive'
+                                        ? Icons.cloud_queue_rounded
+                                        : (m['type'] == 'dailymotion'
+                                            ? Icons.play_circle_filled_rounded
+                                            : (m['type'] == 'bstation'
+                                                ? Icons.smart_display_rounded
+                                                : Icons.movie_rounded))),
                                 size: 14,
                                 color: m['type'] == 'youtube'
                                     ? const Color(0xFFFF0000)
-                                    : (m['type'] == 'twitch'
-                                        ? const Color(0xFF9146FF)
-                                        : (m['type'] == 'vimeo'
-                                            ? const Color(0xFF1AB7EA)
-                                            : (m['type'] == 'google_drive'
-                                                ? const Color(0xFF0F9D58)
-                                                : (m['type'] == 'dailymotion'
-                                                    ? const Color(0xFF0066DC)
-                                                    : (m['type'] == 'bstation'
-                                                        ? const Color(0xFF00A1D6)
-                                                        : AppColors.secondaryNeon))))),
+                                    : (m['type'] == 'google_drive'
+                                        ? const Color(0xFF0F9D58)
+                                        : (m['type'] == 'dailymotion'
+                                            ? const Color(0xFF0066DC)
+                                            : (m['type'] == 'bstation'
+                                                ? const Color(0xFF00A1D6)
+                                                : AppColors.secondaryNeon))),
                               ),
                               label: Text(
                                 m['title']!,

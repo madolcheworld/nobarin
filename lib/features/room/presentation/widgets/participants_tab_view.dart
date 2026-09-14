@@ -73,119 +73,6 @@ class ParticipantsTabView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       children: [
-        // Voice VoIP Status Banner if available
-        if (voiceController != null)
-          ListenableBuilder(
-            listenable: voiceController!,
-            builder: (context, _) {
-              final status = voiceController!.status;
-              final isSpeaking = voiceController!.isLocalSpeaking;
-              final activeSpeakerCount = voiceController!.activeSpeakerIds.length +
-                  (isSpeaking ? 1 : 0);
-
-              Color dotColor = AppColors.accentGreen;
-              String statusTitle = 'Voice Chat Terhubung';
-              if (status == VoiceStatus.connecting) {
-                dotColor = AppColors.accentYellow;
-                statusTitle = 'Menghubungkan ke Voice...';
-              } else if (status == VoiceStatus.error) {
-                dotColor = AppColors.accentRed;
-                statusTitle = 'Koneksi Voice Gagal';
-              } else if (status == VoiceStatus.disconnected) {
-                dotColor = AppColors.textMuted;
-                statusTitle = 'Voice Chat Nonaktif';
-              }
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: dotColor.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: dotColor.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dotColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: dotColor.withValues(alpha: 0.6),
-                            blurRadius: 6,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            statusTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: dotColor,
-                            ),
-                          ),
-                          if (status == VoiceStatus.connected)
-                            Text(
-                              activeSpeakerCount > 0
-                                  ? '$activeSpeakerCount peserta sedang berbicara'
-                                  : 'Hening (tidak ada yang berbicara)',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (status == VoiceStatus.error)
-                      TextButton.icon(
-                        onPressed: () {
-                          AppHaptics.selection();
-                          voiceController!.reconnect();
-                        },
-                        icon: const Icon(Icons.refresh_rounded, size: 14),
-                        label: const Text('Coba Lagi', style: TextStyle(fontSize: 11)),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.accentRed,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-        // Section Title
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Row(
-            children: [
-              const Icon(Icons.people_alt_rounded,
-                  size: 15, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                'PESERTA AKTIF (${participants.length})',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-
         // Participants List Items
         ...sortedList.map((user) {
           final isMe = (currentUserId != null && user.id == currentUserId) ||
@@ -265,76 +152,74 @@ class ParticipantsTabView extends StatelessWidget {
                   ],
                 ],
               ),
-              subtitle: Row(
-                children: [
-                  if (isHost)
-                    Container(
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentYellow.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: AppColors.accentYellow.withValues(alpha: 0.5),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('👑', style: TextStyle(fontSize: 10)),
-                          SizedBox(width: 3),
-                          Text(
-                            'Host',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.accentYellow,
+              subtitle: (isHost || isCoHost)
+                  ? Row(
+                      children: [
+                        if (isHost)
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.accentYellow.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color:
+                                    AppColors.accentYellow.withValues(alpha: 0.5),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('👑', style: TextStyle(fontSize: 10)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Host',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.accentYellow,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (isCoHost)
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.secondaryNeon.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: AppColors.secondaryNeon
+                                    .withValues(alpha: 0.5),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('⭐', style: TextStyle(fontSize: 10)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Co-Host',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.secondaryNeon,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     )
-                  else if (isCoHost)
-                    Container(
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondaryNeon.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: AppColors.secondaryNeon.withValues(alpha: 0.5),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('⭐', style: TextStyle(fontSize: 10)),
-                          SizedBox(width: 3),
-                          Text(
-                            'Co-Host',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.secondaryNeon,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    const Text(
-                      'Peserta',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                ],
-              ),
+                  : null,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

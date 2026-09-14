@@ -74,8 +74,8 @@ void main() {
       expect(ytPresets[6].id, 'tiny');
     });
 
-    test('Vimeo and Dailymotion preset qualities', () {
-      final vimeoPresets = [
+    test('Dailymotion preset qualities', () {
+      final dmPresets = [
         const VideoQuality.auto(),
         const VideoQuality(id: '1080p', label: '1080p (Full HD)', height: 1080),
         const VideoQuality(id: '720p', label: '720p (HD)', height: 720),
@@ -83,10 +83,10 @@ void main() {
         const VideoQuality(id: '360p', label: '360p (Hemat Kuota)', height: 360),
       ];
 
-      expect(vimeoPresets.any((q) => q.isAuto), isTrue);
-      expect(vimeoPresets.any((q) => q.id == '1080p'), isTrue);
-      expect(vimeoPresets.any((q) => q.id == '720p'), isTrue);
-      expect(vimeoPresets.any((q) => q.id == '360p'), isTrue);
+      expect(dmPresets.any((q) => q.isAuto), isTrue);
+      expect(dmPresets.any((q) => q.id == '1080p'), isTrue);
+      expect(dmPresets.any((q) => q.id == '720p'), isTrue);
+      expect(dmPresets.any((q) => q.id == '360p'), isTrue);
     });
   });
 }

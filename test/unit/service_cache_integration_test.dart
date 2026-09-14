@@ -5,7 +5,6 @@ import 'package:http/testing.dart';
 import 'package:nobarin/core/network/api_cache_manager.dart';
 import 'package:nobarin/core/network/app_http_client.dart';
 import 'package:nobarin/features/lobby/data/dailymotion_service.dart';
-import 'package:nobarin/features/lobby/data/vimeo_service.dart';
 import 'package:nobarin/features/lobby/data/youtube_service.dart';
 
 void main() {
@@ -47,31 +46,6 @@ void main() {
       expect(video2.title, equals('Test Video Cached'));
     });
 
-    test('VimeoService.fetchVideoDetails caches response and skips second network call', () async {
-      int httpCalls = 0;
-      final mock = MockClient((request) async {
-        httpCalls++;
-        return http.Response(
-          jsonEncode({
-            'title': 'Vimeo Test Cached',
-            'author_name': 'Vimeo Creator',
-            'thumbnail_url': 'https://vumbnail.com/76979871.jpg',
-            'duration': 120,
-          }),
-          200,
-        );
-      });
-
-      AppHttpClient.setMockClient(mock);
-
-      final v1 = await VimeoService.fetchVideoDetails('76979871');
-      expect(httpCalls, equals(1));
-      expect(v1.title, equals('Vimeo Test Cached'));
-
-      final v2 = await VimeoService.fetchVideoDetails('76979871');
-      expect(httpCalls, equals(1));
-      expect(v2.title, equals('Vimeo Test Cached'));
-    });
 
     test('DailymotionService.fetchVideoDetails caches response and skips second network call', () async {
       int httpCalls = 0;

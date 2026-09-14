@@ -15,6 +15,7 @@ class GenericMediaPickerConfig<T extends PlayableMediaItem> {
   final Future<List<T>> Function(String query, int page) searchFunction;
   final bool hasPagination;
   final String searchHint;
+  final bool searchOnSubmitOnly;
 
   const GenericMediaPickerConfig({
     required this.title,
@@ -26,6 +27,7 @@ class GenericMediaPickerConfig<T extends PlayableMediaItem> {
     required this.searchFunction,
     this.hasPagination = false,
     required this.searchHint,
+    this.searchOnSubmitOnly = false,
   });
 }
 
@@ -102,6 +104,15 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
   }
 
   void _onSearchChanged(String query) {
+    if (widget.config.searchOnSubmitOnly) {
+      if (query.trim().isEmpty) {
+        _loadCategory(_selectedCategory);
+      } else {
+        setState(() {});
+      }
+      return;
+    }
+
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 350), () {
       _performSearch(query);
@@ -109,6 +120,8 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
   }
 
   Future<void> _performSearch(String query) async {
+    FocusScope.of(context).unfocus();
+
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) {
       _loadCategory(_selectedCategory);
@@ -229,16 +242,36 @@ class _GenericMediaPickerScreenState<T extends PlayableMediaItem>
                   color: isDark ? Colors.white38 : Colors.black38,
                   fontSize: 14,
                 ),
-                prefixIcon: Icon(Icons.search, color: brandColor, size: 22),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
+                prefixIcon: IconButton(
+                  icon: Icon(Icons.search, color: brandColor, size: 22),
+                  tooltip: 'Cari',
+                  onPressed: () => _performSearch(_searchController.text),
+                ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_searchController.text.isNotEmpty)
+                      IconButton(
                         icon: const Icon(Icons.clear, size: 18),
+                        tooltip: 'Hapus',
                         onPressed: () {
                           _searchController.clear();
                           _loadCategory(_selectedCategory);
                         },
-                      )
-                    : null,
+                      ),
+                    if (widget.config.searchOnSubmitOnly &&
+                        _searchController.text.trim().isNotEmpty)
+                      IconButton(
+                        icon: Icon(
+                          Icons.arrow_forward_rounded,
+                          color: brandColor,
+                          size: 20,
+                        ),
+                        tooltip: 'Cari sekarang',
+                        onPressed: () => _performSearch(_searchController.text),
+                      ),
+                  ],
+                ),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 filled: true,

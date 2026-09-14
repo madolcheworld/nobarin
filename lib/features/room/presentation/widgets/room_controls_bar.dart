@@ -418,16 +418,6 @@ class RoomControlsBar extends StatelessWidget {
         color = const Color(0xFFFF0000);
         label = 'YouTube';
         break;
-      case 'twitch':
-        icon = Icons.live_tv_rounded;
-        color = const Color(0xFF9146FF);
-        label = 'Twitch';
-        break;
-      case 'vimeo':
-        icon = Icons.video_collection_rounded;
-        color = const Color(0xFF1AB7EA);
-        label = 'Vimeo';
-        break;
       case 'google_drive':
         icon = Icons.cloud_outlined;
         color = const Color(0xFF34A853);
