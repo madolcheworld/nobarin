@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../chat/controllers/chat_controller.dart';
 import '../../../lobby/data/models/bstation_video_model.dart';
@@ -67,59 +65,33 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   String? _thumbnailUrl;
-  String _selectedType = 'youtube'; // 'youtube', 'direct_url', 'local_p2p'
+  String _selectedType = 'youtube'; // 'youtube', 'dailymotion', 'bstation', 'google_drive', 'local_p2p'
   LocalVideoFile? _selectedLocalFile;
-  bool _showPresets = false;
 
   @override
   void initState() {
     super.initState();
     if (!widget.isAddingToQueueInitial) {
       _urlController.text = widget.syncController.player.mediaUrl;
-      _selectedType = widget.syncController.player.mediaType;
+      final currentType = widget.syncController.player.mediaType;
+      _selectedType = (currentType == 'direct_url' && !_urlController.text.startsWith('p2p://'))
+          ? 'youtube'
+          : currentType;
+      final detected = UnifiedPlayerController.detectMediaFromUrl(_urlController.text);
+      if (detected != null) {
+        _thumbnailUrl = detected.thumbnailUrl;
+        _titleController.text = detected.title;
+      }
     } else {
       _selectedType = 'youtube';
-    }
-    _urlController.addListener(_onUrlChanged);
-  }
-
-  void _onUrlChanged() {
-    final text = _urlController.text.trim();
-    final detected = UnifiedPlayerController.detectMediaFromUrl(text);
-
-    if (detected != null) {
-      setState(() {
-        _selectedType = detected.mediaType;
-        _thumbnailUrl = detected.thumbnailUrl;
-      });
-    } else {
-      setState(() {});
     }
   }
 
   @override
   void dispose() {
-    _urlController.removeListener(_onUrlChanged);
     _urlController.dispose();
     _titleController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pasteFromClipboard() async {
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = data?.text?.trim();
-      if (text != null && text.isNotEmpty) {
-        _urlController.text = text;
-        final detected = UnifiedPlayerController.detectMediaFromUrl(text);
-        if (detected != null) {
-          setState(() {
-            _selectedType = detected.mediaType;
-            _thumbnailUrl = detected.thumbnailUrl;
-          });
-        }
-      }
-    } catch (_) {}
   }
 
   void _applyMedia() {
@@ -218,8 +190,20 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final hasUrl = _urlController.text.trim().isNotEmpty;
-    final ytId = UnifiedPlayerController.extractYouTubeVideoId(_urlController.text.trim());
+    final currentUrl = _urlController.text.trim();
+    final ytId = UnifiedPlayerController.extractYouTubeVideoId(currentUrl);
+
+    final isCurrentYt = ytId != null || (currentUrl.isNotEmpty && _selectedType == 'youtube');
+    final isCurrentDaily = _selectedType == 'dailymotion' && currentUrl.isNotEmpty;
+    final isCurrentBstation = _selectedType == 'bstation' && currentUrl.isNotEmpty;
+    final isCurrentDrive = _selectedType == 'google_drive' && currentUrl.isNotEmpty;
+    final isCurrentLocal = _selectedLocalFile != null || currentUrl.startsWith('p2p://');
+
+    final bool canProceed = (_selectedType == 'youtube' && isCurrentYt) ||
+        (_selectedType == 'dailymotion' && isCurrentDaily) ||
+        (_selectedType == 'bstation' && isCurrentBstation) ||
+        (_selectedType == 'google_drive' && isCurrentDrive) ||
+        (_selectedType == 'local_p2p' && isCurrentLocal);
 
     return Center(
       child: ConstrainedBox(
@@ -350,14 +334,6 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                           isSelected: _selectedType == 'local_p2p',
                           onTap: () => setState(() => _selectedType = 'local_p2p'),
                         ),
-                        const SizedBox(width: 4),
-                        _PillTabItem(
-                          icon: Icons.link_rounded,
-                          iconColor: AppColors.secondaryNeon,
-                          label: 'Direct',
-                          isSelected: _selectedType == 'direct_url',
-                          onTap: () => setState(() => _selectedType = 'direct_url'),
-                        ),
                       ],
                     ),
                   ),
@@ -367,13 +343,39 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
 
                 // Tab Content
                 if (_selectedType == 'youtube') ...[
-                  // YouTube Search Action Card
-                  Material(
-                    color: const Color(0xFFFF0000).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
+                  _ActionSearchCard(
+                    title: 'Cari di YouTube',
+                    subtitle: 'Cari video, musik, podcast, & klip trending',
+                    icon: Icons.search_rounded,
+                    color: const Color(0xFFFF0000),
+                    onTap: () async {
+                      final video = await Navigator.of(context).push<YouTubeVideo>(
+                        MaterialPageRoute(
+                          builder: (_) => const YouTubePickerScreen(),
+                        ),
+                      );
+                      if (video != null && mounted) {
+                        setState(() {
+                          _urlController.text = video.url;
+                          _titleController.text = video.title;
+                          _thumbnailUrl = video.thumbnailUrl;
+                          _selectedType = 'youtube';
+                        });
+                      }
+                    },
+                  ),
+
+                  if (isCurrentYt) ...[
+                    const SizedBox(height: 12),
+                    _SelectedVideoCard(
+                      title: _titleController.text.isNotEmpty
+                          ? _titleController.text
+                          : 'Video YouTube ($ytId)',
+                      thumbnailUrl: _thumbnailUrl ??
+                          (ytId != null ? 'https://img.youtube.com/vi/$ytId/mqdefault.jpg' : null),
+                      platformLabel: 'YouTube',
+                      platformColor: const Color(0xFFFF0000),
+                      onGanti: () async {
                         final video = await Navigator.of(context).push<YouTubeVideo>(
                           MaterialPageRoute(
                             builder: (_) => const YouTubePickerScreen(),
@@ -384,314 +386,45 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                             _urlController.text = video.url;
                             _titleController.text = video.title;
                             _thumbnailUrl = video.thumbnailUrl;
-                            _selectedType = 'youtube';
                           });
                         }
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFF0000).withValues(alpha: 0.18),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFFFF0000),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Cari di YouTube',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Cari video, trending, musik & klip',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Divider with text
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'atau tempel tautan',
-                          style: TextStyle(
-                              fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ),
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // YouTube URL Input with Paste button
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: 'https://youtube.com/watch?v=...',
-                      hintStyle: const TextStyle(
-                          fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.link_rounded,
-                          color: Color(0xFFFF0000), size: 18),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded,
-                                  size: 14),
-                              label: const Text('Paste',
-                                  style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: AppColors.secondaryNeon,
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  // Live Preview Card (if video identified)
-                  if (hasUrl && (ytId != null || _thumbnailUrl != null)) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: AppColors.accentRed.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: SizedBox(
-                              width: 64,
-                              height: 42,
-                              child: Image.network(
-                                _thumbnailUrl ??
-                                    'https://img.youtube.com/vi/$ytId/mqdefault.jpg',
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
-                                  color: Colors.black26,
-                                  child: const Icon(Icons.movie_rounded,
-                                      size: 18, color: Colors.white54),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _titleController.text.isNotEmpty
-                                      ? _titleController.text
-                                      : 'Video YouTube ($ytId)',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Siap diputar',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.primaryNeon,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
-                ] else if (_selectedType == 'google_drive') ...[
-                  // Google Drive Browse / Search Action Card
-                  Material(
-                    color: const Color(0xFF0F9D58).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
-                        final video = await Navigator.of(context).push<GoogleDriveVideo>(
-                          MaterialPageRoute(
-                            builder: (_) => const GoogleDrivePickerScreen(),
-                          ),
-                        );
-                        if (video != null && mounted) {
-                          setState(() {
-                            _urlController.text = video.url;
-                            _titleController.text = video.title;
-                            _thumbnailUrl = video.thumbnailUrl;
-                            _selectedType = 'google_drive';
-                          });
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F9D58).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.cloud_queue_rounded,
-                                color: Color(0xFF0F9D58),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Jelajahi Video Google Drive',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Buka Drive Saya (Login Akun) atau Koleksi Publik',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Drive URL Input
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Tautan atau File ID Google Drive',
-                      hintText: 'https://drive.google.com/file/d/... atau ID',
-                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                      prefixIcon: const Icon(
-                        Icons.cloud_queue_rounded,
-                        color: Color(0xFF0F9D58),
-                        size: 18,
-                      ),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded, size: 14),
-                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFF0F9D58),
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Tears of Steel Drive 4K',
-                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
                 ] else if (_selectedType == 'dailymotion') ...[
-                  // Dailymotion Browse / Search Action Card
-                  Material(
-                    color: const Color(0xFF0066DC).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
+                  _ActionSearchCard(
+                    title: 'Jelajahi Video Dailymotion',
+                    subtitle: 'Pilih video trending, musik, animasi & berita',
+                    icon: Icons.play_circle_filled_rounded,
+                    color: const Color(0xFF0066DC),
+                    onTap: () async {
+                      final video = await Navigator.of(context).push<DailymotionVideo>(
+                        MaterialPageRoute(
+                          builder: (_) => const DailymotionPickerScreen(),
+                        ),
+                      );
+                      if (video != null && mounted) {
+                        setState(() {
+                          _urlController.text = video.url;
+                          _titleController.text = video.title;
+                          _thumbnailUrl = video.effectiveThumbnailUrl;
+                          _selectedType = 'dailymotion';
+                        });
+                      }
+                    },
+                  ),
+
+                  if (isCurrentDaily) ...[
+                    const SizedBox(height: 12),
+                    _SelectedVideoCard(
+                      title: _titleController.text.isNotEmpty
+                          ? _titleController.text
+                          : 'Video Dailymotion',
+                      thumbnailUrl: _thumbnailUrl ??
+                          'https://www.dailymotion.com/thumbnail/video/${UnifiedPlayerController.extractDailymotionVideoId(currentUrl) ?? ""}',
+                      platformLabel: 'Dailymotion',
+                      platformColor: const Color(0xFF0066DC),
+                      onGanti: () async {
                         final video = await Navigator.of(context).push<DailymotionVideo>(
                           MaterialPageRoute(
                             builder: (_) => const DailymotionPickerScreen(),
@@ -702,139 +435,44 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                             _urlController.text = video.url;
                             _titleController.text = video.title;
                             _thumbnailUrl = video.effectiveThumbnailUrl;
-                            _selectedType = 'dailymotion';
                           });
                         }
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0066DC).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_circle_filled_rounded,
-                                color: Color(0xFF0066DC),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Jelajahi Video Dailymotion',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Pilih video trending, berita, musik & animasi',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Divider with text
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'atau tempel link Dailymotion',
-                          style: TextStyle(
-                              fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ),
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Dailymotion URL Input
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Link Video Dailymotion',
-                      hintText: 'https://www.dailymotion.com/video/x7tgad0',
-                      hintStyle: const TextStyle(
-                          fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.link_rounded,
-                          color: Color(0xFF0066DC), size: 18),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded, size: 14),
-                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFF0066DC),
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Big Buck Bunny Dailymotion',
-                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
+                  ],
                 ] else if (_selectedType == 'bstation') ...[
-                  // Bstation Browse / Search Action Card
-                  Material(
-                    color: const Color(0xFF00A1D6).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
+                  _ActionSearchCard(
+                    title: 'Jelajahi Video Bstation',
+                    subtitle: 'Pilih anime populer, trending, AMV, & kreator',
+                    icon: Icons.smart_display_rounded,
+                    color: const Color(0xFF00A1D6),
+                    onTap: () async {
+                      final video = await Navigator.of(context).push<BstationVideo>(
+                        MaterialPageRoute(
+                          builder: (_) => const BstationPickerScreen(),
+                        ),
+                      );
+                      if (video != null && mounted) {
+                        setState(() {
+                          _urlController.text = video.url;
+                          _titleController.text = video.title;
+                          _thumbnailUrl = video.effectiveThumbnailUrl;
+                          _selectedType = 'bstation';
+                        });
+                      }
+                    },
+                  ),
+
+                  if (isCurrentBstation) ...[
+                    const SizedBox(height: 12),
+                    _SelectedVideoCard(
+                      title: _titleController.text.isNotEmpty
+                          ? _titleController.text
+                          : 'Video Bstation',
+                      thumbnailUrl: _thumbnailUrl,
+                      platformLabel: 'Bstation',
+                      platformColor: const Color(0xFF00A1D6),
+                      onGanti: () async {
                         final video = await Navigator.of(context).push<BstationVideo>(
                           MaterialPageRoute(
                             builder: (_) => const BstationPickerScreen(),
@@ -845,211 +483,99 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                             _urlController.text = video.url;
                             _titleController.text = video.title;
                             _thumbnailUrl = video.effectiveThumbnailUrl;
-                            _selectedType = 'bstation';
                           });
                         }
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00A1D6).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.smart_display_rounded,
-                                color: Color(0xFF00A1D6),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Jelajahi Video Bstation',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Pilih anime populer, trending, AMV, kreator & musik',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
+                    ),
+                  ],
+                ] else if (_selectedType == 'google_drive') ...[
+                  _ActionSearchCard(
+                    title: 'Jelajahi Video Google Drive',
+                    subtitle: 'Buka Drive Saya (Login Akun) atau Koleksi Publik',
+                    icon: Icons.cloud_queue_rounded,
+                    color: const Color(0xFF0F9D58),
+                    onTap: () async {
+                      final video = await Navigator.of(context).push<GoogleDriveVideo>(
+                        MaterialPageRoute(
+                          builder: (_) => const GoogleDrivePickerScreen(),
                         ),
-                      ),
+                      );
+                      if (video != null && mounted) {
+                        setState(() {
+                          _urlController.text = video.url;
+                          _titleController.text = video.title;
+                          _thumbnailUrl = video.thumbnailUrl;
+                          _selectedType = 'google_drive';
+                        });
+                      }
+                    },
+                  ),
+
+                  if (isCurrentDrive) ...[
+                    const SizedBox(height: 12),
+                    _SelectedVideoCard(
+                      title: _titleController.text.isNotEmpty
+                          ? _titleController.text
+                          : 'Video Google Drive',
+                      thumbnailUrl: _thumbnailUrl,
+                      platformLabel: 'Google Drive',
+                      platformColor: const Color(0xFF0F9D58),
+                      onGanti: () async {
+                        final video = await Navigator.of(context).push<GoogleDriveVideo>(
+                          MaterialPageRoute(
+                            builder: (_) => const GoogleDrivePickerScreen(),
+                          ),
+                        );
+                        if (video != null && mounted) {
+                          setState(() {
+                            _urlController.text = video.url;
+                            _titleController.text = video.title;
+                            _thumbnailUrl = video.thumbnailUrl;
+                          });
+                        }
+                      },
                     ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Divider with text
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'atau tempel link Bstation',
-                          style: TextStyle(
-                              fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ),
-                      Expanded(
-                          child: Divider(color: AppColors.border.withValues(alpha: 0.6))),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Bstation URL Input
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Link Video / Anime Bstation',
-                      hintText: 'https://bilibili.tv/id/video/... atau BV...',
-                      hintStyle: const TextStyle(
-                          fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.smart_display_rounded,
-                          color: Color(0xFF00A1D6), size: 18),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                                setState(() => _thumbnailUrl = null);
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded, size: 14),
-                              label: const Text('Paste', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFF00A1D6),
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Spy x Family Episode 1',
-                      hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded, color: AppColors.textSecondary, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                ] else if (_selectedType == 'direct_url') ...[
-                  // Direct URL Tab
-                  TextField(
-                    controller: _urlController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'URL Video Langsung',
-                      hintText: 'https://domain.com/video.mp4 atau .m3u8',
-                      hintStyle: const TextStyle(
-                          fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.movie_outlined,
-                          color: AppColors.secondaryNeon, size: 18),
-                      suffixIcon: hasUrl
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _urlController.clear();
-                                _titleController.clear();
-                              },
-                            )
-                          : TextButton.icon(
-                              onPressed: _pasteFromClipboard,
-                              icon: const Icon(Icons.content_paste_rounded,
-                                  size: 14),
-                              label: const Text('Paste',
-                                  style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: AppColors.secondaryNeon,
-                              ),
-                            ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Episode 1 / Movie Name',
-                      hintStyle:
-                          TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded,
-                          color: AppColors.textSecondary, size: 18),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Micro format badges
-                  const Row(
-                    children: [
-                      Text(
-                        'Format didukung:',
-                        style: TextStyle(
-                            fontSize: 10, color: AppColors.textSecondary),
-                      ),
-                      SizedBox(width: 6),
-                      _FormatBadge(label: 'MP4'),
-                      SizedBox(width: 4),
-                      _FormatBadge(label: 'HLS .m3u8'),
-                      SizedBox(width: 4),
-                      _FormatBadge(label: 'WEBM'),
-                    ],
-                  ),
+                  ],
                 ] else if (_selectedType == 'local_p2p') ...[
-                  // Local P2P Video Picker Action Card
-                  Material(
-                    color: const Color(0xFF00B4D8).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
+                  _ActionSearchCard(
+                    title: _selectedLocalFile != null
+                        ? _selectedLocalFile!.name
+                        : 'Pilih File Video dari HP / PC',
+                    subtitle: _selectedLocalFile != null
+                        ? '${_selectedLocalFile!.formattedSize} • Format ${_selectedLocalFile!.extension.toUpperCase()}'
+                        : 'Streaming via WebRTC Internet langsung tanpa upload',
+                    icon: Icons.folder_open_rounded,
+                    color: const Color(0xFF00B4D8),
+                    onTap: () async {
+                      final file = await LocalVideoPickerSheet.show(
+                        context,
+                        isAddingToQueue: widget.isAddingToQueueInitial,
+                      );
+                      if (file != null && mounted) {
+                        setState(() {
+                          _selectedLocalFile = file;
+                          _urlController.text = file.path ??
+                              'p2p://${file.id}?title=${Uri.encodeComponent(file.name)}';
+                          _titleController.text = file.name;
+                        });
+                      }
+                    },
+                  ),
+
+                  if (_selectedLocalFile != null || isCurrentLocal) ...[
+                    const SizedBox(height: 12),
+                    _SelectedVideoCard(
+                      title: _selectedLocalFile?.name ??
+                          (_titleController.text.isNotEmpty
+                              ? _titleController.text
+                              : 'Video Lokal P2P'),
+                      thumbnailUrl: null,
+                      platformLabel: 'Lokal P2P',
+                      platformColor: const Color(0xFF00B4D8),
+                      customSubtitle: _selectedLocalFile != null
+                          ? '${_selectedLocalFile!.formattedSize} • ${_selectedLocalFile!.extension.toUpperCase()}'
+                          : 'File Lokal Siap Diputar',
+                      onGanti: () async {
                         final file = await LocalVideoPickerSheet.show(
                           context,
                           isAddingToQueue: widget.isAddingToQueueInitial,
@@ -1063,84 +589,10 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                           });
                         }
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00B4D8).withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.folder_open_rounded,
-                                color: Color(0xFF00B4D8),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _selectedLocalFile != null
-                                        ? _selectedLocalFile!.name
-                                        : 'Pilih File Video dari HP / PC',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _selectedLocalFile != null
-                                        ? '${_selectedLocalFile!.formattedSize} • Format ${_selectedLocalFile!.extension.toUpperCase()}'
-                                        : 'Streaming via WebRTC Internet langsung tanpa upload',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
-                  ),
+                  ],
 
-                  const SizedBox(height: 12),
-
-                  // Optional Title
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Judul Video (Opsional)',
-                      hintText: 'Contoh: Movie Name 1080p',
-                      hintStyle:
-                          TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      prefixIcon: Icon(Icons.title_rounded,
-                          color: AppColors.textSecondary, size: 18),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
+                  const SizedBox(height: 10),
                   const Row(
                     children: [
                       Text(
@@ -1160,101 +612,12 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                   ),
                 ],
 
-                const SizedBox(height: 12),
-
-                // Collapsible Demo/Sample Media Accordion
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    initiallyExpanded: _showPresets,
-                    onExpansionChanged: (v) => setState(() => _showPresets = v),
-                    tilePadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Row(
-                      children: [
-                        Icon(Icons.bolt_rounded,
-                            size: 15, color: Colors.amber),
-                        SizedBox(width: 6),
-                        Text(
-                          'Contoh Video Uji Coba (Demo)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: AppColors.border, width: 0.6),
-                        ),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: ApiConstants.presetMedia
-                              .where((m) => m['type'] == _selectedType)
-                              .map((m) {
-                            return ActionChip(
-                              avatar: Icon(
-                                m['type'] == 'youtube'
-                                    ? Icons.play_arrow_rounded
-                                    : (m['type'] == 'google_drive'
-                                        ? Icons.cloud_queue_rounded
-                                        : (m['type'] == 'dailymotion'
-                                            ? Icons.play_circle_filled_rounded
-                                            : (m['type'] == 'bstation'
-                                                ? Icons.smart_display_rounded
-                                                : Icons.movie_rounded))),
-                                size: 14,
-                                color: m['type'] == 'youtube'
-                                    ? const Color(0xFFFF0000)
-                                    : (m['type'] == 'google_drive'
-                                        ? const Color(0xFF0F9D58)
-                                        : (m['type'] == 'dailymotion'
-                                            ? const Color(0xFF0066DC)
-                                            : (m['type'] == 'bstation'
-                                                ? const Color(0xFF00A1D6)
-                                                : AppColors.secondaryNeon))),
-                              ),
-                              label: Text(
-                                m['title']!,
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              backgroundColor: AppColors.surface,
-                              side: const BorderSide(
-                                  color: AppColors.border, width: 0.8),
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 2),
-                              onPressed: () {
-                                _urlController.text = m['url']!;
-                                _titleController.text = m['title']!;
-                                setState(() {
-                                  _showPresets = false;
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
                 const SizedBox(height: 16),
 
                 // Primary & Secondary Actions
                 if (widget.isAddingToQueueInitial) ...[
                   ElevatedButton.icon(
-                    onPressed: hasUrl ? _addToQueue : null,
+                    onPressed: canProceed ? _addToQueue : null,
                     icon: const Icon(Icons.playlist_add_rounded, size: 18),
                     label: const Text('Tambahkan ke Antrean'),
                     style: ElevatedButton.styleFrom(
@@ -1269,7 +632,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                 ] else ...[
                   // Play Now Button
                   ElevatedButton.icon(
-                    onPressed: hasUrl ? _applyMedia : null,
+                    onPressed: canProceed ? _applyMedia : null,
                     icon: const Icon(Icons.play_arrow_rounded, size: 20),
                     label: const Text(
                       'Putar Sekarang',
@@ -1286,13 +649,13 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                   if (widget.queueController != null) ...[
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: hasUrl ? _addToQueue : null,
+                      onPressed: canProceed ? _addToQueue : null,
                       icon: const Icon(Icons.playlist_add_rounded, size: 17),
                       label: const Text('Tambahkan ke Antrean Saja'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primaryNeon,
                         side: BorderSide(
-                          color: hasUrl
+                          color: canProceed
                               ? AppColors.primaryNeon
                               : AppColors.border,
                         ),
@@ -1401,6 +764,235 @@ class _FormatBadge extends StatelessWidget {
           fontWeight: FontWeight.bold,
           color: AppColors.textMuted,
         ),
+      ),
+    );
+  }
+}
+
+class _ActionSearchCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionSearchCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Buka',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 10, color: color),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedVideoCard extends StatelessWidget {
+  final String title;
+  final String? thumbnailUrl;
+  final String platformLabel;
+  final Color platformColor;
+  final String? customSubtitle;
+  final VoidCallback onGanti;
+
+  const _SelectedVideoCard({
+    required this.title,
+    required this.thumbnailUrl,
+    required this.platformLabel,
+    required this.platformColor,
+    this.customSubtitle,
+    required this.onGanti,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 58,
+              height: 42,
+              child: thumbnailUrl != null && thumbnailUrl!.isNotEmpty
+                  ? Image.network(
+                      thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        color: AppColors.surface,
+                        child: Icon(Icons.video_library_rounded,
+                            size: 20, color: platformColor),
+                      ),
+                    )
+                  : Container(
+                      color: AppColors.surface,
+                      child: Icon(Icons.video_library_rounded,
+                          size: 20, color: platformColor),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: platformColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        platformLabel,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: platformColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Video Terpilih',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (customSubtitle != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    customSubtitle!,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onGanti,
+            style: TextButton.styleFrom(
+              foregroundColor: platformColor,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Ganti',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -18,14 +18,15 @@ class DailymotionPickerScreen extends StatelessWidget {
         brandIcon: Icons.play_circle_filled_rounded,
         categories: const [
           'Trending',
-          'Anime & Kartun',
-          'Musik & Hiburan',
-          'Teknologi & Gaming',
+          'Berita & Media',
+          'Musik & Klip',
+          'Olahraga & Aksi',
+          'Film & Animasi',
         ],
         categoryPresets: DailymotionService.categoryPresets,
         searchFunction: (query, _) => DailymotionService.search(query),
         hasPagination: false,
-        searchHint: 'Cari video atau tempel link Dailymotion...',
+        searchHint: 'Cari video Dailymotion...',
       ),
     );
   }

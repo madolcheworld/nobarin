@@ -961,7 +961,7 @@ class _GoogleDrivePickerScreenState extends State<GoogleDrivePickerScreen>
         categoryPresets: GoogleDriveService.categoryPresets,
         searchFunction: (query, _) async => GoogleDriveService.search(query),
         hasPagination: false,
-        searchHint: 'Cari judul file atau tempel URL Google Drive...',
+        searchHint: 'Cari judul video Google Drive...',
       ),
     );
   }

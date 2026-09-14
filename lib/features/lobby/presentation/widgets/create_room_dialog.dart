@@ -21,6 +21,7 @@ import '../screens/dailymotion_picker_screen.dart';
 import '../screens/google_drive_picker_screen.dart';
 import '../screens/youtube_picker_screen.dart';
 import '../../../p2p_streaming/models/local_video_file.dart';
+import '../../../p2p_streaming/presentation/local_video_picker_sheet.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
   final YouTubeVideo? initialYouTubeVideo;
@@ -86,7 +87,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   GoogleDriveVideo? _selectedGoogleDriveVideo;
   DailymotionVideo? _selectedDailymotionVideo;
   BstationVideo? _selectedBstationVideo;
-  String _mediaType = 'direct_url';
+  LocalVideoFile? _selectedLocalVideoFile;
+  String _mediaType = 'youtube';
   String _controlMode = 'host_only'; // 'host_only' or 'collaborative'
   bool _isPublic = true;
   bool _isLoading = false;
@@ -100,7 +102,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaUrlController.text = widget.initialYouTubeVideo!.url;
       _titleController.text = widget.initialYouTubeVideo!.title;
     } else if (widget.initialLocalVideoFile != null) {
-      _mediaType = 'direct_url';
+      _selectedLocalVideoFile = widget.initialLocalVideoFile;
+      _mediaType = 'local_p2p';
       _mediaUrlController.text =
           'p2p://${widget.initialLocalVideoFile!.id}?title=${Uri.encodeComponent(widget.initialLocalVideoFile!.name)}&path=${Uri.encodeComponent(widget.initialLocalVideoFile!.path ?? '')}';
       _titleController.text = 'Nobar: ${widget.initialLocalVideoFile!.name}';
@@ -120,7 +123,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _mediaUrlController.text = widget.initialBstationVideo!.url;
       _titleController.text = widget.initialBstationVideo!.title;
     } else if (widget.initialMediaUrl != null) {
-      _mediaType = widget.initialMediaType ?? 'direct_url';
+      _mediaType = widget.initialMediaType ?? 'youtube';
       _mediaUrlController.text = widget.initialMediaUrl!;
       _titleController.text = 'Nonton Bareng';
     } else if (widget.initialMediaType == 'google_drive') {
@@ -158,6 +161,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _titleController.text = 'Nonton Bstation';
       }
     } else {
+      _mediaType = 'youtube';
       _titleController.text = 'Nonton Bareng';
       _mediaUrlController.text = ApiConstants.presetMedia[0]['url']!;
     }
@@ -263,17 +267,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           });
         }
       }
-    } else if ((text.endsWith('.mp4') ||
-            text.endsWith('.m3u8') ||
-            text.endsWith('.webm')) &&
-        _mediaType != 'direct_url') {
-      setState(() {
-        _mediaType = 'direct_url';
-        _selectedYouTubeVideo = null;
-        _selectedGoogleDriveVideo = null;
-        _selectedDailymotionVideo = null;
-        _selectedBstationVideo = null;
-      });
     }
   }
 
@@ -293,6 +286,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       _selectedGoogleDriveVideo = item is GoogleDriveVideo ? item : null;
       _selectedDailymotionVideo = item is DailymotionVideo ? item : null;
       _selectedBstationVideo = item is BstationVideo ? item : null;
+      _selectedLocalVideoFile = null;
       _mediaType = item.mediaType;
       _mediaUrlController.text = item.url;
       _titleController.text = item.title;
@@ -320,6 +314,23 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   Future<void> _pickAnotherBstationVideo() =>
       _pickMedia<BstationVideo>(const BstationPickerScreen());
 
+  Future<void> _pickAnotherLocalVideo() async {
+    final file = await LocalVideoPickerSheet.show(context);
+    if (file != null && mounted) {
+      setState(() {
+        _selectedLocalVideoFile = file;
+        _selectedYouTubeVideo = null;
+        _selectedGoogleDriveVideo = null;
+        _selectedDailymotionVideo = null;
+        _selectedBstationVideo = null;
+        _mediaType = 'local_p2p';
+        _mediaUrlController.text =
+            'p2p://${file.id}?title=${Uri.encodeComponent(file.name)}&path=${Uri.encodeComponent(file.path ?? '')}';
+        _titleController.text = 'Nobar: ${file.name}';
+      });
+    }
+  }
+
   Future<void> _handleCreate() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -338,6 +349,16 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     var mediaType = _mediaType;
     final mediaUrl = _mediaUrlController.text.trim();
+    if (mediaUrl.isEmpty) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan pilih video terlebih dahulu.'),
+          backgroundColor: AppColors.accentRed,
+        ),
+      );
+      return;
+    }
     String? mediaThumbnail;
 
     if (_selectedYouTubeVideo != null) {
@@ -804,81 +825,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          const Text(
-                            'Link Video Google Drive *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://drive.google.com/file/d/...',
-                              prefixIcon: Icon(
-                                Icons.cloud_queue_rounded,
-                                color: Color(0xFF0F9D58),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL Google Drive tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'google_drive')
-                                .map((media) {
-                              return ActionChip(
-                                avatar: const Icon(
-                                  Icons.cloud_queue_rounded,
-                                  size: 14,
-                                  color: Color(0xFF0F9D58),
-                                ),
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                    final allPresets = GoogleDriveService.categoryPresets.values.expand((v) => v);
-                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
-                                    if (matched.isNotEmpty) {
-                                      _selectedGoogleDriveVideo = matched.first;
-                                    } else {
-                                      final id = GoogleDriveService.extractFileId(media['url']!);
-                                      if (id != null) {
-                                        _selectedGoogleDriveVideo = GoogleDriveVideo(
-                                          id: id,
-                                          title: media['title'] ?? 'Google Drive Video ($id)',
-                                          ownerName: 'Google Drive Shared',
-                                          category: 'Koleksi Drive',
-                                        );
-                                      }
-                                    }
-                                    if (_titleController.text.isEmpty ||
-                                        _titleController.text == 'Nonton Bareng' ||
-                                        _titleController.text == 'Nonton Google Drive') {
-                                      _titleController.text = 'Nonton ${media['title']}';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
                         ],
 
                         // Dailymotion options (if Dailymotion)
@@ -1036,79 +982,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'Link Video Dailymotion *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://www.dailymotion.com/video/...',
-                              prefixIcon: Icon(
-                                Icons.play_circle_filled_rounded,
-                                color: Color(0xFF0066DC),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL Dailymotion tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'dailymotion')
-                                .map((media) {
-                              return ActionChip(
-                                avatar: const Icon(
-                                  Icons.play_circle_filled_rounded,
-                                  size: 14,
-                                  color: Color(0xFF0066DC),
-                                ),
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                    final allPresets = DailymotionService.allPresets;
-                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
-                                    if (matched.isNotEmpty) {
-                                      _selectedDailymotionVideo = matched.first;
-                                    } else {
-                                      final id = UnifiedPlayerController.extractDailymotionVideoId(media['url']!);
-                                      if (id != null) {
-                                        _selectedDailymotionVideo = DailymotionVideo.fromId(
-                                          id,
-                                          title: media['title'],
-                                        );
-                                      }
-                                    }
-                                    if (_titleController.text.isEmpty ||
-                                        _titleController.text == 'Nonton Bareng' ||
-                                        _titleController.text == 'Nonton Dailymotion') {
-                                      _titleController.text = 'Nonton ${media['title']}';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
                           ),
                           const SizedBox(height: 14),
                         ],
@@ -1272,131 +1145,124 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          const Text(
-                            'Link Video / Anime Bstation *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://www.bilibili.tv/id/video/...',
-                              prefixIcon: Icon(
-                                Icons.smart_display_rounded,
-                                color: Color(0xFF00A1D6),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL Bstation tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'bstation')
-                                .map((media) {
-                              return ActionChip(
-                                avatar: const Icon(
-                                  Icons.smart_display_rounded,
-                                  size: 14,
-                                  color: Color(0xFF00A1D6),
-                                ),
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                    final allPresets = BstationService.allPresets;
-                                    final matched = allPresets.where((v) => v.url == media['url'] || v.title == media['title']);
-                                    if (matched.isNotEmpty) {
-                                      _selectedBstationVideo = matched.first;
-                                    } else {
-                                      final id = UnifiedPlayerController.extractBstationVideoId(media['url']!);
-                                      if (id != null) {
-                                        _selectedBstationVideo = BstationVideo.fromId(
-                                          id,
-                                          title: media['title'],
-                                        );
-                                      }
-                                    }
-                                    if (_titleController.text.isEmpty ||
-                                        _titleController.text == 'Nonton Bareng' ||
-                                        _titleController.text == 'Nonton Bstation') {
-                                      _titleController.text = 'Nonton ${media['title']}';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
                         ],
 
-                        // Direct URL options (if direct URL)
-                        if (_mediaType == 'direct_url') ...[
-                          const Text(
-                            'Link Video (MP4 / HLS .m3u8) *',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mediaUrlController,
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.textPrimary),
-                            decoration: const InputDecoration(
-                              hintText: 'https://example.com/video.mp4',
-                              prefixIcon: Icon(
-                                Icons.link_rounded,
-                                color: AppColors.secondaryNeon,
+                        // Local P2P Video option
+                        if (_mediaType == 'local_p2p' || _selectedLocalVideoFile != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF00B4D8).withValues(alpha: 0.6),
+                                width: 1.5,
                               ),
                             ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'URL media tidak boleh kosong';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: ApiConstants.presetMedia
-                                .where((m) => m['type'] == 'direct_url')
-                                .map((media) {
-                              return ActionChip(
-                                label: Text(
-                                  media['title']!,
-                                  style: const TextStyle(fontSize: 11),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF003846),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.video_file_rounded,
+                                    color: Color(0xFF00B4D8),
+                                    size: 28,
+                                  ),
                                 ),
-                                backgroundColor: AppColors.surfaceElevated,
-                                side: const BorderSide(color: AppColors.border),
-                                onPressed: () {
-                                  setState(() {
-                                    _mediaUrlController.text = media['url']!;
-                                  });
-                                },
-                              );
-                            }).toList(),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF00B4D8),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: const Text(
+                                              'Lokal P2P',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Text(
+                                            'P2P Internet Streaming',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _selectedLocalVideoFile?.name ?? 'File Video Lokal',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      if (_selectedLocalVideoFile != null) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${_selectedLocalVideoFile!.formattedSize} • Format ${_selectedLocalVideoFile!.extension.toUpperCase()}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _pickAnotherLocalVideo,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00B4D8).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: const Color(0xFF00B4D8).withValues(alpha: 0.4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded,
+                                            size: 15, color: Color(0xFF00B4D8)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Ganti',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 14),
                         ],

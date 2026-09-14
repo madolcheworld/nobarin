@@ -27,7 +27,7 @@ class BstationPickerScreen extends StatelessWidget {
         searchFunction: (query, page) async =>
             BstationService.search(query, page: page),
         hasPagination: true,
-        searchHint: 'Cari anime, donghua, atau link Bstation...',
+        searchHint: 'Cari anime, donghua, atau judul di Bstation...',
         searchOnSubmitOnly: true,
       ),
     );

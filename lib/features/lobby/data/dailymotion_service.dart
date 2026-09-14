@@ -237,6 +237,19 @@ class DailymotionService {
       return allPresets;
     }
 
+    // Direct URL or Video ID resolution
+    final directId = extractVideoId(trimmed);
+    if (directId != null &&
+        (trimmed.startsWith('http') ||
+            trimmed.contains('dailymotion') ||
+            trimmed.contains('dai.ly') ||
+            RegExp(r'^[xk][a-zA-Z0-9]{5,7}$').hasMatch(trimmed))) {
+      final detail = await fetchVideoDetails(directId);
+      if (detail != null) {
+        return [detail];
+      }
+    }
+
     final cacheKey = 'dm_search_${trimmed.toLowerCase()}_limit$limit';
     final cached = ApiCacheManager.instance.get<List<DailymotionVideo>>(cacheKey);
     if (cached != null) {

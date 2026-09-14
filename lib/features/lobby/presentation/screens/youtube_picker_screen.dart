@@ -28,7 +28,7 @@ class YouTubePickerScreen extends StatelessWidget {
         categoryPresets: YouTubeService.categoryPresets,
         searchFunction: (query, page) => YouTubeService.search(query, page: page),
         hasPagination: true,
-        searchHint: 'Cari video atau tempel link YouTube...',
+        searchHint: 'Cari video YouTube...',
       ),
     );
   }

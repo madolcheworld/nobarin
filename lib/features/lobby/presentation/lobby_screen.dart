@@ -102,11 +102,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         }
         return;
       }
-    } else if (sourceType == MediaSourceType.directUrl) {
-      room = await CreateRoomDialog.show(
-        context,
-        initialMediaType: 'direct_url',
-      );
     }
 
     if (room != null && mounted) {

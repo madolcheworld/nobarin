@@ -7,7 +7,6 @@ enum MediaSourceType {
   dailymotion,
   bstation,
   localVideo,
-  directUrl,
 }
 
 class MediaSourceDialog extends StatelessWidget {
@@ -154,17 +153,6 @@ class MediaSourceDialog extends StatelessWidget {
                     iconColor: Colors.white,
                     iconBackground: const Color(0xFF00B4D8),
                     onTap: () => onSourceSelected(MediaSourceType.localVideo),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  _SourceCard(
-                    title: 'Direct Video URL',
-                    subtitle: 'Streaming link MP4, WebM, atau HLS',
-                    icon: Icons.link_rounded,
-                    iconColor: Colors.white,
-                    iconBackground: AppColors.secondaryNeon,
-                    onTap: () => onSourceSelected(MediaSourceType.directUrl),
                   ),
                 ],
               ),
