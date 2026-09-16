@@ -8,17 +8,7 @@ import '../../auth/presentation/auth_controller.dart';
 import 'lobby_controller.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/join_code_dialog.dart';
-import 'widgets/media_source_dialog.dart';
 import 'widgets/room_card.dart';
-import 'screens/bstation_picker_screen.dart';
-import 'screens/dailymotion_picker_screen.dart';
-import 'screens/google_drive_picker_screen.dart';
-import 'screens/youtube_picker_screen.dart';
-import '../data/models/bstation_video_model.dart';
-import '../data/models/dailymotion_video_model.dart';
-import '../data/models/google_drive_video_model.dart';
-import '../data/models/youtube_video_model.dart';
-import '../../p2p_streaming/presentation/local_video_picker_sheet.dart';
 import '../../room/models/room_model.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -30,7 +20,6 @@ class LobbyScreen extends ConsumerStatefulWidget {
 
 class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String _selectedCategory = 'all';
 
   @override
   void dispose() {
@@ -39,71 +28,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Future<void> _openCreateRoomDialog() async {
-    final sourceType = await MediaSourceDialog.show(context);
-    if (sourceType == null || !mounted) return;
-
-    RoomModel? room;
-
-    if (sourceType == MediaSourceType.youtube) {
-      final video = await Navigator.of(context).push<YouTubeVideo>(
-        MaterialPageRoute(builder: (_) => const YouTubePickerScreen()),
-      );
-      if (video == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialYouTubeVideo: video,
-      );
-    } else if (sourceType == MediaSourceType.googleDrive) {
-      final video = await Navigator.of(context).push<GoogleDriveVideo>(
-        MaterialPageRoute(builder: (_) => const GoogleDrivePickerScreen()),
-      );
-      if (video == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialGoogleDriveVideo: video,
-      );
-    } else if (sourceType == MediaSourceType.dailymotion) {
-      final video = await Navigator.of(context).push<DailymotionVideo>(
-        MaterialPageRoute(builder: (_) => const DailymotionPickerScreen()),
-      );
-      if (video == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialDailymotionVideo: video,
-      );
-    } else if (sourceType == MediaSourceType.bstation) {
-      final video = await Navigator.of(context).push<BstationVideo>(
-        MaterialPageRoute(builder: (_) => const BstationPickerScreen()),
-      );
-      if (video == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialBstationVideo: video,
-      );
-    } else if (sourceType == MediaSourceType.localVideo) {
-      final file = await LocalVideoPickerSheet.show(context);
-      if (file == null || !mounted) return;
-
-      room = await CreateRoomDialog.show(
-        context,
-        initialLocalVideoFile: file,
-      );
-      if (room != null && mounted) {
-        await context.push(
-          '/room/${room.code}',
-          extra: {'room': room, 'localFile': file},
-        );
-        if (mounted) {
-          ref.read(lobbyControllerProvider.notifier).refreshRooms();
-        }
-        return;
-      }
-    }
-
+    final room = await CreateRoomDialog.show(context);
     if (room != null && mounted) {
       await context.push('/room/${room.code}', extra: room);
       if (mounted) {
@@ -397,33 +322,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
                     const SizedBox(height: 18),
 
-                    // Horizontal Platform Filter Chips
-                    SizedBox(
-                      height: 36,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _buildFilterChip('all', 'Semua'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('youtube', 'YouTube'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('bstation', 'Bstation'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('google_drive', 'Drive'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('dailymotion', 'Dailymotion'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('direct_url', 'Direct URL'),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
 
                     // Section Title with room count
                     Builder(
                       builder: (_) {
-                        final displayed = _filterByCategory(filteredRooms);
+                        final displayed = filteredRooms;
                         return Row(
                           children: [
                             const Text(
@@ -505,7 +408,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ),
               ),
               data: (_) {
-                final displayedRooms = _filterByCategory(filteredRooms);
+                final displayedRooms = filteredRooms;
 
                 if (displayedRooms.isEmpty) {
                   return SliverFillRemaining(
@@ -539,16 +442,14 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              Text(
-                                _selectedCategory == 'all'
-                                    ? 'Belum Ada Room Publik'
-                                    : 'Tidak Ada Room ${_getCategoryLabel(_selectedCategory)}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
+                                const Text(
+                                  'Belum Ada Room Publik',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 6),
                               const Text(
                                 'Buat room pertama dan tonton bersama temanmu sekarang!',
@@ -653,79 +554,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               },
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  List<RoomModel> _filterByCategory(List<RoomModel> rooms) {
-    if (_selectedCategory == 'all') return rooms;
-    return rooms.where((r) {
-      if (_selectedCategory == 'youtube') return r.currentMediaType == 'youtube';
-      if (_selectedCategory == 'bstation') {
-        return r.currentMediaType == 'bstation' || r.currentMediaType == 'bilibili';
-      }
-      if (_selectedCategory == 'google_drive') return r.currentMediaType == 'google_drive';
-      if (_selectedCategory == 'dailymotion') return r.currentMediaType == 'dailymotion';
-      if (_selectedCategory == 'direct_url') return r.currentMediaType == 'direct_url';
-      return true;
-    }).toList();
-  }
-
-  String _getCategoryLabel(String cat) {
-    switch (cat) {
-      case 'youtube':
-        return 'YouTube';
-      case 'bstation':
-        return 'Bstation';
-      case 'google_drive':
-        return 'Google Drive';
-      case 'dailymotion':
-        return 'Dailymotion';
-      case 'direct_url':
-        return 'Direct URL';
-      default:
-        return 'Publik';
-    }
-  }
-
-  Widget _buildFilterChip(String id, String label) {
-    final isSelected = _selectedCategory == id;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          AppHaptics.selection();
-          setState(() {
-            _selectedCategory = id;
-          });
-        },
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primaryNeon.withValues(alpha: 0.2)
-                : AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? AppColors.primaryNeon
-                  : AppColors.border,
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? Colors.white : AppColors.textSecondary,
-              ),
-            ),
-          ),
         ),
       ),
     );

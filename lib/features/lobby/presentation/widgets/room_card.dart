@@ -14,39 +14,32 @@ class RoomCard extends StatelessWidget {
   });
 
   ({String label, IconData icon, Color color}) _getSourceInfo(String? type) {
-    switch (type) {
-      case 'youtube':
-        return (
-          label: 'YouTube',
-          icon: Icons.play_circle_filled_rounded,
-          color: AppColors.youtubeRed,
-        );
-      case 'bstation':
-      case 'bilibili':
-        return (
-          label: 'Bstation',
-          icon: Icons.smart_display_rounded,
-          color: AppColors.bstationBlue,
-        );
-      case 'google_drive':
-        return (
-          label: 'Google Drive',
-          icon: Icons.cloud_queue_rounded,
-          color: AppColors.googleDriveGreen,
-        );
-      case 'dailymotion':
-        return (
-          label: 'Dailymotion',
-          icon: Icons.play_circle_filled_rounded,
-          color: AppColors.dailymotionBlue,
-        );
-      default:
-        return (
-          label: 'Direct URL',
-          icon: Icons.videocam_rounded,
-          color: AppColors.secondaryNeon,
-        );
+    if (type == 'youtube') {
+      return (
+        label: 'YouTube',
+        icon: Icons.smart_display_rounded,
+        color: AppColors.youtubeRed,
+      );
     }
+    if (type == 'bstation' || type == 'bilibili') {
+      return (
+        label: 'Bstation',
+        icon: Icons.tv_rounded,
+        color: AppColors.bstationBlue,
+      );
+    }
+    if (type == 'direct_url') {
+      return (
+        label: 'Direct URL',
+        icon: Icons.videocam_rounded,
+        color: AppColors.secondaryNeon,
+      );
+    }
+    return (
+      label: 'Room',
+      icon: Icons.meeting_room_rounded,
+      color: AppColors.primaryNeon,
+    );
   }
 
   @override

@@ -1,193 +1,40 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-// ignore: depend_on_referenced_packages
-import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
-
-class FakeWebViewPlatform extends WebViewPlatform {
-  @override
-  PlatformNavigationDelegate createPlatformNavigationDelegate(
-    PlatformNavigationDelegateCreationParams params,
-  ) {
-    return FakePlatformNavigationDelegate(params);
-  }
-
-  @override
-  PlatformWebViewController createPlatformWebViewController(
-    PlatformWebViewControllerCreationParams params,
-  ) {
-    return FakePlatformWebViewController(params);
-  }
-
-  @override
-  PlatformWebViewWidget createPlatformWebViewWidget(
-    PlatformWebViewWidgetCreationParams params,
-  ) {
-    return FakePlatformWebViewWidget(params);
-  }
-}
-
-class FakePlatformNavigationDelegate extends PlatformNavigationDelegate {
-  FakePlatformNavigationDelegate(super.params) : super.implementation();
-
-  @override
-  Future<void> setOnNavigationRequest(NavigationRequestCallback onNavigationRequest) async {}
-
-  @override
-  Future<void> setOnWebResourceError(WebResourceErrorCallback onWebResourceError) async {}
-}
-
-class FakePlatformWebViewController extends PlatformWebViewController {
-  FakePlatformWebViewController(super.params) : super.implementation();
-
-  @override
-  Future<void> setJavaScriptMode(JavaScriptMode javaScriptMode) async {}
-
-  @override
-  Future<void> setPlatformNavigationDelegate(PlatformNavigationDelegate handler) async {}
-
-  @override
-  Future<void> setUserAgent(String? userAgent) async {}
-
-  @override
-  Future<void> addJavaScriptChannel(JavaScriptChannelParams javaScriptChannelParams) async {}
-
-  @override
-  Future<void> removeJavaScriptChannel(String javaScriptChannelName) async {}
-
-  @override
-  Future<void> enableZoom(bool enabled) async {}
-
-  @override
-  Future<void> loadRequest(LoadRequestParams params) async {}
-
-  @override
-  Future<void> loadHtmlString(String html, {String? baseUrl}) async {}
-
-  @override
-  Future<void> runJavaScript(String javaScript) async {}
-
-  @override
-  Future<String> runJavaScriptReturningResult(String javaScript) async => '';
-}
-
-class FakePlatformWebViewWidget extends PlatformWebViewWidget {
-  FakePlatformWebViewWidget(super.params) : super.implementation();
-
-  @override
-  Widget build(BuildContext context) => const SizedBox();
-}
 
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
-    WebViewPlatform.instance = FakeWebViewPlatform();
   });
 
   group('UnifiedPlayerController Unit Tests', () {
-    test('extractYouTubeVideoId extracts video ID across various formats', () {
-      // Standard watch URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube.com/watch?v=aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
+    test('detectMediaFromUrl detects direct video URL correctly', () {
+      final detected = UnifiedPlayerController.detectMediaFromUrl(
+        'https://example.com/videos/sample.mp4',
       );
+      expect(detected, isNotNull);
+      expect(detected!.mediaType, equals('direct_url'));
+      expect(
+          detected.mediaUrl, equals('https://example.com/videos/sample.mp4'));
+      expect(detected.title, equals('sample.mp4'));
+      expect(detected.isDirectUrl, isTrue);
 
-      // youtu.be short URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://youtu.be/aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // Shorts URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube.com/shorts/aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // Live URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube.com/live/aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // Embed URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube.com/embed/aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // YouTube nocookie embed URL
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // Raw 11-character video ID
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId('aqz-KE-bpKQ'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // URL with query parameters before or after v=
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://www.youtube.com/watch?feature=shared&v=aqz-KE-bpKQ&t=12s'),
-        equals('aqz-KE-bpKQ'),
-      );
-
-      // Non-YouTube URLs or invalid strings
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(
-            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'),
-        isNull,
-      );
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId(''),
-        isNull,
-      );
-      expect(
-        UnifiedPlayerController.extractYouTubeVideoId('not_a_valid_id'),
-        isNull,
-      );
+      expect(UnifiedPlayerController.detectMediaFromUrl(''), isNull);
+      expect(UnifiedPlayerController.detectMediaFromUrl('invalid_url'), isNull);
     });
 
-    test('loadMedia auto-detects YouTube URL even when direct_url type is passed',
-        () async {
+    test('loadMedia loads direct media URL and updates properties', () async {
       final controller = UnifiedPlayerController();
       addTearDown(() => controller.dispose());
 
       await controller.loadMedia(
         'direct_url',
-        'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
-        autoPlay: false,
-      );
-
-      // Should automatically route to YouTube
-      expect(controller.mediaType, equals('youtube'));
-      expect(controller.mediaUrl,
-          equals('https://www.youtube.com/watch?v=aqz-KE-bpKQ'));
-    });
-
-    test('loadMedia auto-detects direct media URL even when youtube type is passed',
-        () async {
-      final controller = UnifiedPlayerController();
-      addTearDown(() => controller.dispose());
-
-      await controller.loadMedia(
-        'youtube',
         'https://example.com/movie.mp4',
         autoPlay: false,
       );
 
-      // Should automatically route to direct_url
       expect(controller.mediaType, equals('direct_url'));
       expect(controller.mediaUrl, equals('https://example.com/movie.mp4'));
+      expect(controller.hasMedia, isTrue);
     });
 
     test('clearError resets errorMessage to null and notifies listeners', () {
@@ -217,42 +64,9 @@ void main() {
       expect(controller.isMuted, isFalse);
     });
 
-    test('embed player delegates play, pause, seek, and state updates', () async {
-      final controller = UnifiedPlayerController();
-      addTearDown(() => controller.dispose());
-
-      await controller.loadMedia(
-        'dailymotion',
-        'https://www.dailymotion.com/video/x7tgad0',
-        autoPlay: false,
-      );
-
-      final List<String> receivedCommands = [];
-      controller.onEmbedPlayerCommand = (action, arg) {
-        receivedCommands.add('$action:${arg ?? ""}');
-      };
-
-      await controller.play();
-      expect(receivedCommands, contains('play:'));
-
-      await controller.pause();
-      expect(receivedCommands, contains('pause:'));
-
-      await controller.seekTo(45.0);
-      expect(receivedCommands, contains('seek:45.0'));
-
-      controller.updateEmbedPlaybackState(
-        isPlaying: true,
-        position: 15.0,
-        duration: 120.0,
-      );
-
-      expect(controller.isPlaying, isTrue);
-      expect(controller.position, equals(15.0));
-      expect(controller.duration, equals(120.0));
-    });
-
-    test('enterFullscreen, exitFullscreen, and toggleFullscreen update state and notify listeners', () async {
+    test(
+        'enterFullscreen, exitFullscreen, and toggleFullscreen update state and notify listeners',
+        () async {
       final controller = UnifiedPlayerController();
       addTearDown(() => controller.dispose());
 
@@ -283,6 +97,31 @@ void main() {
 
       await controller.toggleFullscreen();
       expect(controller.isFullscreen, isFalse);
+    });
+
+    test('detectMediaFromUrl detects YouTube URLs correctly', () {
+      final detectedWatch = UnifiedPlayerController.detectMediaFromUrl(
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      expect(detectedWatch, isNotNull);
+      expect(detectedWatch!.mediaType, equals('youtube'));
+      expect(detectedWatch.mediaId, equals('dQw4w9WgXcQ'));
+      expect(detectedWatch.isYoutube, isTrue);
+      expect(detectedWatch.thumbnailUrl, contains('dQw4w9WgXcQ'));
+
+      final detectedShorts = UnifiedPlayerController.detectMediaFromUrl(
+        'https://m.youtube.com/shorts/dQw4w9WgXcQ',
+      );
+      expect(detectedShorts, isNotNull);
+      expect(detectedShorts!.mediaType, equals('youtube'));
+      expect(detectedShorts.mediaId, equals('dQw4w9WgXcQ'));
+
+      final detectedShortUrl = UnifiedPlayerController.detectMediaFromUrl(
+        'https://youtu.be/dQw4w9WgXcQ',
+      );
+      expect(detectedShortUrl, isNotNull);
+      expect(detectedShortUrl!.mediaType, equals('youtube'));
+      expect(detectedShortUrl.mediaId, equals('dQw4w9WgXcQ'));
     });
   });
 }

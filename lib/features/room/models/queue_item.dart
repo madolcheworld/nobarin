@@ -24,16 +24,14 @@ class QueueItem {
   });
 
   bool get isYouTube => mediaType == 'youtube';
-  bool get isDirectUrl => mediaType == 'direct_url';
-  bool get isGoogleDrive => mediaType == 'google_drive' || mediaType == 'gdrive';
-  bool get isDailymotion => mediaType == 'dailymotion';
   bool get isBstation => mediaType == 'bstation' || mediaType == 'bilibili';
+  bool get isDirectUrl => mediaType == 'direct_url';
 
   factory QueueItem.fromJson(Map<String, dynamic> json) {
     return QueueItem(
       id: json['id'] as String? ?? '',
       roomId: json['room_id'] as String? ?? '',
-      mediaType: json['media_type'] as String? ?? 'youtube',
+      mediaType: json['media_type'] as String? ?? 'direct_url',
       mediaUrl: json['media_url'] as String? ?? '',
       title: json['title'] as String? ?? 'Video',
       thumbnailUrl: json['thumbnail_url'] as String?,

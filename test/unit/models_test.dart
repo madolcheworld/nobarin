@@ -75,38 +75,18 @@ void main() {
       expect(room.description, 'Nonton seru!');
     });
 
-    test('RoomModel.resolveThumbnail correctly extracts thumbnails for various platforms', () {
-      // YouTube
+    test('RoomModel.resolveThumbnail returns direct image URL or null', () {
       expect(
-        RoomModel.resolveThumbnail(url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'),
-        'https://img.youtube.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+        RoomModel.resolveThumbnail(url: 'https://example.com/image.jpg'),
+        'https://example.com/image.jpg',
       );
       expect(
-        RoomModel.resolveThumbnail(url: 'https://youtu.be/jfKfPfyJRdk'),
-        'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
-      );
-
-
-      // Google Drive
-      expect(
-        RoomModel.resolveThumbnail(url: 'https://drive.google.com/file/d/1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8/preview'),
-        'https://drive.google.com/thumbnail?id=1_yN3d9T8g6rK5y6E_Z-aL6jA4h2_xGk8&sz=w640',
-      );
-
-      // Dailymotion
-      expect(
-        RoomModel.resolveThumbnail(url: 'https://www.dailymotion.com/video/x7tgad0'),
-        'https://www.dailymotion.com/thumbnail/video/x7tgad0',
-      );
-
-      // Direct presets
-      expect(
-        RoomModel.resolveThumbnail(url: 'https://vjs.zencdn.net/v/oceans.mp4'),
-        contains('unsplash'),
+        RoomModel.resolveThumbnail(url: 'https://example.com/video.mp4'),
+        isNull,
       );
       expect(
-        RoomModel.resolveThumbnail(url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
-        'https://peach.blender.org/wp-content/uploads/title_shot.png',
+        RoomModel.resolveThumbnail(url: null),
+        isNull,
       );
     });
 

@@ -408,9 +408,9 @@ class RoomControlsBar extends StatelessWidget {
   }
 
   Widget _buildMediaTypeBadge(String type) {
-    IconData icon;
-    Color color;
-    String label;
+    final IconData icon;
+    final Color color;
+    final String label;
 
     switch (type.toLowerCase()) {
       case 'youtube':
@@ -418,15 +418,22 @@ class RoomControlsBar extends StatelessWidget {
         color = const Color(0xFFFF0000);
         label = 'YouTube';
         break;
-      case 'google_drive':
-        icon = Icons.cloud_outlined;
-        color = const Color(0xFF34A853);
-        label = 'Drive';
+      case 'bstation':
+      case 'bilibili':
+        icon = Icons.tv_rounded;
+        color = AppColors.bstationBlue;
+        label = 'Bstation';
+        break;
+      case 'screenshare':
+      case 'screen':
+        icon = Icons.screen_share_rounded;
+        color = Colors.cyanAccent;
+        label = 'Layar';
         break;
       default:
         icon = Icons.movie_outlined;
         color = AppColors.secondaryNeon;
-        label = 'Stream';
+        label = 'Direct Video';
     }
 
     return Container(

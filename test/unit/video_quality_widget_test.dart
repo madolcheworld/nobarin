@@ -4,8 +4,8 @@ import 'package:nobarin/features/auth/domain/user_profile.dart';
 import 'package:nobarin/features/room/controllers/sync_controller.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 import 'package:nobarin/features/room/models/room_model.dart';
+import 'package:nobarin/features/room/models/video_quality.dart';
 import 'package:nobarin/features/room/presentation/widgets/unified_player_view.dart';
-import 'package:nobarin/features/room/presentation/widgets/video_quality_sheet.dart';
 
 void main() {
   group('Video Quality Fast & Accurate UI Flow Tests', () {
@@ -25,8 +25,8 @@ void main() {
       hostId: 'tester-1',
       hostName: 'Tester',
       isPublic: true,
-      currentMediaType: 'youtube',
-      currentMediaUrl: 'https://youtu.be/dQw4w9WgXcQ',
+      currentMediaType: 'direct_url',
+      currentMediaUrl: 'https://example.com/movie.mp4',
       livekitRoomName: 'room_WP7777',
     );
 
@@ -44,8 +44,14 @@ void main() {
       syncController.dispose();
     });
 
-    testWidgets('1. Bottom bar displays quality pill and opens VideoQualitySheet on tap', (tester) async {
-      await player.loadMedia('direct_url', 'https://example.com/movie.mp4', autoPlay: false);
+    testWidgets(
+        '1. Bottom bar displays quality pill and opens VideoQualitySheet on tap',
+        (tester) async {
+      await player.loadMedia(
+        'direct_url',
+        'https://example.com/movie.mp4',
+        autoPlay: false,
+      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -74,38 +80,23 @@ void main() {
       expect(find.text('Auto (Otomatis)'), findsOneWidget);
     });
 
-
-    testWidgets('3. Dailymotion quality presets rendered and selectable', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await player.loadMedia('dailymotion', 'https://www.dailymotion.com/video/x8bgd2b', autoPlay: false);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: VideoQualitySheet(player: player),
-          ),
-        ),
+    testWidgets('2. Selecting VideoQuality updates controller state',
+        (tester) async {
+      await player.loadMedia(
+        'direct_url',
+        'https://example.com/movie.mp4',
+        autoPlay: false,
       );
-      await tester.pumpAndSettle();
 
-      expect(find.text('1080p Full HD'), findsOneWidget);
-      expect(find.text('720p HD'), findsOneWidget);
-      expect(find.text('480p SD'), findsOneWidget);
-      expect(find.text('380p'), findsOneWidget);
-      expect(find.text('240p Hemat Kuota'), findsOneWidget);
+      const customQuality = VideoQuality(
+        id: '720',
+        label: '720p HD',
+        height: 720,
+      );
 
-      await tester.tap(find.text('480p SD'));
-      await tester.pumpAndSettle();
-
-      expect(player.selectedQuality?.id, '480');
-      expect(player.currentQualityLabel, '480p');
+      await player.setVideoQuality(customQuality);
+      expect(player.selectedQuality?.id, equals('720'));
+      expect(player.currentQualityLabel, equals('720p'));
     });
-
   });
 }

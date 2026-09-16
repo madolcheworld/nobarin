@@ -14,10 +14,10 @@ void main() {
       final item = QueueItem(
         id: 'item-1',
         roomId: 'room-1',
-        mediaType: 'youtube',
-        mediaUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        mediaType: 'direct_url',
+        mediaUrl: 'https://example.com/video.mp4',
         title: 'Rick Astley - Never Gonna Give You Up',
-        thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+        thumbnailUrl: null,
         addedByUserId: 'user-1',
         addedByUserName: 'Alice',
         orderIndex: 0,
@@ -36,8 +36,7 @@ void main() {
       expect(fromJson.addedByUserId, item.addedByUserId);
       expect(fromJson.addedByUserName, item.addedByUserName);
       expect(fromJson.orderIndex, item.orderIndex);
-      expect(fromJson.isYouTube, isTrue);
-      expect(fromJson.isDirectUrl, isFalse);
+      expect(fromJson.isDirectUrl, isTrue);
     });
   });
 

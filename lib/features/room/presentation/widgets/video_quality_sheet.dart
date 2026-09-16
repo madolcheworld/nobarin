@@ -273,37 +273,11 @@ class VideoQualitySheet extends StatelessWidget {
   }
 
   static Color _getSourceColor(String type) {
-    switch (type) {
-      case 'youtube':
-        return AppColors.youtubeRed;
-      case 'dailymotion':
-        return AppColors.dailymotionBlue;
-      case 'bstation':
-      case 'bilibili':
-        return AppColors.bstationBlue;
-      case 'google_drive':
-        return AppColors.googleDriveGreen;
-      default:
-        return AppColors.primaryNeon;
-    }
+    return AppColors.primaryNeon;
   }
 
   static String _getSourceLabel(String type) {
-    switch (type) {
-      case 'youtube':
-        return 'YouTube';
-      case 'dailymotion':
-        return 'Dailymotion';
-      case 'bstation':
-      case 'bilibili':
-        return 'Bstation';
-      case 'google_drive':
-        return 'Google Drive';
-      case 'direct_url':
-        return 'Direct URL / HLS';
-      default:
-        return type.toUpperCase();
-    }
+    return 'Direct Video';
   }
 }
 

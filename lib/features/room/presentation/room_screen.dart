@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,8 +14,6 @@ import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
 import '../../chat/presentation/widgets/fullscreen_reaction_bar.dart';
 import '../../lobby/presentation/lobby_controller.dart';
-import '../../p2p_streaming/controllers/p2p_stream_controller.dart';
-import '../../p2p_streaming/models/local_video_file.dart';
 import '../../pip/presentation/pip_button.dart';
 import '../../pip/services/pip_service.dart';
 import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
@@ -37,13 +34,11 @@ import 'widgets/unified_player_view.dart';
 class RoomScreen extends ConsumerStatefulWidget {
   final String roomCode;
   final RoomModel? initialRoom;
-  final LocalVideoFile? initialLocalVideoFile;
 
   const RoomScreen({
     super.key,
     required this.roomCode,
     this.initialRoom,
-    this.initialLocalVideoFile,
   });
 
   @override
@@ -70,9 +65,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   WebRtcVoiceController? _voiceController;
   QueueController? _queueController;
   WebRtcScreenShareController? _screenShareController;
-  P2pStreamController? _p2pController;
   RealtimeChannel? _signalingChannel;
-  String? _lastLoadedP2pStreamUrl;
 
   @override
   void initState() {
@@ -263,13 +256,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
       _signalingChannel = supabase?.channel('signaling_${room.id}');
 
-      _p2pController = P2pStreamController(
-        roomId: room.id,
-        currentUser: user,
-        supabase: supabase,
-        sharedChannel: _signalingChannel,
-      );
-      _p2pController!.addListener(_onControllerUpdated);
 
       _voiceController = WebRtcVoiceController(
         roomId: room.id,
@@ -340,37 +326,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       };
 
       // Initial media load
-      final bool isHost = _roomController?.isHost == true;
-      if (isHost && widget.initialLocalVideoFile != null) {
-        _p2pController?.startHostStreaming(widget.initialLocalVideoFile!);
+      if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
+        final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
         _player.loadMedia(
-          'direct_url',
-          widget.initialLocalVideoFile!.path ?? room.currentMediaUrl ?? '',
-          autoPlay: true,
+          room.currentMediaType ?? 'direct_url',
+          room.currentMediaUrl!,
+          autoPlay: shouldAutoPlay,
+          startSeconds: room.currentPosition,
         );
-      } else if (isHost && room.currentMediaUrl?.startsWith('p2p://') == true) {
-        final localFile = LocalVideoFile.tryFromP2pUri(room.currentMediaUrl!);
-        if (localFile != null && localFile.path != null && localFile.path!.isNotEmpty) {
-          _p2pController?.startHostStreaming(localFile);
-          _player.loadMedia(
-            'direct_url',
-            localFile.path!,
-            autoPlay: room.isPlaying,
-            startSeconds: room.currentPosition,
-          );
-        }
-      } else if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
-        if (!room.currentMediaUrl!.startsWith('p2p://')) {
-          final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
-          _player.loadMedia(
-            room.currentMediaType ?? 'direct_url',
-            room.currentMediaUrl!,
-            autoPlay: shouldAutoPlay,
-            startSeconds: room.currentPosition,
-          );
-          if (shouldAutoPlay && _roomController?.isHost == true && !room.isPlaying) {
-            _syncController?.broadcastSync(state: 'playing', position: room.currentPosition);
-          }
+        if (shouldAutoPlay && _roomController?.isHost == true && !room.isPlaying) {
+          _syncController?.broadcastSync(state: 'playing', position: room.currentPosition);
         }
       }
       if (mounted) {
@@ -445,22 +410,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         _wasHost = isNowHost;
       }
 
-      // Auto-load P2P loopback proxy stream for viewers once ready
-      final bool isViewer = !(_roomController?.isHost ?? false);
-      if (isViewer && _p2pController != null && _p2pController!.isViewerStreaming) {
-        final streamUrl = _p2pController!.streamUrl;
-        if (streamUrl.isNotEmpty && streamUrl != _lastLoadedP2pStreamUrl) {
-          _lastLoadedP2pStreamUrl = streamUrl;
-          _player.loadMedia(
-            'direct_url',
-            streamUrl,
-            autoPlay: _room?.isPlaying ?? true,
-            startSeconds: _room?.currentPosition ?? 0.0,
-          );
-        }
-      } else if (_room?.currentMediaUrl?.startsWith('p2p://') != true) {
-        _lastLoadedP2pStreamUrl = null;
-      }
 
       debugPrint(
           '[RoomScreen] _onControllerUpdated: participants=${_roomController?.state.participants.length}');
@@ -475,10 +424,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     _roomController?.removeListener(_onControllerUpdated);
     _voiceController?.removeListener(_onControllerUpdated);
     _queueController?.removeListener(_onControllerUpdated);
-    _p2pController?.removeListener(_onControllerUpdated);
     _player.dispose();
     _syncController?.dispose();
-    _p2pController?.dispose();
 
     // Auto-close or handover room if host leaves unexpectedly (e.g. browser back button, URL navigation)
     if (_roomController != null &&
@@ -528,7 +475,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       syncController: _syncController!,
       chatController: _chatController,
       queueController: _queueController,
-      p2pController: _p2pController,
     );
   }
 
@@ -539,8 +485,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   Future<void> _handleExitRoom() async {
     // If player is in fullscreen, ONLY exit fullscreen and DO NOT leave room
-    if (_player.isFullscreen ||
-        _player.ytController?.value.fullScreenOption.enabled == true) {
+    if (_player.isFullscreen) {
       await _player.exitFullscreen();
       return;
     }
@@ -787,7 +732,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     final speakingIds = _voiceController?.activeSpeakerIds ?? {};
     final mutedIds = _voiceController?.mutedUserIds ?? {};
     final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final bool isMobileYouTube = !kIsWeb && _player.mediaType == 'youtube';
     final bool isFullscreen = _player.isFullscreen;
     final bool isInPip = PipService.instance.isInPipMode;
 
@@ -816,8 +760,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         title: currentRoom.title,
                         showTopBar: false,
                         isPipMode: true,
-                        isP2pStream: _p2pController?.isP2pActive == true ||
-                            currentRoom.currentMediaUrl?.startsWith('p2p://') == true,
                       )
                     : const SizedBox.shrink()),
           ),
@@ -825,8 +767,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       );
     }
 
-    // For non-mobile-YouTube (e.g. MediaKit native or Web video), render dedicated fullscreen view
-    if (isFullscreen && !isMobileYouTube) {
+    // Fullscreen dedicated view
+    if (isFullscreen) {
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) async {
@@ -846,8 +788,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 onExit: _handleExitRoom,
                 title: currentRoom.title,
                 showTopBar: true,
-                isP2pStream: _p2pController?.isP2pActive == true ||
-                    currentRoom.currentMediaUrl?.startsWith('p2p://') == true,
               ),
               if (_chatController != null) ...[
                 Positioned.fill(
@@ -869,8 +809,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_player.isFullscreen ||
-            _player.ytController?.value.fullScreenOption.enabled == true) {
+        if (_player.isFullscreen) {
           await _player.exitFullscreen();
           return;
         }
@@ -984,8 +923,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                                   onExit: _handleExitRoom,
                                   title: currentRoom.title,
                                   showTopBar: false,
-                                  isP2pStream: _p2pController?.isP2pActive == true ||
-                                      currentRoom.currentMediaUrl?.startsWith('p2p://') == true,
                                 ),
                               if (_chatController != null)
                                 Positioned.fill(
@@ -1058,8 +995,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         onExit: _handleExitRoom,
                         title: currentRoom.title,
                         showTopBar: false,
-                        isP2pStream: _p2pController?.isP2pActive == true ||
-                            currentRoom.currentMediaUrl?.startsWith('p2p://') == true,
                       ),
 
                     // Controls Bar
@@ -1127,6 +1062,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
           ),
           child: TabBar(
             controller: _tabController,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 6),
             indicatorColor: AppColors.primaryNeon,
             indicatorWeight: 2.5,
             labelColor: AppColors.primaryNeon,

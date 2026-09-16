@@ -159,7 +159,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     const SizedBox(height: 8),
 
                     const Text(
-                      'Nonton bareng video YouTube & Stream dengan sinkronisasi real-time & Voice Chat.',
+                      'Nonton bareng video stream dengan sinkronisasi real-time & Voice Chat.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -178,7 +178,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                       children: [
                         _buildFeatureBadge('⚡ Sinkron Real-time', AppColors.primaryNeon),
                         _buildFeatureBadge('🎙️ VoIP Live Suara', AppColors.accentGreen),
-                        _buildFeatureBadge('📺 YouTube & Stream', AppColors.secondaryNeon),
+                        _buildFeatureBadge('📺 Video Stream', AppColors.secondaryNeon),
                       ],
                     ).animate().fadeIn(delay: 350.ms),
 

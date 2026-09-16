@@ -98,10 +98,10 @@ void main() {
       expect(filtered.first.code, 'WP1001');
 
       // 5. Filter by host name
-      container.read(lobbySearchQueryProvider.notifier).state = 'Popcorn';
+      container.read(lobbySearchQueryProvider.notifier).state = 'Cinephile';
       filtered = container.read(filteredRoomsProvider);
       expect(filtered.isNotEmpty, isTrue);
-      expect(filtered.first.hostName, contains('Popcorn'));
+      expect(filtered.first.hostName, contains('Cinephile'));
     });
 
     test('findRoomByCode does not add private rooms into public lobby state', () async {

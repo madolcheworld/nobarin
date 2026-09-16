@@ -46,48 +46,6 @@ class RoomModel {
     if (url == null || url.trim().isEmpty) return null;
     final trimmed = url.trim();
 
-    // 1. YouTube
-    final ytMatch = RegExp(
-      r'(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+?&v=|live\/))([a-zA-Z0-9_-]{11})',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (ytMatch != null) {
-      final ytId = ytMatch.group(1);
-      return 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
-    }
-
-
-    // 3. Google Drive
-    final driveMatch = RegExp(
-      r'(?:drive\.google\.com\/(?:file\/d\/|open\?id=)|[\?&]id=)([a-zA-Z0-9_-]+)',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (driveMatch != null) {
-      final driveId = driveMatch.group(1);
-      return 'https://drive.google.com/thumbnail?id=$driveId&sz=w640';
-    }
-
-    // 4. Dailymotion
-    final dmMatch = RegExp(
-      r'(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (dmMatch != null) {
-      final dmId = dmMatch.group(1);
-      return 'https://www.dailymotion.com/thumbnail/video/$dmId';
-    }
-
-    // 6. Direct preset media fallbacks
-    if (trimmed.contains('oceans.mp4')) {
-      return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=640&q=80';
-    }
-    if (trimmed.contains('x36xhzz') || trimmed.contains('bunny')) {
-      return 'https://peach.blender.org/wp-content/uploads/title_shot.png';
-    }
-    if (trimmed.contains('sintel')) {
-      return 'https://durian.blender.org/wp-content/uploads/2010/05/sintel_poster_small.jpg';
-    }
-
     // If the URL itself is an image format
     final lower = trimmed.toLowerCase();
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {

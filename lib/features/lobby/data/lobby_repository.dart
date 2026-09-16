@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../room/models/room_model.dart';
-import '../../../core/constants/api_constants.dart';
 
 class LobbyRepository {
   final SupabaseClient? supabase;
@@ -14,38 +13,38 @@ class LobbyRepository {
   /// In-memory mock rooms for fallback when offline or Supabase table not created yet
   static final List<RoomModel> _demoRooms = [
     RoomModel(
-      id: 'demo-room-1',
+      id: 'mock-1',
       code: 'WP1001',
-      title: '🎬 Movie Night: Big Buck Bunny',
-      description: 'Nonton bareng kartun animasi open source seru!',
-      hostName: 'AdminPopcorn',
+      title: 'Nobarin Santai Bareng',
+      hostId: 'mock-host-1',
+      hostName: 'AdminNobar',
       isPublic: true,
       controlMode: 'collaborative',
       currentMediaType: 'direct_url',
-      currentMediaUrl: ApiConstants.presetMedia[1]['url'],
-      thumbnailUrl: 'https://peach.blender.org/wp-content/uploads/title_shot.png',
+      currentMediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      thumbnailUrl: null,
       currentState: 'playing',
       currentPosition: 12.0,
       livekitRoomName: 'room_WP1001',
-      participantCount: 4,
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
+      createdAt: DateTime.now(),
+      participantCount: 3,
     ),
     RoomModel(
-      id: 'demo-room-2',
+      id: 'mock-2',
       code: 'WP2002',
-      title: '🎧 Chill Beats & Lofi Vibing',
-      description: 'Dengerin musik bareng sambil santai dan ngobrol',
-      hostName: 'CyberDj',
+      title: 'Nobarin Film Pendek',
+      hostId: 'mock-host-2',
+      hostName: 'Cinephile',
       isPublic: true,
       controlMode: 'host_only',
-      currentMediaType: 'youtube',
-      currentMediaUrl: ApiConstants.presetMedia[4]['url'],
-      thumbnailUrl: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+      currentMediaType: 'direct_url',
+      currentMediaUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+      thumbnailUrl: null,
       currentState: 'playing',
       currentPosition: 64.0,
       livekitRoomName: 'room_WP2002',
-      participantCount: 7,
-      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+      createdAt: DateTime.now(),
+      participantCount: 5,
     ),
   ];
 
@@ -422,8 +421,8 @@ class LobbyRepository {
       hostName: hostName,
       isPublic: isPublic,
       controlMode: controlMode,
-      currentMediaType: initialMediaType ?? 'direct_url',
-      currentMediaUrl: initialMediaUrl ?? ApiConstants.presetMedia[0]['url'],
+      currentMediaType: initialMediaType,
+      currentMediaUrl: initialMediaUrl,
       thumbnailUrl: resolvedThumb,
       currentState: 'paused',
       currentPosition: 0.0,

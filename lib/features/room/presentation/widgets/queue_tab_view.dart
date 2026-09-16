@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../browser/presentation/bstation_browser_sheet.dart';
+import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/unified_player_controller.dart';
 import '../../models/queue_item.dart';
@@ -25,76 +27,134 @@ class QueueTabView extends StatelessWidget {
         final bool canManage = queueController.canManageQueue;
         final bool canAdd = queueController.canAddToQueue;
         final hasMedia = player.mediaUrl.isNotEmpty;
-        final isYouTube = player.mediaType == 'youtube';
-        final isDailymotion = player.mediaType == 'dailymotion';
-        final isBstation = player.mediaType == 'bstation' ||
-            player.mediaType == 'bilibili';
-        final isGoogleDrive = player.mediaType == 'google_drive' ||
-            player.mediaType == 'gdrive';
-        final ytId = UnifiedPlayerController.extractYouTubeVideoId(
-            player.mediaUrl);
-        final dmId = isDailymotion
-            ? UnifiedPlayerController.extractDailymotionVideoId(
-                player.mediaUrl)
-            : null;
-
+        final bool isYouTube = player.mediaType == 'youtube';
+        final bool isBstation = player.mediaType == 'bstation';
         final Color sourceColor = isYouTube
             ? AppColors.youtubeRed
-            : (isDailymotion
-                ? AppColors.dailymotionBlue
-                : (isBstation
-                    ? AppColors.bstationBlue
-                    : (isGoogleDrive
-                        ? AppColors.googleDriveGreen
-                        : AppColors.secondaryNeon)));
-
+            : isBstation
+                ? AppColors.bstationBlue
+                : AppColors.secondaryNeon;
         final String sourceLabel = isYouTube
             ? 'YouTube'
-            : (isDailymotion
-                ? 'Dailymotion'
-                : (isBstation
-                    ? 'Bstation'
-                    : (isGoogleDrive ? 'Google Drive' : 'Direct URL')));
+            : isBstation
+                ? 'Bstation'
+                : 'Direct Video';
 
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           children: [
             // Top Action Row
             if (canAdd) ...[
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primaryNeon,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    visualDensity: VisualDensity.compact,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+              Row(
+                children: [
+                  // Dedicated YouTube Queue Button
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.youtubeRed,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        AppHaptics.selection();
+                        YouTubeBrowserSheet.show(
+                          context,
+                          queueController: queueController,
+                          chatController: queueController.chatController,
+                          mode: YouTubeBrowserMode.queueOnly,
+                        );
+                      },
+                      icon: const Icon(Icons.smart_display_rounded, size: 15),
+                      label: const Text(
+                        '+ YouTube',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                  onPressed: () {
-                    AppHaptics.selection();
-                    MediaSourcePicker.show(
-                      context,
-                      syncController: queueController.syncController,
-                      chatController: queueController.chatController,
-                      queueController: queueController,
-                      isAddingToQueueInitial: true,
-                    );
-                  },
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text(
-                    'Tambah Video',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(width: 6),
+
+                  // Dedicated Bstation Queue Button
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.bstationBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        AppHaptics.selection();
+                        BstationBrowserSheet.show(
+                          context,
+                          queueController: queueController,
+                          chatController: queueController.chatController,
+                          mode: BstationBrowserMode.queueOnly,
+                        );
+                      },
+                      icon: const Icon(Icons.tv_rounded, size: 15),
+                      label: const Text(
+                        '+ Bstation',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 6),
+
+                  // Direct URL / Other Media Button
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.surfaceElevated,
+                      foregroundColor: AppColors.primaryNeon,
+                      side: const BorderSide(
+                          color: AppColors.primaryNeon, width: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
+                      visualDensity: VisualDensity.compact,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      AppHaptics.selection();
+                      MediaSourcePicker.show(
+                        context,
+                        syncController: queueController.syncController,
+                        chatController: queueController.chatController,
+                        queueController: queueController,
+                        isAddingToQueueInitial: true,
+                      );
+                    },
+                    icon: const Icon(Icons.link_rounded, size: 15),
+                    label: const Text(
+                      '+ Link',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
             ],
 
             // Now Playing Card
@@ -132,50 +192,16 @@ class QueueTabView extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: isYouTube && ytId != null
-                          ? Image.network(
-                              'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
-                              width: 68,
-                              height: 44,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                width: 68,
-                                height: 44,
-                                color: Colors.black38,
-                                child: const Icon(Icons.play_circle_fill,
-                                    color: AppColors.youtubeRed, size: 24),
-                              ),
-                            )
-                          : (isDailymotion && dmId != null
-                              ? Image.network(
-                                  'https://www.dailymotion.com/thumbnail/video/$dmId',
-                                  width: 68,
-                                  height: 44,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    width: 68,
-                                    height: 44,
-                                    color: Colors.black38,
-                                    child: const Icon(
-                                        Icons.play_circle_filled_rounded,
-                                        color: AppColors.dailymotionBlue,
-                                        size: 24),
-                                  ),
-                                )
-                              : Container(
-                                  width: 68,
-                                  height: 44,
-                                  color: sourceColor.withValues(alpha: 0.15),
-                                  child: Icon(
-                                    isBstation
-                                        ? Icons.smart_display_rounded
-                                        : (isGoogleDrive
-                                            ? Icons.cloud_queue_rounded
-                                            : Icons.movie_outlined),
-                                    color: sourceColor,
-                                    size: 24,
-                                  ),
-                                )),
+                      child: Container(
+                        width: 68,
+                        height: 44,
+                        color: sourceColor.withValues(alpha: 0.15),
+                        child: Icon(
+                          Icons.movie_outlined,
+                          color: sourceColor,
+                          size: 24,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -400,22 +426,16 @@ class _QueueItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isYouTube = item.mediaType == 'youtube';
-    final isDailymotion = item.mediaType == 'dailymotion';
-    final isBstation =
-        item.mediaType == 'bstation' || item.mediaType == 'bilibili';
-    final isGoogleDrive =
-        item.mediaType == 'google_drive' || item.mediaType == 'gdrive';
-
-    final Color sourceColor = isYouTube
+    final Color sourceColor = item.isYouTube
         ? AppColors.youtubeRed
-        : (isDailymotion
-            ? AppColors.dailymotionBlue
-            : (isBstation
-                ? AppColors.bstationBlue
-                : (isGoogleDrive
-                    ? AppColors.googleDriveGreen
-                    : AppColors.secondaryNeon)));
+        : item.isBstation
+            ? AppColors.bstationBlue
+            : AppColors.secondaryNeon;
+    final String sourceBadge = item.isYouTube
+        ? 'YOUTUBE'
+        : item.isBstation
+            ? 'BSTATION'
+            : item.mediaType.toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -478,7 +498,7 @@ class _QueueItemCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
-                  item.mediaType.toUpperCase(),
+                  sourceBadge,
                   style: TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.bold,

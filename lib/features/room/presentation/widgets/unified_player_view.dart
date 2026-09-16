@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -12,7 +11,7 @@ import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../../../../core/utils/time_formatter.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
-import 'web_embed_player.dart';
+import 'bstation_player_widget.dart';
 import 'video_quality_sheet.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
@@ -23,7 +22,6 @@ class UnifiedPlayerView extends StatefulWidget {
   final String? title;
   final bool showTopBar;
   final bool isPipMode;
-  final bool isP2pStream;
 
   const UnifiedPlayerView({
     super.key,
@@ -34,7 +32,6 @@ class UnifiedPlayerView extends StatefulWidget {
     this.title,
     this.showTopBar = true,
     this.isPipMode = false,
-    this.isP2pStream = false,
   });
 
   @override
@@ -50,61 +47,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   bool _rightDoubleTapActive = false;
   Timer? _doubleTapTimer;
 
-  bool get _isP2pActive =>
-      widget.isP2pStream ||
-      widget.player.mediaUrl.startsWith('p2p://') ||
-      widget.syncController.room.currentMediaUrl?.startsWith('p2p://') == true;
-
-  Widget _buildP2pBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primaryNeon.withValues(alpha: 0.8),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryNeon.withValues(alpha: 0.3),
-            blurRadius: 8,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              color: AppColors.primaryNeon,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryNeon,
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Text(
-            'P2P Internet Stream',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   void initState() {
@@ -223,52 +165,24 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     return ListenableBuilder(
       listenable: widget.player,
       builder: (context, _) {
-        final bool isYouTube = widget.player.mediaType == 'youtube';
-        final bool isGoogleDrive = widget.player.mediaType == 'google_drive';
-        final bool isDailymotion = widget.player.mediaType == 'dailymotion';
-        final bool isBstation = widget.player.mediaType == 'bstation' ||
-            widget.player.mediaType == 'bilibili';
-        final bool isEmbed =
-            isGoogleDrive || isDailymotion || isBstation;
         final bool hasMedia = widget.player.mediaUrl.isNotEmpty;
         final bool canControl = widget.syncController.canControl;
-        final bool isMobileYouTube = !kIsWeb && isYouTube;
         final String? errorMsg = widget.player.errorMessage;
 
         Widget playerWidget;
         if (!hasMedia) {
           playerWidget = _buildEmptyPlaceholder();
-        } else if (isEmbed) {
-          playerWidget = WebEmbedPlayer(
-            key: ValueKey(
-              'embed_${widget.player.mediaType}_${widget.player.mediaUrl}',
-            ),
-            player: widget.player,
-            isPipMode: widget.isPipMode,
-          );
-        } else if (isYouTube && widget.player.ytController != null) {
+        } else if (widget.player.mediaType == 'youtube' &&
+            widget.player.ytController != null) {
           playerWidget = YoutubePlayer(
-            key: ValueKey(
-              'yt_${widget.player.mediaUrl}_${widget.player.ytController.hashCode}',
-            ),
             controller: widget.player.ytController!,
             aspectRatio: 16 / 9,
-            gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-            enableFullScreenOnVerticalDrag: false,
-            autoFullScreen: false,
-            controlsBuilder: (context, isFullscreen) {
-              if (widget.isPipMode) {
-                return const SizedBox.shrink();
-              }
-              if (errorMsg != null) {
-                return _buildErrorOverlay(
-                  context,
-                  errorMsg,
-                  canControl: canControl,
-                );
-              }
-              return _buildControlsOverlay(context, isFullscreen: isFullscreen);
-            },
+          );
+        } else if (widget.player.mediaType == 'bstation' &&
+            widget.player.bstationController != null) {
+          playerWidget = BstationPlayerWidget(
+            controller: widget.player.bstationController!,
+            aspectRatio: 16 / 9,
           );
         } else if (kIsWeb && widget.player.webVideoWidget != null) {
           playerWidget = widget.player.webVideoWidget!;
@@ -368,14 +282,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                   ),
                 ),
 
-              // Controls Overlay for media (for non-mobile-YouTube; mobile YouTube renders via controlsBuilder in OverlayPortal)
-              if (hasMedia && !isMobileYouTube && errorMsg == null && !widget.isPipMode)
+              // Controls Overlay for media
+              if (hasMedia && errorMsg == null && !widget.isPipMode)
                 Positioned.fill(
                   child: _buildControlsOverlay(context, isFullscreen: isFs),
                 ),
 
               // Error message overlay if playback failed
-              if (hasMedia && !isMobileYouTube && errorMsg != null)
+              if (hasMedia && errorMsg != null)
                 Positioned.fill(
                   child: _buildErrorOverlay(
                     context,
@@ -716,22 +630,10 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     maxLines: 1,
                                   ),
                                 ),
-                              if (_isP2pActive) ...[
-                                const SizedBox(width: 8),
-                                _buildP2pBadge(),
-                              ],
                             ],
                           ),
                         ),
                       ),
-                    ),
-
-                  // Floating P2P badge when top bar is not shown
-                  if (!isFs && !widget.showTopBar && _isP2pActive)
-                    Positioned(
-                      top: 10,
-                      right: 12,
-                      child: _buildP2pBadge(),
                     ),
 
                   // 4. Bottom Timeline & Controls Bar (positioned strictly at bottom)
