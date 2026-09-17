@@ -35,4 +35,24 @@ class TimeFormatter {
     final minute = local.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
+
+  /// Formats a DateTime to a friendly relative time ago in Indonesian (e.g. "Baru saja", "5 mnt lalu", "2 jam lalu", "3 hari lalu")
+  static String formatTimeAgo(DateTime? dateTime) {
+    if (dateTime == null) return '';
+    final diff = DateTime.now().difference(dateTime.toLocal());
+    if (diff.isNegative || diff.inSeconds < 60) {
+      return 'Baru saja';
+    }
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} mnt lalu';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours} jam lalu';
+    }
+    if (diff.inDays < 30) {
+      return '${diff.inDays} hari lalu';
+    }
+    final months = (diff.inDays / 30).floor();
+    return '$months bln lalu';
+  }
 }

@@ -232,11 +232,23 @@ final lobbyControllerProvider =
   return LobbyController(repo, supabase: repo.supabase);
 });
 
+enum LobbyFilterCategory {
+  all,
+  liveOnly,
+  youtube,
+  bstation,
+  dailymotion,
+}
+
 final lobbySearchQueryProvider = StateProvider<String>((ref) => '');
+
+final lobbyFilterCategoryProvider =
+    StateProvider<LobbyFilterCategory>((ref) => LobbyFilterCategory.all);
 
 final filteredRoomsProvider = Provider<List<RoomModel>>((ref) {
   final roomsAsync = ref.watch(lobbyControllerProvider);
   final rawQuery = ref.watch(lobbySearchQueryProvider).trim();
+  final category = ref.watch(lobbyFilterCategoryProvider);
   final query = rawQuery.toLowerCase();
   final cleanQuery = rawQuery
       .replaceAll('-', '')
@@ -247,8 +259,28 @@ final filteredRoomsProvider = Provider<List<RoomModel>>((ref) {
 
   return roomsAsync.when(
     data: (rooms) {
-      if (query.isEmpty) return rooms;
-      return rooms.where((room) {
+      var result = rooms;
+
+      // Filter by category
+      if (category == LobbyFilterCategory.liveOnly) {
+        result = result.where((r) => r.isPlaying).toList();
+      } else if (category == LobbyFilterCategory.youtube) {
+        result = result.where((r) => r.currentMediaType == 'youtube').toList();
+      } else if (category == LobbyFilterCategory.bstation) {
+        result = result
+            .where((r) =>
+                r.currentMediaType == 'bstation' ||
+                r.currentMediaType == 'bilibili')
+            .toList();
+      } else if (category == LobbyFilterCategory.dailymotion) {
+        result = result
+            .where((r) => r.currentMediaType == 'dailymotion')
+            .toList();
+      }
+
+      // Filter by search query
+      if (query.isEmpty) return result;
+      return result.where((room) {
         final titleMatch = room.title.toLowerCase().contains(query);
         final hostMatch = (room.hostName ?? '').toLowerCase().contains(query);
         final rawCode = room.code.toLowerCase();

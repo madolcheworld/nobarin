@@ -40,5 +40,25 @@ void main() {
       final dt = DateTime(2026, 9, 5, 14, 5);
       expect(TimeFormatter.formatChatTime(dt), '14:05');
     });
+
+    test('formats relative time ago in Indonesian', () {
+      expect(TimeFormatter.formatTimeAgo(null), '');
+      expect(TimeFormatter.formatTimeAgo(DateTime.now()), 'Baru saja');
+      expect(
+        TimeFormatter.formatTimeAgo(
+            DateTime.now().subtract(const Duration(minutes: 5))),
+        '5 mnt lalu',
+      );
+      expect(
+        TimeFormatter.formatTimeAgo(
+            DateTime.now().subtract(const Duration(hours: 3))),
+        '3 jam lalu',
+      );
+      expect(
+        TimeFormatter.formatTimeAgo(
+            DateTime.now().subtract(const Duration(days: 2))),
+        '2 hari lalu',
+      );
+    });
   });
 }

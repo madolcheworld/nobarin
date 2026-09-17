@@ -132,8 +132,19 @@ class BstationPlayerController extends ChangeNotifier {
             .bstar-header, .bstar-footer, .bstar-open-app, .bstar-app-banner,
             .app-download, .open-app, .openapp,
             .bstar-comment, .bstar-recommend, .episode-list-wrap,
-            .bstar-web-player__ad {
+            .bstar-web-player__ad,
+            .dialog, .dialog__wrap, .dialog__container, .video-toapp-dialog,
+            .dialog--mobile, .video-toapp-content, .bstar-dialog,
+            .bstar-dialog-mask, .bstar-dialog__wrapper, .bstar-modal,
+            .bstar-mask, .bstar-openapp-dialog, .open-app-dialog,
+            .bstar-pop, .bstar-pop-wrap, .bstar-popup,
+            [class*="video-toapp"], [class*="toapp"], [class*="open-app"],
+            [class*="openapp"], [class*="app-download"] {
               display: none !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+              visibility: hidden !important;
+              z-index: -9999 !important;
             }
             html, body {
               background-color: #000 !important;
@@ -143,7 +154,9 @@ class BstationPlayerController extends ChangeNotifier {
               width: 100% !important;
               height: 100% !important;
             }
-            .bstar-player, .player-container, .bstar-web-player, #player {
+            .bstar-player, .player-container, .bstar-web-player, #player,
+            .player, #bilibiliPlayer, .player-mobile, .player-mobile-area,
+            .player-mobile-box, .player-mobile-video-wrap {
               width: 100vw !important;
               height: 100vh !important;
               position: fixed !important;
@@ -216,8 +229,27 @@ class BstationPlayerController extends ChangeNotifier {
           }
         }
 
+        // 3. Continuously eliminate app-download modals, dialogs, and popups
+        function cleanBstationClutter() {
+          try {
+            var unwanted = document.querySelectorAll(
+              '.dialog, .video-toapp-dialog, .dialog__wrap, .dialog__container, ' +
+              '[class*="toapp"], [class*="video-toapp"], .bstar-open-app, .bstar-app-banner, ' +
+              '.open-app, .openapp, .app-download, [class*="open-app"], [class*="openapp"], ' +
+              '.bstar-dialog, .bstar-dialog-mask, .bstar-modal, .bstar-mask, .bstar-popup'
+            );
+            unwanted.forEach(function(el) {
+              if (!el.querySelector('video') && el.tagName !== 'VIDEO') {
+                el.remove();
+              }
+            });
+          } catch(e) {}
+        }
+
         setInterval(setupVideoBridge, 600);
+        setInterval(cleanBstationClutter, 400);
         setupVideoBridge();
+        cleanBstationClutter();
       })();
     ''';
 

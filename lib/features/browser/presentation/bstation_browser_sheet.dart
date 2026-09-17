@@ -236,6 +236,49 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
           setTimeout(reportBstationState, 300);
         });
 
+        function injectClutterStyles() {
+          try {
+            if (document.getElementById('nobar-bstation-clutter-style')) return;
+            var style = document.createElement('style');
+            style.id = 'nobar-bstation-clutter-style';
+            style.textContent = `
+              .dialog, .dialog__wrap, .dialog__container, .video-toapp-dialog,
+              .dialog--mobile, .video-toapp-content, .bstar-dialog,
+              .bstar-dialog-mask, .bstar-dialog__wrapper, .bstar-modal,
+              .bstar-mask, .bstar-openapp-dialog, .open-app-dialog,
+              .bstar-pop, .bstar-pop-wrap, .bstar-popup,
+              .bstar-open-app, .bstar-app-banner, .open-app, .openapp,
+              [class*="video-toapp"], [class*="toapp"], [class*="open-app"],
+              [class*="openapp"], [class*="app-download"] {
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                visibility: hidden !important;
+              }
+            `;
+            document.head.appendChild(style);
+          } catch(e) {}
+        }
+        injectClutterStyles();
+
+        function cleanBstationClutter() {
+          try {
+            var unwanted = document.querySelectorAll(
+              '.dialog, .video-toapp-dialog, .dialog__wrap, .dialog__container, ' +
+              '[class*="toapp"], [class*="video-toapp"], .bstar-open-app, .bstar-app-banner, ' +
+              '.open-app, .openapp, .app-download, [class*="open-app"], [class*="openapp"], ' +
+              '.bstar-dialog, .bstar-dialog-mask, .bstar-modal, .bstar-mask, .bstar-popup'
+            );
+            unwanted.forEach(function(el) {
+              if (!el.querySelector('video') && el.tagName !== 'VIDEO') {
+                el.remove();
+              }
+            });
+          } catch(e) {}
+        }
+        cleanBstationClutter();
+        setInterval(cleanBstationClutter, 600);
+
         setInterval(reportBstationState, 1500);
         setTimeout(reportBstationState, 500);
       })();

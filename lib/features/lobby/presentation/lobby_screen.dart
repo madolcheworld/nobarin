@@ -9,6 +9,7 @@ import 'lobby_controller.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/join_code_dialog.dart';
 import 'widgets/room_card.dart';
+import 'widgets/user_profile_sheet.dart';
 import '../../room/models/room_model.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -20,10 +21,32 @@ class LobbyScreen extends ConsumerStatefulWidget {
 
 class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  bool _showFab = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    final shouldShow =
+        _scrollController.hasClients && _scrollController.offset > 120;
+    if (shouldShow != _showFab) {
+      setState(() {
+        _showFab = shouldShow;
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -50,11 +73,94 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     }
   }
 
+  Widget _buildFilterChip({
+    required String label,
+    IconData? icon,
+    Color? iconColor,
+    int? count,
+    required LobbyFilterCategory category,
+    required LobbyFilterCategory selectedCategory,
+  }) {
+    final isSelected = selectedCategory == category;
+
+    return InkWell(
+      onTap: () {
+        AppHaptics.selection();
+        ref.read(lobbyFilterCategoryProvider.notifier).state = category;
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primaryNeon.withValues(alpha: 0.2)
+              : AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primaryNeon
+                : AppColors.borderLight,
+            width: isSelected ? 1.4 : 0.9,
+          ),
+          boxShadow: isSelected ? AppColors.neonVioletGlow : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: iconColor ?? AppColors.textPrimary),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.primaryNeon
+                      : AppColors.surface,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected
+                        ? Colors.white
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authControllerProvider).asData?.value;
     final roomsAsync = ref.watch(lobbyControllerProvider);
     final filteredRooms = ref.watch(filteredRoomsProvider);
+    final selectedCategory = ref.watch(lobbyFilterCategoryProvider);
+    final rawQuery = ref.watch(lobbySearchQueryProvider).trim();
+
+    final allRooms = roomsAsync.asData?.value ?? [];
+    final allRoomsCount = allRooms.length;
+    final liveRoomsCount = allRooms.where((r) => r.isPlaying).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -82,150 +188,115 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           ],
         ),
         actions: [
-          // User profile menu
-          if (user != null) ...[
-            Container(
+          // Realtime Status Indicator
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.accentGreen.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.accentGreen.withValues(alpha: 0.3),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.accentGreen,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                const Text(
+                  'Online',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.accentGreen,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // User profile trigger button
+          InkWell(
+            onTap: () {
+              AppHaptics.light();
+              UserProfileSheet.show(context);
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: AppColors.surfaceElevated,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppColors.border),
               ),
-              child: PopupMenuButton<String>(
-                tooltip: 'Menu Profil',
-                color: AppColors.surfaceElevated,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: AppColors.border),
-                ),
-                onSelected: (val) async {
-                  if (val == 'logout') {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: AppColors.surfaceElevated,
-                        title: const Text('Keluar Akun?'),
-                        content: Text(
-                          'Yakin ingin keluar dari akun ${user.username}?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: const Text('Batal'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentRed,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: const Text('Keluar'),
-                          ),
-                        ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    user?.avatarUrl ?? '🦊',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 80),
+                    child: Text(
+                      user?.username ?? 'Tamu',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
-                    );
-                    if (confirm == true && context.mounted) {
-                      showDialog<void>(
-                        context: context,
-                        barrierDismissible: false,
-                        useRootNavigator: true,
-                        builder: (_) => PopScope(
-                          canPop: false,
-                          child: Dialog(
-                            backgroundColor: AppColors.surfaceElevated,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: const BorderSide(color: AppColors.border),
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 20,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: AppColors.primaryNeon,
-                                    ),
-                                  ),
-                                  SizedBox(width: 16),
-                                  Text(
-                                    'Sedang keluar akun...',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                      await ref.read(authControllerProvider.notifier).logout();
-                      if (context.mounted) {
-                        if (Navigator.of(context, rootNavigator: true).canPop()) {
-                          Navigator.of(context, rootNavigator: true).pop();
-                        }
-                        context.go('/');
-                      }
-                    }
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'logout',
-                    child: const Row(
-                      children: [
-                        Icon(Icons.logout_rounded, size: 18, color: AppColors.accentRed),
-                        SizedBox(width: 8),
-                        Text(
-                          'Keluar Akun',
-                          style: TextStyle(
-                            color: AppColors.accentRed,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(user.avatarUrl, style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 6),
-                      Text(
-                        user.username,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 16,
-                        color: AppColors.textSecondary,
-                      ),
-                    ],
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.tune_rounded,
+                    size: 14,
+                    color: AppColors.textSecondary,
                   ),
-                ),
+                ],
               ),
             ),
-            const SizedBox(width: 14),
-          ],
+          ),
+          const SizedBox(width: 14),
         ],
+      ),
+      floatingActionButton: AnimatedSlide(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        offset: _showFab ? Offset.zero : const Offset(0, 2),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: _showFab ? 1.0 : 0.0,
+          child: _showFab
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    AppHaptics.light();
+                    _openCreateRoomDialog();
+                  },
+                  backgroundColor: AppColors.primaryNeonDark,
+                  foregroundColor: Colors.white,
+                  elevation: 6,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text(
+                    'Buat Room',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () =>
@@ -233,9 +304,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         color: AppColors.primaryNeon,
         backgroundColor: AppColors.surfaceElevated,
         child: CustomScrollView(
+          controller: _scrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Hero / Quick Action Cards Section
+            // Top Section: Sapaan, Dual Hero Cards, Pencarian, & Filter Chips
             SliverToBoxAdapter(
               child: Padding(
                 padding:
@@ -243,7 +316,28 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Dual Action Cards Row
+                    // 1. Sapaan Ramah Sederhana
+                    Text(
+                      'Halo, ${user?.username ?? 'Teman'}! 👋',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Mau nonton apa hari ini?',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // 2. Dual Action Cards Row (Buat Room & Gabung Kode)
                     Row(
                       children: [
                         // Card 1: Buat Room Baru
@@ -266,7 +360,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                     BoxShadow(
                                       color: AppColors.primaryNeon
                                           .withValues(alpha: 0.35),
-                                      blurRadius: 16,
+                                      blurRadius: 14,
                                       offset: const Offset(0, 4),
                                     ),
                                   ],
@@ -277,11 +371,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.2),
+                                        color: Colors.white
+                                            .withValues(alpha: 0.2),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
-                                        Icons.add_rounded,
+                                        Icons.video_call_rounded,
                                         color: Colors.white,
                                         size: 22,
                                       ),
@@ -293,6 +388,15 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         fontSize: 15,
                                         fontWeight: FontWeight.w900,
                                         color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Mulai nobar & ajak teman',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.85),
                                       ),
                                     ),
                                   ],
@@ -320,7 +424,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                   color: AppColors.surfaceElevated,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: AppColors.secondaryNeon.withValues(alpha: 0.6),
+                                    color: AppColors.secondaryNeon
+                                        .withValues(alpha: 0.6),
                                     width: 1.2,
                                   ),
                                   boxShadow: [
@@ -357,6 +462,14 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
+                                    const SizedBox(height: 2),
+                                    const Text(
+                                      'Masukkan 6 digit PIN',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -368,11 +481,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
                     const SizedBox(height: 20),
 
-                    // Search Bar
+                    // 3. Search Bar
                     TextField(
                       controller: _searchController,
+                      focusNode: _searchFocusNode,
                       decoration: InputDecoration(
-                        hintText: 'Cari judul room, host, atau kode...',
+                        hintText: 'Cari judul room atau nama host...',
                         prefixIcon: const Icon(
                           Icons.search_rounded,
                           color: AppColors.textSecondary,
@@ -382,6 +496,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                 icon: const Icon(Icons.clear_rounded, size: 18),
                                 onPressed: () {
                                   _searchController.clear();
+                                  _searchFocusNode.unfocus();
                                   ref
                                       .read(lobbySearchQueryProvider.notifier)
                                       .state = '';
@@ -390,63 +505,111 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                               )
                             : null,
                       ),
+                      onSubmitted: (_) {
+                        _searchFocusNode.unfocus();
+                      },
                       onChanged: (val) {
                         ref.read(lobbySearchQueryProvider.notifier).state = val;
                         setState(() {});
                       },
                     ),
 
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
+                    // 4. Category Filter Chips Row
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip(
+                            label: 'Semua',
+                            count: allRoomsCount,
+                            category: LobbyFilterCategory.all,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            label: '🔴 Sedang Live',
+                            count: liveRoomsCount,
+                            category: LobbyFilterCategory.liveOnly,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            label: 'YouTube',
+                            icon: Icons.smart_display_rounded,
+                            iconColor: AppColors.youtubeRed,
+                            category: LobbyFilterCategory.youtube,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            label: 'Bstation',
+                            icon: Icons.tv_rounded,
+                            iconColor: AppColors.bstationBlue,
+                            category: LobbyFilterCategory.bstation,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            label: 'Dailymotion',
+                            icon: Icons.play_circle_filled_rounded,
+                            iconColor: AppColors.dailymotionBlue,
+                            category: LobbyFilterCategory.dailymotion,
+                            selectedCategory: selectedCategory,
+                          ),
+                        ],
+                      ),
+                    ),
 
-                    // Section Title with room count
-                    Builder(
-                      builder: (_) {
-                        final displayed = filteredRooms;
-                        return Row(
-                          children: [
-                            const Text(
-                              'Room Publik',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
+                    const SizedBox(height: 20),
+
+                    // 5. Section Header with Room Count
+                    Row(
+                      children: [
+                        const Text(
+                          'Room Publik',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryNeon.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.primaryNeon
+                                  .withValues(alpha: 0.3),
+                              width: 0.8,
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: AppColors.primaryNeon.withValues(alpha: 0.3),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Text(
-                                '${displayed.length}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryNeon,
-                                ),
-                              ),
+                          ),
+                          child: Text(
+                            '${filteredRooms.length}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryNeon,
                             ),
-                          ],
-                        );
-                      },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
 
-            // Room List / Grid
+            // Room List / Shimmer / Empty State
             roomsAsync.when(
               loading: () => SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => const Padding(
@@ -486,6 +649,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               data: (_) {
                 final displayedRooms = filteredRooms;
 
+                // Empty State Handling
                 if (displayedRooms.isEmpty) {
                   return SliverFillRemaining(
                     hasScrollBody: false,
@@ -495,29 +659,120 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceElevated.withValues(alpha: 0.6),
+                            color: AppColors.surfaceElevated
+                                .withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: AppColors.borderLight),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(18),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.primaryNeon.withValues(alpha: 0.1),
-                                  border: Border.all(
-                                    color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                              // Distinct Icons & Labels
+                              if (rawQuery.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.primaryNeon
+                                        .withValues(alpha: 0.1),
+                                  ),
+                                  child: const Icon(
+                                    Icons.search_off_rounded,
+                                    size: 38,
+                                    color: AppColors.primaryNeon,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.tv_off_rounded,
-                                  size: 42,
-                                  color: AppColors.primaryNeon,
+                                const SizedBox(height: 14),
+                                const Text(
+                                  'Room Tidak Ditemukan',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Tidak ada room yang cocok dengan "$rawQuery"',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    ref
+                                        .read(lobbySearchQueryProvider.notifier)
+                                        .state = '';
+                                    setState(() {});
+                                  },
+                                  child: const Text('Hapus Pencarian'),
+                                ),
+                              ] else if (selectedCategory !=
+                                  LobbyFilterCategory.all) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.secondaryNeon
+                                        .withValues(alpha: 0.1),
+                                  ),
+                                  child: const Icon(
+                                    Icons.filter_alt_off_rounded,
+                                    size: 38,
+                                    color: AppColors.secondaryNeon,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                const Text(
+                                  'Tidak Ada Room di Kategori Ini',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Belum ada room publik untuk filter yang dipilih.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    ref
+                                        .read(lobbyFilterCategoryProvider
+                                            .notifier)
+                                        .state = LobbyFilterCategory.all;
+                                  },
+                                  child: const Text('Tampilkan Semua Room'),
+                                ),
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.primaryNeon
+                                        .withValues(alpha: 0.1),
+                                    border: Border.all(
+                                      color: AppColors.primaryNeon
+                                          .withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.tv_off_rounded,
+                                    size: 38,
+                                    color: AppColors.primaryNeon,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
                                 const Text(
                                   'Belum Ada Room Publik',
                                   style: TextStyle(
@@ -526,37 +781,41 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Buat room pertama dan tonton bersama temanmu sekarang!',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: AppColors.primaryGradient,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                  ),
-                                  onPressed: () {
-                                    AppHaptics.light();
-                                    _openCreateRoomDialog();
-                                  },
-                                  icon: const Icon(Icons.add_rounded, color: Colors.white),
-                                  label: const Text(
-                                    'Buat Room Sekarang',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Buat room pertama dan tonton bersama temanmu sekarang!',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 18),
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: AppColors.primaryGradient,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                    ),
+                                    onPressed: () {
+                                      AppHaptics.light();
+                                      _openCreateRoomDialog();
+                                    },
+                                    icon: const Icon(Icons.add_rounded,
+                                        color: Colors.white),
+                                    label: const Text(
+                                      'Buat Room Sekarang',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -565,31 +824,32 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   );
                 }
 
+                // Room List layout (1 column on mobile, 2 columns on wide screens)
                 return SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                   sliver: SliverLayoutBuilder(
                     builder: (context, constraints) {
                       final double width = constraints.crossAxisExtent;
-                      final int crossAxisCount = width > 900
-                          ? 3
-                          : width > 600
-                              ? 2
-                              : 1;
+                      final bool isWide = width > 760;
 
-                      if (crossAxisCount == 1) {
+                      if (!isWide) {
                         return SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
                               final room = displayedRooms[index];
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.only(bottom: 12),
                                 child: RoomCard(
                                   room: room,
                                   onTap: () async {
-                                    await context.push('/room/${room.code}', extra: room);
+                                    await context.push('/room/${room.code}',
+                                        extra: room);
                                     if (context.mounted) {
-                                      ref.read(lobbyControllerProvider.notifier).refreshRooms();
+                                      ref
+                                          .read(
+                                              lobbyControllerProvider.notifier)
+                                          .refreshRooms();
                                     }
                                   },
                                 ),
@@ -602,11 +862,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
                       return SliverGrid(
                         gridDelegate:
-                            SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 1.10,
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 600,
+                          mainAxisExtent: 110,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 14,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -614,9 +874,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             return RoomCard(
                               room: room,
                               onTap: () async {
-                                await context.push('/room/${room.code}', extra: room);
+                                await context.push('/room/${room.code}',
+                                    extra: room);
                                 if (context.mounted) {
-                                  ref.read(lobbyControllerProvider.notifier).refreshRooms();
+                                  ref
+                                      .read(lobbyControllerProvider.notifier)
+                                      .refreshRooms();
                                 }
                               },
                             );
@@ -628,6 +891,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   ),
                 );
               },
+            ),
+
+            // Bottom space
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 32),
             ),
           ],
         ),

@@ -49,8 +49,8 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SizedBox(
-              width: 320,
-              height: 340,
+              width: 360,
+              height: 140,
               child: RoomCard(
                 room: testRoomWithThumb,
                 onTap: () => tapped = true,
@@ -60,12 +60,12 @@ void main() {
         ),
       );
 
-      // Verify title & host
+      // Verify title, host, participant count, source, and control mode
       expect(find.text('Nobar Anime Premiere'), findsOneWidget);
       expect(find.text('AdminNobar'), findsOneWidget);
-      expect(find.text('WP1234'), findsOneWidget);
       expect(find.text('15'), findsOneWidget);
       expect(find.text('Direct URL'), findsOneWidget);
+      expect(find.text('Host'), findsOneWidget);
 
       // Verify tap
       await tester.tap(find.byType(RoomCard));
@@ -79,8 +79,8 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SizedBox(
-              width: 320,
-              height: 340,
+              width: 360,
+              height: 140,
               child: RoomCard(
                 room: testRoomFallback,
                 onTap: () {},
@@ -90,11 +90,11 @@ void main() {
         ),
       );
 
-      // Verify source label
+      // Verify source label, title, host, and collaborative mode
       expect(find.text('Video Stream Room'), findsOneWidget);
       expect(find.text('GamerX'), findsOneWidget);
-      expect(find.text('WP5678'), findsOneWidget);
       expect(find.text('42'), findsOneWidget);
+      expect(find.text('Bebas'), findsOneWidget);
     });
   });
 }

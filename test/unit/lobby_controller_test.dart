@@ -104,6 +104,29 @@ void main() {
       expect(filtered.first.hostName, contains('Cinephile'));
     });
 
+    test('filteredRoomsProvider filters by LobbyFilterCategory correctly', () async {
+      final controller = container.read(lobbyControllerProvider.notifier);
+      await controller.refreshRooms();
+
+      // Reset search
+      container.read(lobbySearchQueryProvider.notifier).state = '';
+
+      // Test all
+      container.read(lobbyFilterCategoryProvider.notifier).state = LobbyFilterCategory.all;
+      var filtered = container.read(filteredRoomsProvider);
+      expect(filtered.length, greaterThan(0));
+
+      // Test liveOnly
+      container.read(lobbyFilterCategoryProvider.notifier).state = LobbyFilterCategory.liveOnly;
+      filtered = container.read(filteredRoomsProvider);
+      expect(filtered.every((r) => r.isPlaying), isTrue);
+
+      // Test youtube
+      container.read(lobbyFilterCategoryProvider.notifier).state = LobbyFilterCategory.youtube;
+      filtered = container.read(filteredRoomsProvider);
+      expect(filtered.every((r) => r.currentMediaType == 'youtube'), isTrue);
+    });
+
     test('findRoomByCode does not add private rooms into public lobby state', () async {
       final controller = container.read(lobbyControllerProvider.notifier);
       await controller.refreshRooms();

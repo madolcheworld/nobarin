@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../room/models/room_model.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
+import '../../data/lobby_repository.dart';
 import '../lobby_controller.dart';
 
 class JoinCodeDialog extends ConsumerStatefulWidget {
@@ -17,6 +20,21 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
   final TextEditingController _codeController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isNotEmpty) {
+      AppHaptics.selection();
+      final normalized = LobbyRepository.normalizeCode(text);
+      _codeController.text = normalized.isNotEmpty ? normalized : text;
+      if (mounted) {
+        setState(() {
+          _errorMessage = null;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -133,15 +151,41 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                       color: AppColors.textMuted,
                     ),
                     errorText: _errorMessage,
+                    suffixIcon: _codeController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              _codeController.clear();
+                              setState(() => _errorMessage = null);
+                            },
+                          )
+                        : null,
                   ),
                   onChanged: (_) {
                     if (_errorMessage != null) {
                       setState(() => _errorMessage = null);
+                    } else {
+                      setState(() {});
                     }
                   },
                   onSubmitted: (_) => _handleJoin(),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _isLoading ? null : _pasteFromClipboard,
+                    icon: const Icon(Icons.content_paste_rounded, size: 15),
+                    label: const Text(
+                      'Tempel dari Clipboard',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.secondaryNeon,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(

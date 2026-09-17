@@ -311,79 +311,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                       ),
               ),
 
-              // Quick Reactions Row (Compact & Streamlined)
-              if (widget.showReactions)
-                Container(
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    border: Border(
-                      top: BorderSide(color: AppColors.border, width: 0.8),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.bolt_rounded,
-                        size: 14,
-                        color: AppColors.primaryNeon,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: ApiConstants.quickReactions.length + 1,
-                          separatorBuilder: (_, _) => const SizedBox(width: 4),
-                          itemBuilder: (context, index) {
-                            if (index == ApiConstants.quickReactions.length) {
-                              return InkWell(
-                                onTap: _openEmojiPickerForFloating,
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceHighlight,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: AppColors.borderLight,
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_rounded,
-                                    size: 14,
-                                    color: AppColors.secondaryNeon,
-                                  ),
-                                ),
-                              );
-                            }
-                            final emoji = ApiConstants.quickReactions[index];
-                            return InkWell(
-                              onTap: () {
-                                AppHaptics.selection();
-                                widget.chatController.sendReaction(emoji);
-                                _scrollToBottom();
-                              },
-                              borderRadius: BorderRadius.circular(14),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                child: Text(
-                                  emoji,
-                                  style: const TextStyle(fontSize: 16),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              // Quick Reactions Row (Responsive & Polished across any screen size)
+              if (widget.showReactions) _buildQuickReactionsBar(),
 
               // Typing Indicator Banner
               _buildTypingIndicator(widget.chatController.typingStatusText),
@@ -714,6 +643,132 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickReactionsBar() {
+    final emojis = ApiConstants.quickReactions;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceElevated,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxBarWidth =
+              constraints.maxWidth > 520 ? 520 : constraints.maxWidth;
+          final bool isVeryNarrow = constraints.maxWidth < 310;
+
+          if (isVeryNarrow) {
+            return SizedBox(
+              height: 38,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: emojis.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                itemBuilder: (context, index) {
+                  if (index == emojis.length) {
+                    return _buildAddReactionButton(compact: true);
+                  }
+                  return _buildQuickReactionItem(emojis[index], compact: true);
+                },
+              ),
+            );
+          }
+
+          // Responsive Evenly Distributed Bar across full screen width
+          return Center(
+            child: SizedBox(
+              width: maxBarWidth,
+              height: 38,
+              child: Row(
+                children: [
+                  for (final emoji in emojis)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: _buildQuickReactionItem(emoji),
+                      ),
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _buildAddReactionButton(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildQuickReactionItem(String emoji, {bool compact = false}) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () {
+          AppHaptics.selection();
+          widget.chatController.sendReaction(emoji);
+          _scrollToBottom();
+        },
+        borderRadius: BorderRadius.circular(10),
+        splashColor: AppColors.primaryNeon.withValues(alpha: 0.25),
+        highlightColor: AppColors.primaryNeon.withValues(alpha: 0.1),
+        child: Container(
+          width: compact ? 38 : null,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.6),
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            emoji,
+            style: const TextStyle(fontSize: 19, height: 1.1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddReactionButton({bool compact = false}) {
+    return Material(
+      color: AppColors.surfaceHighlight.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: _openEmojiPickerForFloating,
+        borderRadius: BorderRadius.circular(10),
+        splashColor: AppColors.secondaryNeon.withValues(alpha: 0.25),
+        child: Container(
+          width: compact ? 38 : null,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.borderLight.withValues(alpha: 0.8),
+              width: 0.8,
+            ),
+          ),
+          child: const Icon(
+            Icons.add_rounded,
+            size: 18,
+            color: AppColors.secondaryNeon,
+          ),
+        ),
       ),
     );
   }

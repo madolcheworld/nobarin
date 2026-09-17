@@ -99,56 +99,65 @@ class RoomCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerLoading(
       child: Container(
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border),
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.borderLight, width: 1.1),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 16:9 Thumbnail Box
-              const AspectRatio(
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left Thumbnail
+            SizedBox(
+              width: 124,
+              child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: ShimmerBox(
                   width: double.infinity,
                   height: double.infinity,
-                  borderRadius: 0,
+                  borderRadius: 10,
                 ),
               ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title Lines
-                    const ShimmerBox(
-                        width: double.infinity, height: 16, borderRadius: 4),
-                    const SizedBox(height: 6),
-                    const ShimmerBox(width: 170, height: 14, borderRadius: 4),
-                    const SizedBox(height: 12),
-                    // Bottom Row
-                    Row(
-                      children: [
-                        const ShimmerBox(
-                            width: 75, height: 20, borderRadius: 8),
-                        const SizedBox(width: 8),
-                        const ShimmerBox(
-                            width: 65, height: 20, borderRadius: 8),
-                        const Spacer(),
-                        const ShimmerBox(
-                            width: 55, height: 20, borderRadius: 8),
-                      ],
-                    ),
-                  ],
-                ),
+            ),
+            SizedBox(width: 12),
+            // Right info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShimmerBox(
+                    width: double.infinity,
+                    height: 14,
+                    borderRadius: 4,
+                  ),
+                  SizedBox(height: 6),
+                  ShimmerBox(
+                    width: 100,
+                    height: 12,
+                    borderRadius: 4,
+                  ),
+                  SizedBox(height: 10),
+                  Row(
+                    children: [
+                      ShimmerBox(
+                        width: 50,
+                        height: 18,
+                        borderRadius: 6,
+                      ),
+                      SizedBox(width: 6),
+                      ShimmerBox(
+                        width: 60,
+                        height: 18,
+                        borderRadius: 6,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
