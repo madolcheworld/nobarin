@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../models/video_quality.dart';
 
 /// Controller for Dailymotion video player via WebViewController & HTML5 video bridge
 class DailymotionPlayerController extends ChangeNotifier {
@@ -15,11 +16,22 @@ class DailymotionPlayerController extends ChangeNotifier {
   double _playbackSpeed = 1.0;
   bool _isDisposed = false;
 
+  // Video Quality state for Dailymotion
+  List<VideoQuality> _availableQualities = [
+    const VideoQuality.auto(
+      label: 'Auto (Otomatis Dailymotion)',
+      mode: QualityControlMode.webviewBridge,
+    ),
+  ];
+  VideoQuality? _selectedQuality;
+
   void Function(double position)? onPositionChanged;
   void Function(double duration)? onDurationChanged;
   void Function(bool isPlaying)? onPlayingChanged;
   void Function()? onPlaybackEnded;
   void Function(String error)? onError;
+  void Function(List<VideoQuality> qualities)? onQualitiesChanged;
+  void Function(VideoQuality quality)? onQualitySelectedChanged;
 
   WebViewController? get webViewController => _webViewController;
   String get url => _url;
@@ -30,6 +42,8 @@ class DailymotionPlayerController extends ChangeNotifier {
   bool get isMuted => _isMuted;
   double get volume => _volume;
   double get playbackSpeed => _playbackSpeed;
+  List<VideoQuality> get availableQualities => List.unmodifiable(_availableQualities);
+  VideoQuality? get selectedQuality => _selectedQuality;
 
   bool get _isSupportedMobilePlatform =>
       !kIsWeb &&
@@ -68,7 +82,20 @@ class DailymotionPlayerController extends ChangeNotifier {
     _videoId = extractVideoId(url);
     _position = startSeconds;
     _isPlaying = autoPlay;
+    _availableQualities = [
+      const VideoQuality.auto(
+        label: 'Auto (Otomatis Dailymotion)',
+        mode: QualityControlMode.webviewBridge,
+      ),
+    ];
+    _selectedQuality = _availableQualities.first;
     notifyListeners();
+
+    // Fallback if player API is slow to respond with resolutions
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (_isDisposed || _availableQualities.length > 1) return;
+      _updateQualitiesFromBridge(['1080', '720', '480', '380', '240']);
+    });
 
     if (!_isSupportedMobilePlatform) {
       return;
@@ -234,6 +261,31 @@ class DailymotionPlayerController extends ChangeNotifier {
                 }));
               }
             });
+
+            // 3. Poll Dailymotion Player qualities
+            function pollDailymotionQualities() {
+              try {
+                if (window.player && typeof window.player.getQualities === 'function') {
+                  var list = window.player.getQualities();
+                  if (Array.isArray(list) && list.length > 0) {
+                    window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                      event: 'qualities',
+                      qualities: list
+                    }));
+                  }
+                } else if (window.player && window.player.getState) {
+                  var state = window.player.getState();
+                  if (state && Array.isArray(state.qualities) && state.qualities.length > 0) {
+                    window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                      event: 'qualities',
+                      qualities: state.qualities
+                    }));
+                  }
+                }
+              } catch(e) {}
+            }
+            setInterval(pollDailymotionQualities, 1500);
+            pollDailymotionQualities();
           }
         }
 
@@ -276,6 +328,23 @@ class DailymotionPlayerController extends ChangeNotifier {
               onDurationChanged?.call(_duration);
             }
             break;
+          case 'qualities':
+            final rawList = data['qualities'];
+            if (rawList is List) {
+              _updateQualitiesFromBridge(rawList);
+            }
+            break;
+          case 'qualitychange':
+            final curQ = data['quality']?.toString();
+            if (curQ != null) {
+              _selectedQuality = _availableQualities.firstWhere(
+                (q) => q.id == curQ,
+                orElse: () => VideoQuality.dailymotion(curQ),
+              );
+              notifyListeners();
+              onQualitySelectedChanged?.call(_selectedQuality!);
+            }
+            break;
           case 'play':
             if (!_isPlaying) {
               _isPlaying = true;
@@ -298,6 +367,62 @@ class DailymotionPlayerController extends ChangeNotifier {
         }
       }
     } catch (_) {}
+  }
+
+  void _updateQualitiesFromBridge(List<dynamic> list) {
+    final List<VideoQuality> qualities = [
+      const VideoQuality.auto(
+        label: 'Auto (Otomatis Dailymotion)',
+        mode: QualityControlMode.webviewBridge,
+      ),
+    ];
+    final Set<String> seen = {'auto'};
+
+    for (final item in list) {
+      final str = item.toString().trim().toLowerCase();
+      if (str.isEmpty || seen.contains(str) || str == 'auto') continue;
+      seen.add(str);
+      qualities.add(VideoQuality.dailymotion(str));
+    }
+
+    // Sort descending by height
+    qualities.sort((a, b) {
+      if (a.isAuto) return -1;
+      if (b.isAuto) return 1;
+      return (b.height ?? 0).compareTo(a.height ?? 0);
+    });
+
+    _availableQualities = qualities;
+    notifyListeners();
+    onQualitiesChanged?.call(_availableQualities);
+  }
+
+  /// Sets video quality for Dailymotion player
+  Future<void> setQuality(String qualityId) async {
+    _selectedQuality = _availableQualities.firstWhere(
+      (q) => q.id == qualityId,
+      orElse: () => VideoQuality.dailymotion(qualityId),
+    );
+    notifyListeners();
+    onQualitySelectedChanged?.call(_selectedQuality!);
+
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript('''
+          (function() {
+            try {
+              if (window.player && typeof window.player.setQuality === 'function') {
+                window.player.setQuality('$qualityId');
+              } else if (window.player && typeof window.player.setPlaybackQuality === 'function') {
+                window.player.setPlaybackQuality('$qualityId');
+              } else {
+                window.postMessage(JSON.stringify({ command: 'setQuality', value: '$qualityId' }), '*');
+              }
+            } catch(e) {}
+          })();
+        ''');
+      } catch (_) {}
+    }
   }
 
   Future<void> play() async {

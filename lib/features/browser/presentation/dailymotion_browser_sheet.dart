@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/video_title_resolver.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/dailymotion_player_controller.dart';
 import '../../room/controllers/queue_controller.dart';
@@ -161,14 +162,43 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     }
   }
 
+  Future<void> _resolveTitleBackground(String videoId) async {
+    try {
+      final resolved = await VideoTitleResolver.resolveTitle(
+        'https://www.dailymotion.com/video/$videoId',
+        mediaType: 'dailymotion',
+      );
+      final clean = VideoTitleResolver.cleanTitle(resolved);
+      if (clean.isNotEmpty && mounted) {
+        final currentId = _detectedVideoUrl != null
+            ? DailymotionPlayerController.extractVideoId(_detectedVideoUrl!)
+            : null;
+        if (currentId == videoId && _detectedTitle != clean) {
+          setState(() {
+            _detectedTitle = clean;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
   /// Injects JavaScript to observe SPA navigation & video elements on Dailymotion
   Future<void> _injectSpaDetector() async {
     if (_webViewController == null) return;
 
     const script = '''
       (function() {
-        if (window.__nobarDailymotionDetectorInitialized) return;
-        window.__nobarDailymotionDetectorInitialized = true;
+        function cleanTitleStr(str) {
+          if (!str) return '';
+          var s = str.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          s = s.replace(/\\s*[-|_]\\s*Dailymotion.*\$/i, '');
+          s = s.replace(/\\s*\\|\\s*Dailymotion.*\$/i, '');
+          s = s.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          if (s.toLowerCase() === 'dailymotion') return '';
+          return s;
+        }
 
         function reportDailymotionState() {
           try {
@@ -184,23 +214,25 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
               var title = '';
               var ogTitle = document.querySelector('meta[property="og:title"]');
               if (ogTitle && ogTitle.content) {
-                title = ogTitle.content;
+                title = cleanTitleStr(ogTitle.content);
               }
               if (!title) {
                 var twTitle = document.querySelector('meta[name="twitter:title"]');
                 if (twTitle && twTitle.content) {
-                  title = twTitle.content;
+                  title = cleanTitleStr(twTitle.content);
                 }
               }
               if (!title) {
                 var h1 = document.querySelector('h1');
                 if (h1 && h1.textContent && h1.textContent.trim().length > 0) {
-                  title = h1.textContent.trim();
+                  title = cleanTitleStr(h1.textContent);
                 }
               }
               if (!title) {
-                title = document.title || '';
+                title = cleanTitleStr(document.title);
               }
+
+              title = cleanTitleStr(title);
 
               var thumbnail = '';
               var ogImage = document.querySelector('meta[property="og:image"]');
@@ -222,24 +254,45 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
           } catch (e) {}
         }
 
-        var origPushState = history.pushState;
-        history.pushState = function() {
-          origPushState.apply(this, arguments);
-          setTimeout(reportDailymotionState, 350);
-        };
+        if (!window.__nobarDailymotionDetectorInitialized) {
+          window.__nobarDailymotionDetectorInitialized = true;
 
-        var origReplaceState = history.replaceState;
-        history.replaceState = function() {
-          origReplaceState.apply(this, arguments);
-          setTimeout(reportDailymotionState, 350);
-        };
+          var origPushState = history.pushState;
+          history.pushState = function() {
+            origPushState.apply(this, arguments);
+            setTimeout(reportDailymotionState, 250);
+            setTimeout(reportDailymotionState, 750);
+          };
 
-        window.addEventListener('popstate', function() {
-          setTimeout(reportDailymotionState, 300);
-        });
+          var origReplaceState = history.replaceState;
+          history.replaceState = function() {
+            origReplaceState.apply(this, arguments);
+            setTimeout(reportDailymotionState, 250);
+            setTimeout(reportDailymotionState, 750);
+          };
 
-        setInterval(reportDailymotionState, 1500);
-        setTimeout(reportDailymotionState, 500);
+          window.addEventListener('popstate', function() {
+            setTimeout(reportDailymotionState, 250);
+          });
+
+          try {
+            var observer = new MutationObserver(function() {
+              reportDailymotionState();
+            });
+            if (document.head) {
+              observer.observe(document.head, { subtree: true, characterData: true, childList: true });
+            }
+            if (document.body) {
+              observer.observe(document.body, { childList: true, subtree: true });
+            }
+          } catch(e) {}
+
+          setInterval(reportDailymotionState, 1200);
+        }
+
+        setTimeout(reportDailymotionState, 300);
+        setTimeout(reportDailymotionState, 800);
+        setTimeout(reportDailymotionState, 1800);
       })();
     ''';
 
@@ -283,23 +336,36 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     final isDailymotionVideo = videoId != null && videoId.isNotEmpty;
 
     if (isDailymotionVideo) {
-      String title = extractedTitle?.trim() ?? '';
-      if (title.isEmpty || title.toLowerCase() == 'dailymotion') {
-        title = 'Video Dailymotion ($videoId)';
-      } else {
-        // Remove common suffixes
-        title = title.replaceAll(RegExp(r'\s*-\s*Dailymotion.*$', caseSensitive: false), '');
-        title = title.replaceAll(RegExp(r'\s*\|\s*Dailymotion.*$', caseSensitive: false), '');
+      final clean = VideoTitleResolver.cleanTitle(extractedTitle);
+      String title = clean;
+      if (title.isEmpty) {
+        if (_detectedTitle.isNotEmpty &&
+            _detectedTitle != 'Video Dailymotion' &&
+            _detectedTitle != 'Memuat judul video...') {
+          title = _detectedTitle;
+        } else {
+          title = 'Memuat judul video...';
+        }
+        _resolveTitleBackground(videoId);
       }
 
       final thumb = (extractedThumbnail != null && extractedThumbnail.isNotEmpty)
           ? extractedThumbnail
           : 'https://www.dailymotion.com/thumbnail/video/$videoId';
 
-      if (mounted) {
+      if (mounted &&
+          (_detectedVideoUrl != url ||
+              (_detectedTitle != title && title != 'Memuat judul video...') ||
+              (_detectedTitle == 'Memuat judul video...' && title != 'Memuat judul video...'))) {
         setState(() {
           _detectedVideoUrl = url;
-          _detectedTitle = title.isNotEmpty ? title : 'Video Dailymotion';
+          _detectedTitle = title;
+          _detectedThumbnail = thumb;
+        });
+      } else if (mounted && _detectedVideoUrl != url) {
+        setState(() {
+          _detectedVideoUrl = url;
+          _detectedTitle = title;
           _detectedThumbnail = thumb;
         });
       }
@@ -318,7 +384,9 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     final url = _detectedVideoUrl;
     if (url == null || url.isEmpty) return;
 
-    final title = _detectedTitle.isNotEmpty ? _detectedTitle : 'Video Dailymotion';
+    final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
+        ? _detectedTitle
+        : 'Video Dailymotion';
 
     // 1. Create Room Mode
     if (widget.mode == DailymotionBrowserMode.createRoom) {
@@ -759,7 +827,7 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     return DailymotionPlayerController.extractVideoId(url) != null;
   }
 
-  void _handleManualFallbackSubmit() {
+  void _handleManualFallbackSubmit() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -774,16 +842,22 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     }
 
     final videoId = DailymotionPlayerController.extractVideoId(url)!;
+    final resolved = await VideoTitleResolver.resolveTitle(
+      'https://www.dailymotion.com/video/$videoId',
+      mediaType: 'dailymotion',
+    );
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoUrl = url;
-      _detectedTitle = 'Video Dailymotion ($videoId)';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video Dailymotion';
       _detectedThumbnail = 'https://www.dailymotion.com/thumbnail/video/$videoId';
     });
 
     _handleVideoSelection(widget.mode == DailymotionBrowserMode.watchNow ? 'watchNow' : 'play');
   }
 
-  void _handleManualFallbackQueue() {
+  void _handleManualFallbackQueue() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -798,9 +872,15 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     }
 
     final videoId = DailymotionPlayerController.extractVideoId(url)!;
+    final resolved = await VideoTitleResolver.resolveTitle(
+      'https://www.dailymotion.com/video/$videoId',
+      mediaType: 'dailymotion',
+    );
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoUrl = url;
-      _detectedTitle = 'Video Dailymotion ($videoId)';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video Dailymotion';
       _detectedThumbnail = 'https://www.dailymotion.com/thumbnail/video/$videoId';
     });
 

@@ -4,6 +4,7 @@ import 'dart:ui_web' as ui_web;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
+import '../../models/video_quality.dart';
 import 'web_video_adapter.dart';
 
 bool get isSupported => kIsWeb;
@@ -13,12 +14,14 @@ WebVideoAdapter createWebVideoAdapter({
   required void Function(double duration) onDurationChanged,
   required void Function(bool isPlaying) onPlayingChanged,
   required void Function(String error) onError,
+  void Function(List<VideoQuality> qualities)? onQualitiesChanged,
 }) {
   return WebVideoAdapterWeb(
     onPositionChanged: onPositionChanged,
     onDurationChanged: onDurationChanged,
     onPlayingChanged: onPlayingChanged,
     onError: onError,
+    onQualitiesChanged: onQualitiesChanged,
   );
 }
 
@@ -29,6 +32,18 @@ extension type _HlsJS._(JSObject _) implements JSObject {
   external void loadSource(String url);
   external void attachMedia(web.HTMLVideoElement video);
   external void destroy();
+  external JSArray<JSObject> get levels;
+  external int get currentLevel;
+  external set currentLevel(int level);
+  external void on(String event, JSFunction callback);
+}
+
+@JS()
+extension type _HlsLevel._(JSObject _) implements JSObject {
+  external int? get height;
+  external int? get width;
+  external int? get bitrate;
+  external String? get name;
 }
 
 @JS('Hls')
@@ -55,12 +70,25 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
   final void Function(double duration) onDurationChanged;
   final void Function(bool isPlaying) onPlayingChanged;
   final void Function(String error) onError;
+  final void Function(List<VideoQuality> qualities)? onQualitiesChanged;
+
+  List<VideoQuality> _availableQualities = [
+    const VideoQuality.auto(mode: QualityControlMode.directTrack),
+  ];
+  VideoQuality? _selectedQuality;
+
+  @override
+  List<VideoQuality> get availableQualities => List.unmodifiable(_availableQualities);
+
+  @override
+  VideoQuality? get selectedQuality => _selectedQuality;
 
   WebVideoAdapterWeb({
     required this.onPositionChanged,
     required this.onDurationChanged,
     required this.onPlayingChanged,
     required this.onError,
+    this.onQualitiesChanged,
   })  : _viewType = 'watch_party_direct_video_${++_idCounter}',
         _videoElement = web.HTMLVideoElement() {
     _videoElement
@@ -115,6 +143,23 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
           debugPrint('[WebVideoAdapter] Error setting currentTime: $e');
         }
       }
+
+      // If single file (not HLS), detect video resolution from element
+      if (_hlsInstance == null && _videoElement.videoHeight > 0) {
+        final h = _videoElement.videoHeight;
+        final w = _videoElement.videoWidth;
+        if (_availableQualities.length <= 1 || _availableQualities.first.height != h) {
+          _availableQualities = [
+            VideoQuality.fixed(
+              label: '${h}p (Kualitas Asli)',
+              height: h,
+              width: w,
+            ),
+          ];
+          _selectedQuality = _availableQualities.first;
+          onQualitiesChanged?.call(_availableQualities);
+        }
+      }
     }
 
     _subscriptions.add(_videoElement.onDurationChange.listen((_) => handleDurationAndSeek()));
@@ -147,6 +192,46 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
     }));
   }
 
+  void _extractHlsLevels() {
+    if (_hlsInstance == null) return;
+    try {
+      final List<VideoQuality> qualities = [
+        const VideoQuality.auto(
+          label: 'Auto (Otomatis)',
+          mode: QualityControlMode.directTrack,
+        ),
+      ];
+      final rawLevels = _hlsInstance!.levels.toDart;
+      for (int i = 0; i < rawLevels.length; i++) {
+        final lvl = _HlsLevel._(rawLevels[i]);
+        final h = lvl.height;
+        final w = lvl.width;
+        final b = lvl.bitrate;
+        final label = (h != null && h > 0) ? '${h}p' : (lvl.name ?? 'Level $i');
+        qualities.add(
+          VideoQuality(
+            id: '$i',
+            label: label,
+            height: h,
+            width: w,
+            bitrate: b,
+            mode: QualityControlMode.directTrack,
+          ),
+        );
+      }
+      qualities.sort((a, b) {
+        if (a.isAuto) return -1;
+        if (b.isAuto) return 1;
+        return (b.height ?? 0).compareTo(a.height ?? 0);
+      });
+      _availableQualities = qualities;
+      _selectedQuality = qualities.first;
+      onQualitiesChanged?.call(_availableQualities);
+    } catch (e) {
+      debugPrint('[WebVideoAdapter] Error extracting HLS levels: $e');
+    }
+  }
+
   void _cleanupHls() {
     if (_hlsInstance != null) {
       try {
@@ -156,6 +241,10 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
       }
       _hlsInstance = null;
     }
+    _availableQualities = [
+      const VideoQuality.auto(mode: QualityControlMode.directTrack),
+    ];
+    _selectedQuality = _availableQualities.first;
   }
 
   @override
@@ -182,6 +271,12 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
       try {
         final hls = _HlsJS();
         _hlsInstance = hls;
+        hls.on(
+          'hlsManifestParsed',
+          ((JSAny? event, JSAny? data) {
+            _extractHlsLevels();
+          }).toJS,
+        );
         hls.loadSource(url);
         hls.attachMedia(_videoElement);
       } catch (e) {
@@ -199,6 +294,36 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
     } else {
       _videoElement.pause();
       onPlayingChanged(false);
+    }
+  }
+
+  @override
+  Future<void> setQuality(String qualityId) async {
+    if (_hlsInstance != null) {
+      try {
+        if (qualityId == 'auto' || qualityId == '-1') {
+          _hlsInstance!.currentLevel = -1;
+          _selectedQuality = _availableQualities.firstWhere(
+            (q) => q.isAuto,
+            orElse: () => const VideoQuality.auto(),
+          );
+        } else {
+          final idx = int.tryParse(qualityId);
+          if (idx != null) {
+            _hlsInstance!.currentLevel = idx;
+            _selectedQuality = _availableQualities.firstWhere(
+              (q) => q.id == qualityId,
+              orElse: () => VideoQuality(
+                id: qualityId,
+                label: '${qualityId}p',
+                mode: QualityControlMode.directTrack,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[WebVideoAdapter] Error setting HLS quality: $e');
+      }
     }
   }
 

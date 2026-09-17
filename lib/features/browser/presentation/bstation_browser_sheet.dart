@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/video_title_resolver.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/queue_controller.dart';
 import '../../room/controllers/sync_controller.dart';
@@ -161,14 +162,38 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
     }
   }
 
+  Future<void> _resolveTitleBackground(String url) async {
+    try {
+      final resolved = await VideoTitleResolver.resolveTitle(url, mediaType: 'bstation');
+      final clean = VideoTitleResolver.cleanTitle(resolved);
+      if (clean.isNotEmpty && mounted && _detectedVideoUrl == url) {
+        if (_detectedTitle != clean) {
+          setState(() {
+            _detectedTitle = clean;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
   /// Injects JavaScript to observe SPA navigation & video elements on Bstation
   Future<void> _injectSpaDetector() async {
     if (_webViewController == null) return;
 
     const script = '''
       (function() {
-        if (window.__nobarBstationDetectorInitialized) return;
-        window.__nobarBstationDetectorInitialized = true;
+        function cleanTitleStr(str) {
+          if (!str) return '';
+          var s = str.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          s = s.replace(/\\s*[-|_]\\s*(Bilibili|Bstation).*\$/i, '');
+          s = s.replace(/\\s*\\|\\s*(Bilibili|Bstation).*\$/i, '');
+          s = s.replace(/\\s*HD\\s*\\|\\s*bilibili.*\$/i, '');
+          s = s.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          if (s.toLowerCase() === 'bstation' || s.toLowerCase() === 'bilibili') return '';
+          return s;
+        }
 
         function reportBstationState() {
           try {
@@ -183,30 +208,101 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
 
             if (isVideoPage) {
               var title = '';
-              var ogTitle = document.querySelector('meta[property="og:title"]');
-              if (ogTitle && ogTitle.content) {
-                title = ogTitle.content;
-              }
+              var thumbnail = '';
+
+              // 1. Check window.__initialState (rich OGV anime & UGC metadata)
+              try {
+                if (window.__initialState && window.__initialState.ogv) {
+                  var ogv = window.__initialState.ogv;
+                  var sTitle = (ogv.season && ogv.season.title) || '';
+                  var epTitle = '';
+                  var epId = ogv.epId || '';
+                  var epMatch = url.match(/\\/play\\/\\d+\\/(\\d+)/);
+                  if (epMatch) epId = epMatch[1];
+
+                  if (ogv.season && ogv.season.sectionsList) {
+                    for (var i = 0; i < ogv.season.sectionsList.length; i++) {
+                      var sec = ogv.season.sectionsList[i];
+                      if (sec && sec.episodes) {
+                        for (var j = 0; j < sec.episodes.length; j++) {
+                          var ep = sec.episodes[j];
+                          if (ep.episode_id == epId || (!epId && i === 0 && j === 0)) {
+                            epTitle = ep.title_display || ep.long_title_display || ep.short_title_display || '';
+                            if (ep.cover) thumbnail = ep.cover;
+                            break;
+                          }
+                        }
+                      }
+                      if (epTitle) break;
+                    }
+                  }
+                  if (sTitle && epTitle) {
+                    title = sTitle + ' - ' + epTitle;
+                  } else if (sTitle) {
+                    title = sTitle;
+                  } else if (epTitle) {
+                    title = epTitle;
+                  }
+                }
+
+                if (!title && window.__initialState && window.__initialState.ugc) {
+                  var ugc = window.__initialState.ugc;
+                  if (ugc.archive && ugc.archive.title) {
+                    title = ugc.archive.title;
+                    if (ugc.archive.cover) thumbnail = ugc.archive.cover;
+                  }
+                }
+              } catch(e) {}
+
+              // 2. Check document.title
               if (!title) {
-                var titleEl = document.querySelector('h1') ||
-                              document.querySelector('.ep-info__title') ||
-                              document.querySelector('.video-info__title') ||
-                              document.querySelector('.bstar-meta__title');
-                if (titleEl && titleEl.textContent && titleEl.textContent.trim().length > 0) {
-                  title = titleEl.textContent.trim();
+                var docT = cleanTitleStr(document.title);
+                if (docT) title = docT;
+              }
+
+              // 3. Check DOM elements
+              if (!title) {
+                var metaTitleEl = document.querySelector('.bstar-meta__title');
+                var activeEpEl = document.querySelector('.ep-item--active, .ep-item.active, [class*="ep-item--active"]');
+                if (metaTitleEl && metaTitleEl.textContent && activeEpEl) {
+                  var sName = metaTitleEl.textContent.trim();
+                  var eName = activeEpEl.getAttribute('title') || activeEpEl.textContent.trim();
+                  if (sName && eName && !/^\\d+\$/.test(eName)) {
+                    title = sName + ' - ' + eName;
+                  } else if (sName) {
+                    title = sName;
+                  }
                 }
               }
+
               if (!title) {
-                title = document.title || '';
+                var titleEl = document.querySelector('.video-info__title') ||
+                              document.querySelector('.bstar-meta__title') ||
+                              document.querySelector('.ep-info__title');
+                if (titleEl && titleEl.textContent) {
+                  var t = cleanTitleStr(titleEl.textContent);
+                  if (t) title = t;
+                }
               }
-              
-              var thumbnail = '';
-              var ogImage = document.querySelector('meta[property="og:image"]');
-              if (ogImage && ogImage.content) {
-                thumbnail = ogImage.content;
+
+              if (!title) {
+                var ogTitle = document.querySelector('meta[property="og:title"]');
+                if (ogTitle && ogTitle.content) {
+                  var t = cleanTitleStr(ogTitle.content);
+                  if (t) title = t;
+                }
               }
-              if (!thumbnail && v && v.getAttribute('poster')) {
-                thumbnail = v.getAttribute('poster');
+
+              title = cleanTitleStr(title);
+
+              if (!thumbnail) {
+                var ogImage = document.querySelector('meta[property="og:image"]');
+                if (ogImage && ogImage.content) {
+                  thumbnail = ogImage.content;
+                }
+                if (!thumbnail && v && v.getAttribute('poster')) {
+                  thumbnail = v.getAttribute('poster');
+                }
               }
 
               if (window.NobarBstationDetector) {
@@ -220,21 +316,48 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
           } catch (e) {}
         }
 
-        var origPushState = history.pushState;
-        history.pushState = function() {
-          origPushState.apply(this, arguments);
-          setTimeout(reportBstationState, 350);
-        };
+        if (!window.__nobarBstationDetectorInitialized) {
+          window.__nobarBstationDetectorInitialized = true;
 
-        var origReplaceState = history.replaceState;
-        history.replaceState = function() {
-          origReplaceState.apply(this, arguments);
-          setTimeout(reportBstationState, 350);
-        };
+          var origPushState = history.pushState;
+          history.pushState = function() {
+            origPushState.apply(this, arguments);
+            setTimeout(reportBstationState, 250);
+            setTimeout(reportBstationState, 750);
+            setTimeout(reportBstationState, 1500);
+          };
 
-        window.addEventListener('popstate', function() {
-          setTimeout(reportBstationState, 300);
-        });
+          var origReplaceState = history.replaceState;
+          history.replaceState = function() {
+            origReplaceState.apply(this, arguments);
+            setTimeout(reportBstationState, 250);
+            setTimeout(reportBstationState, 750);
+          };
+
+          window.addEventListener('popstate', function() {
+            setTimeout(reportBstationState, 250);
+            setTimeout(reportBstationState, 750);
+          });
+
+          try {
+            var observer = new MutationObserver(function() {
+              reportBstationState();
+            });
+            if (document.head) {
+              observer.observe(document.head, { subtree: true, characterData: true, childList: true });
+            }
+            if (document.body) {
+              observer.observe(document.body, { childList: true, subtree: true });
+            }
+          } catch(e) {}
+
+          setInterval(reportBstationState, 1200);
+        }
+
+        reportBstationState();
+        setTimeout(reportBstationState, 300);
+        setTimeout(reportBstationState, 800);
+        setTimeout(reportBstationState, 1800);
 
         function injectClutterStyles() {
           try {
@@ -278,9 +401,6 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
         }
         cleanBstationClutter();
         setInterval(cleanBstationClutter, 600);
-
-        setInterval(reportBstationState, 1500);
-        setTimeout(reportBstationState, 500);
       })();
     ''';
 
@@ -328,28 +448,35 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
         lower.contains('b23.tv');
 
     if (isBstationVideo) {
-      String title = extractedTitle?.trim() ?? '';
-      if (title.isEmpty ||
-          title.toLowerCase() == 'bstation' ||
-          title.toLowerCase() == 'bilibili') {
-        // Extract id or segment
-        final uri = Uri.tryParse(url);
-        final segment = uri != null && uri.pathSegments.isNotEmpty
-            ? uri.pathSegments.last
-            : 'Bstation';
-        title = 'Video Bstation ($segment)';
-      } else {
-        // Clean common platform suffix
-        title = title.replaceAll(
-          RegExp(r'\s*[-|_]\s*(Bilibili|Bstation).*$', caseSensitive: false),
-          '',
-        );
+      final cleanExtracted = VideoTitleResolver.cleanTitle(extractedTitle);
+
+      String title = cleanExtracted;
+      if (title.isEmpty) {
+        if (_detectedTitle.isNotEmpty &&
+            _detectedTitle != 'Video Bstation' &&
+            _detectedTitle != 'Memuat judul video...') {
+          title = _detectedTitle;
+        } else {
+          title = 'Memuat judul video...';
+        }
+        _resolveTitleBackground(url);
       }
 
       String? thumb = extractedThumbnail?.trim();
       if (thumb != null && thumb.isEmpty) thumb = null;
 
-      if (mounted && (_detectedVideoUrl != url || _detectedTitle != title)) {
+      if (mounted &&
+          (_detectedVideoUrl != url ||
+              (_detectedTitle != title && title != 'Memuat judul video...') ||
+              (_detectedTitle == 'Memuat judul video...' && title != 'Memuat judul video...'))) {
+        setState(() {
+          _detectedVideoUrl = url;
+          _detectedTitle = title;
+          if (thumb != null) {
+            _detectedThumbnail = thumb;
+          }
+        });
+      } else if (mounted && _detectedVideoUrl != url) {
         setState(() {
           _detectedVideoUrl = url;
           _detectedTitle = title;
@@ -374,7 +501,9 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
     final mediaUrl = _detectedVideoUrl;
     if (mediaUrl == null || mediaUrl.isEmpty) return;
 
-    final title = _detectedTitle.isNotEmpty ? _detectedTitle : 'Video Bstation';
+    final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
+        ? _detectedTitle
+        : 'Video Bstation';
 
     await _pauseWebViewMedia();
 
@@ -407,7 +536,9 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
       return;
     }
 
-    final title = _detectedTitle.isNotEmpty ? _detectedTitle : 'Video Bstation';
+    final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
+        ? _detectedTitle
+        : 'Video Bstation';
 
     widget.queueController!.addToQueue(
       mediaType: 'bstation',
@@ -448,7 +579,7 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
         lower.contains('b23.tv');
   }
 
-  void _handleManualFallbackSubmit() {
+  void _handleManualFallbackSubmit() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -462,15 +593,18 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
       return;
     }
 
+    final resolved = await VideoTitleResolver.resolveTitle(url, mediaType: 'bstation');
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoUrl = url;
-      _detectedTitle = 'Video Bstation';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video Bstation';
     });
 
     _applyWatchNow();
   }
 
-  void _handleManualFallbackQueue() {
+  void _handleManualFallbackQueue() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -484,9 +618,12 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
       return;
     }
 
+    final resolved = await VideoTitleResolver.resolveTitle(url, mediaType: 'bstation');
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoUrl = url;
-      _detectedTitle = 'Video Bstation';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video Bstation';
     });
 
     _applyAddToQueue();

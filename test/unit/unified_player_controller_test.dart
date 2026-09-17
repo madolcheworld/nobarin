@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nobarin/features/room/controllers/dailymotion_player_controller.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
+import 'package:nobarin/features/room/models/video_quality.dart';
 
 void main() {
   setUpAll(() {
@@ -172,6 +173,63 @@ void main() {
           'x8xyz12');
       expect(DailymotionPlayerController.extractVideoId('x8xyz12'), 'x8xyz12');
       expect(DailymotionPlayerController.extractVideoId('invalid url'), isNull);
+    });
+
+    test('VideoQuality model handles multiple modes and formats labels', () {
+      const autoQuality = VideoQuality.auto();
+      expect(autoQuality.isAuto, isTrue);
+      expect(autoQuality.shortLabel, equals('Auto'));
+      expect(autoQuality.badgeDescription, contains('koneksi'));
+
+      final bstationHd = VideoQuality.bstation(
+        id: '720',
+        label: '720p (HD)',
+        height: 720,
+      );
+      expect(bstationHd.mode, equals(QualityControlMode.webviewBridge));
+      expect(bstationHd.shortLabel, equals('720p'));
+      expect(bstationHd.badgeDescription, contains('HD'));
+
+      final dmFhd = VideoQuality.dailymotion('1080');
+      expect(dmFhd.mode, equals(QualityControlMode.webviewBridge));
+      expect(dmFhd.height, equals(1080));
+      expect(dmFhd.shortLabel, equals('1080p'));
+
+      final fixedOriginal = VideoQuality.fixed(
+        height: 1080,
+        width: 1920,
+      );
+      expect(fixedOriginal.mode, equals(QualityControlMode.fixedOriginal));
+      expect(fixedOriginal.shortLabel, equals('1080p (Asli)'));
+      expect(fixedOriginal.badgeDescription, contains('efisien'));
+    });
+
+    test('UnifiedPlayerController supportsQualitySelection handles each media source', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      // Direct URL
+      await controller.loadMedia('direct_url', 'https://example.com/live.m3u8');
+      expect(controller.supportsQualitySelection, isTrue);
+
+      // Local file
+      await controller.loadMedia('direct_url', '/sdcard/Download/movie.mp4');
+      expect(controller.isLocalFile, isTrue);
+      expect(controller.supportsQualitySelection, isFalse);
+      expect(controller.currentQualityLabel, contains('Asli'));
+
+      // P2P stream
+      await controller.loadMedia('direct_url', 'p2p://room123/video.mp4');
+      expect(controller.isP2PStream, isTrue);
+      expect(controller.supportsQualitySelection, isFalse);
+
+      // YouTube
+      await controller.loadMedia('youtube', 'https://youtu.be/dQw4w9WgXcQ');
+      expect(controller.supportsQualitySelection, isFalse);
+
+      // Dailymotion
+      await controller.loadMedia('dailymotion', 'https://dai.ly/x7tgad0');
+      expect(controller.supportsQualitySelection, isTrue);
     });
   });
 }

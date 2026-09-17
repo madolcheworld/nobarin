@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import '../../models/video_quality.dart';
 import 'web_video_adapter_stub.dart'
     if (dart.library.js_interop) 'web_video_adapter_web.dart' as impl;
 
@@ -13,6 +14,7 @@ abstract class WebVideoAdapter {
     required void Function(double duration) onDurationChanged,
     required void Function(bool isPlaying) onPlayingChanged,
     required void Function(String error) onError,
+    void Function(List<VideoQuality> qualities)? onQualitiesChanged,
   }) {
     if (!impl.isSupported) return null;
     return impl.createWebVideoAdapter(
@@ -20,6 +22,7 @@ abstract class WebVideoAdapter {
       onDurationChanged: onDurationChanged,
       onPlayingChanged: onPlayingChanged,
       onError: onError,
+      onQualitiesChanged: onQualitiesChanged,
     );
   }
 
@@ -53,6 +56,15 @@ abstract class WebVideoAdapter {
 
   /// Whether the video is currently muted.
   bool get isMuted;
+
+  /// Sets video playback quality (HLS rendition level index or auto).
+  Future<void> setQuality(String qualityId);
+
+  /// List of available video qualities for this stream.
+  List<VideoQuality> get availableQualities;
+
+  /// Currently selected video quality.
+  VideoQuality? get selectedQuality;
 
   /// Cleans up DOM elements and stream subscriptions.
   void dispose();

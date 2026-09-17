@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../models/video_quality.dart';
 
 /// Controller for Bstation / Bilibili player via WebViewController & HTML5 video bridge
 class BstationPlayerController extends ChangeNotifier {
@@ -14,11 +15,27 @@ class BstationPlayerController extends ChangeNotifier {
   double _playbackSpeed = 1.0;
   bool _isDisposed = false;
 
+  // Video Quality state for Bstation
+  final List<VideoQuality> _availableQualities = [
+    const VideoQuality.auto(
+      label: 'Auto (Otomatis Bstation)',
+      mode: QualityControlMode.webviewBridge,
+    ),
+    VideoQuality.bstation(id: '720', label: '720p HD', height: 720),
+    VideoQuality.bstation(id: '480', label: '480p Standar', height: 480),
+    VideoQuality.bstation(id: '360', label: '360p Hemat', height: 360),
+  ];
+  VideoQuality? _selectedQuality;
+  int? _detectedHeight;
+  int? _detectedWidth;
+
   void Function(double position)? onPositionChanged;
   void Function(double duration)? onDurationChanged;
   void Function(bool isPlaying)? onPlayingChanged;
   void Function()? onPlaybackEnded;
   void Function(String error)? onError;
+  void Function(List<VideoQuality> qualities)? onQualitiesChanged;
+  void Function(VideoQuality quality)? onQualitySelectedChanged;
 
   WebViewController? get webViewController => _webViewController;
   String get url => _url;
@@ -28,6 +45,10 @@ class BstationPlayerController extends ChangeNotifier {
   bool get isMuted => _isMuted;
   double get volume => _volume;
   double get playbackSpeed => _playbackSpeed;
+  List<VideoQuality> get availableQualities => List.unmodifiable(_availableQualities);
+  VideoQuality? get selectedQuality => _selectedQuality;
+  int? get detectedHeight => _detectedHeight;
+  int? get detectedWidth => _detectedWidth;
 
   bool get _isSupportedMobilePlatform =>
       !kIsWeb &&
@@ -43,6 +64,9 @@ class BstationPlayerController extends ChangeNotifier {
     _url = url;
     _position = startSeconds;
     _isPlaying = autoPlay;
+    _selectedQuality = _availableQualities.first;
+    _detectedHeight = null;
+    _detectedWidth = null;
     notifyListeners();
 
     if (!_isSupportedMobilePlatform) {
@@ -226,10 +250,31 @@ class BstationPlayerController extends ChangeNotifier {
                 }));
               }
             });
+
+            // 3. Track actual video resolution
+            function reportBstationResolution() {
+              if (video && video.videoHeight > 0) {
+                if (video.__nobarLastH !== video.videoHeight || video.__nobarLastW !== video.videoWidth) {
+                  video.__nobarLastH = video.videoHeight;
+                  video.__nobarLastW = video.videoWidth;
+                  if (window.NobarBstationPlayer) {
+                    window.NobarBstationPlayer.postMessage(JSON.stringify({
+                      event: 'resolution',
+                      height: video.videoHeight,
+                      width: video.videoWidth
+                    }));
+                  }
+                }
+              }
+            }
+            video.addEventListener('loadedmetadata', reportBstationResolution);
+            video.addEventListener('resize', reportBstationResolution);
+            setInterval(reportBstationResolution, 1000);
+            reportBstationResolution();
           }
         }
 
-        // 3. Continuously eliminate app-download modals, dialogs, and popups
+        // 4. Continuously eliminate app-download modals, dialogs, and popups
         function cleanBstationClutter() {
           try {
             var unwanted = document.querySelectorAll(
@@ -287,6 +332,15 @@ class BstationPlayerController extends ChangeNotifier {
               onDurationChanged?.call(_duration);
             }
             break;
+          case 'resolution':
+            final h = (data['height'] as num?)?.toInt();
+            final w = (data['width'] as num?)?.toInt();
+            if (h != null && h > 0 && h != _detectedHeight) {
+              _detectedHeight = h;
+              _detectedWidth = w;
+              notifyListeners();
+            }
+            break;
           case 'play':
             if (!_isPlaying) {
               _isPlaying = true;
@@ -309,6 +363,51 @@ class BstationPlayerController extends ChangeNotifier {
         }
       }
     } catch (_) {}
+  }
+
+  /// Sets video quality for Bstation player
+  Future<void> setQuality(String qualityId) async {
+    _selectedQuality = _availableQualities.firstWhere(
+      (q) => q.id == qualityId,
+      orElse: () => VideoQuality.bstation(id: qualityId, label: '${qualityId}p'),
+    );
+    notifyListeners();
+    onQualitySelectedChanged?.call(_selectedQuality!);
+
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript('''
+          (function(targetId) {
+            try {
+              // 1. Check quality buttons in Bstation web player
+              var selectors = [
+                '.bstar-web-player__quality-item',
+                '.player-mobile-control-quality-item',
+                '[class*="quality-item"]',
+                '[class*="quality_item"]',
+                '.quality-wrap li',
+                '[data-quality]'
+              ];
+              var items = document.querySelectorAll(selectors.join(','));
+              for (var i = 0; i < items.length; i++) {
+                var el = items[i];
+                var text = (el.textContent || '').toLowerCase();
+                var val = el.getAttribute('data-quality') || '';
+                if (val === targetId || text.indexOf(targetId) !== -1) {
+                  el.click();
+                  return;
+                }
+              }
+
+              // 2. Try bilibili player instance if available
+              if (window.player && typeof window.player.switchQuality === 'function') {
+                window.player.switchQuality(parseInt(targetId, 10));
+              }
+            } catch (e) {}
+          })('$qualityId');
+        ''');
+      } catch (_) {}
+    }
   }
 
   Future<void> play() async {

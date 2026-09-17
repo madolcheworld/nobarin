@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/video_title_resolver.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/queue_controller.dart';
 import '../../room/controllers/sync_controller.dart';
@@ -161,27 +162,56 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     }
   }
 
+  Future<void> _resolveTitleBackground(String videoId) async {
+    try {
+      final resolved = await VideoTitleResolver.resolveTitle(
+        'https://www.youtube.com/watch?v=$videoId',
+        mediaType: 'youtube',
+      );
+      final clean = VideoTitleResolver.cleanTitle(resolved);
+      if (clean.isNotEmpty && mounted && _detectedVideoId == videoId) {
+        if (_detectedTitle != clean) {
+          setState(() {
+            _detectedTitle = clean;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
   /// Injects JavaScript to listen to YouTube's client-side SPA navigation events
   Future<void> _injectSpaDetector() async {
     if (_webViewController == null) return;
 
     const script = '''
       (function() {
-        if (window.__nobarDetectorInitialized) return;
-        window.__nobarDetectorInitialized = true;
+        function cleanTitleStr(str) {
+          if (!str) return '';
+          var s = str.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          s = s.replace(/\\s*[-|_]\\s*YouTube.*\$/i, '');
+          s = s.trim();
+          if (/^\\d+\$/.test(s)) return '';
+          if (s.toLowerCase() === 'youtube') return '';
+          return s;
+        }
 
         function reportState() {
           try {
             var url = window.location.href;
-            var title = document.title || '';
+            var title = '';
             var titleEl = document.querySelector('h1.slim-video-information-title') ||
                           document.querySelector('ytm-slim-video-information-renderer h1') ||
                           document.querySelector('.ytm-slim-video-metadata-title') ||
-                          document.querySelector('.slim-video-metadata-header');
+                          document.querySelector('.slim-video-metadata-header') ||
+                          document.querySelector('h1');
             if (titleEl && titleEl.textContent && titleEl.textContent.trim().length > 0) {
-              title = titleEl.textContent.trim();
+              title = cleanTitleStr(titleEl.textContent);
             }
-            if (window.NobarYtDetector) {
+            if (!title) {
+              title = cleanTitleStr(document.title);
+            }
+            if (title && window.NobarYtDetector) {
               window.NobarYtDetector.postMessage(JSON.stringify({
                 url: url,
                 title: title
@@ -190,27 +220,47 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
           } catch (e) {}
         }
 
-        window.addEventListener('yt-navigate-finish', function() {
-          setTimeout(reportState, 350);
-        });
+        if (!window.__nobarDetectorInitialized) {
+          window.__nobarDetectorInitialized = true;
 
-        var origPushState = history.pushState;
-        history.pushState = function() {
-          origPushState.apply(this, arguments);
-          setTimeout(reportState, 250);
-        };
+          window.addEventListener('yt-navigate-finish', function() {
+            setTimeout(reportState, 350);
+            setTimeout(reportState, 1000);
+          });
 
-        var origReplaceState = history.replaceState;
-        history.replaceState = function() {
-          origReplaceState.apply(this, arguments);
-          setTimeout(reportState, 250);
-        };
+          var origPushState = history.pushState;
+          history.pushState = function() {
+            origPushState.apply(this, arguments);
+            setTimeout(reportState, 250);
+            setTimeout(reportState, 750);
+          };
 
-        window.addEventListener('popstate', function() {
-          setTimeout(reportState, 250);
-        });
+          var origReplaceState = history.replaceState;
+          history.replaceState = function() {
+            origReplaceState.apply(this, arguments);
+            setTimeout(reportState, 250);
+          };
 
-        setTimeout(reportState, 500);
+          window.addEventListener('popstate', function() {
+            setTimeout(reportState, 250);
+          });
+
+          try {
+            var observer = new MutationObserver(function() {
+              reportState();
+            });
+            if (document.head) {
+              observer.observe(document.head, { subtree: true, characterData: true, childList: true });
+            }
+            if (document.body) {
+              observer.observe(document.body, { childList: true, subtree: true });
+            }
+          } catch(e) {}
+        }
+
+        setTimeout(reportState, 250);
+        setTimeout(reportState, 750);
+        setTimeout(reportState, 1800);
       })();
     ''';
 
@@ -236,18 +286,33 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
 
     final videoId = YoutubePlayerController.convertUrlToId(url);
     if (videoId != null && videoId.isNotEmpty) {
-      String title = extractedTitle?.trim() ?? '';
-      if (title.isEmpty || title.toLowerCase() == 'youtube') {
-        title = 'Video YouTube ($videoId)';
-      } else {
-        title = title.replaceAll(RegExp(r'\s*-\s*YouTube$', caseSensitive: false), '');
+      final clean = VideoTitleResolver.cleanTitle(extractedTitle);
+      String title = clean;
+      if (title.isEmpty) {
+        if (_detectedTitle.isNotEmpty &&
+            _detectedTitle != 'Video YouTube' &&
+            _detectedTitle != 'Memuat judul video...') {
+          title = _detectedTitle;
+        } else {
+          title = 'Memuat judul video...';
+        }
+        _resolveTitleBackground(videoId);
       }
 
       if (videoId == _dismissedVideoId) {
         return;
       }
 
-      if (mounted && (_detectedVideoId != videoId || _detectedTitle != title)) {
+      if (mounted &&
+          (_detectedVideoId != videoId ||
+              (_detectedTitle != title && title != 'Memuat judul video...') ||
+              (_detectedTitle == 'Memuat judul video...' && title != 'Memuat judul video...'))) {
+        setState(() {
+          _detectedVideoId = videoId;
+          _detectedTitle = title;
+          _isBannerMinimized = false;
+        });
+      } else if (mounted && _detectedVideoId != videoId) {
         setState(() {
           _detectedVideoId = videoId;
           _detectedTitle = title;
@@ -270,7 +335,9 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     if (_detectedVideoId == null) return;
 
     final mediaUrl = 'https://www.youtube.com/watch?v=$_detectedVideoId';
-    final title = _detectedTitle.isNotEmpty ? _detectedTitle : 'Video YouTube';
+    final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
+        ? _detectedTitle
+        : 'Video YouTube';
 
     await _pauseWebViewMedia();
 
@@ -301,7 +368,9 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     if (_detectedVideoId == null || widget.queueController == null) return;
 
     final mediaUrl = 'https://www.youtube.com/watch?v=$_detectedVideoId';
-    final title = _detectedTitle.isNotEmpty ? _detectedTitle : 'Video YouTube';
+    final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
+        ? _detectedTitle
+        : 'Video YouTube';
 
     widget.queueController!.addToQueue(
       mediaType: 'youtube',
@@ -334,7 +403,7 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     );
   }
 
-  void _handleManualFallbackSubmit() {
+  void _handleManualFallbackSubmit() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -349,15 +418,21 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
       return;
     }
 
+    final resolved = await VideoTitleResolver.resolveTitle(
+      'https://www.youtube.com/watch?v=$videoId',
+      mediaType: 'youtube',
+    );
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoId = videoId;
-      _detectedTitle = 'Video YouTube ($videoId)';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video YouTube';
     });
 
     _applyWatchNow();
   }
 
-  void _handleManualFallbackQueue() {
+  void _handleManualFallbackQueue() async {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
@@ -372,9 +447,15 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
       return;
     }
 
+    final resolved = await VideoTitleResolver.resolveTitle(
+      'https://www.youtube.com/watch?v=$videoId',
+      mediaType: 'youtube',
+    );
+    final clean = VideoTitleResolver.cleanTitle(resolved);
+
     setState(() {
       _detectedVideoId = videoId;
-      _detectedTitle = 'Video YouTube ($videoId)';
+      _detectedTitle = clean.isNotEmpty ? clean : 'Video YouTube';
     });
 
     _applyAddToQueue();

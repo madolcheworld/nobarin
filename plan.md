@@ -11,6 +11,7 @@ Berdasarkan diskusi dan kebutuhan yang telah disepakati:
 - **Sumber Media (Playback Sources)**:
   1. **YouTube**: Pemutaran video/playlist YouTube via iframe/player integration.
   2. **Direct Video URL**: Streaming file video langsung (MP4, HLS `.m3u8`, WebM) dengan akselerasi hardware.
+  3. **File Video Internal (Direct P2P & LAN Streaming)**: Pemutaran langsung dari file penyimpanan internal perangkat host (MP4, MKV, WebM, MOV) yang di-stream secara real-time ke viewer via WebRTC DataChannel P2P dan Local LAN HTTP Server tanpa perlu upload ke cloud, serta dukungan Local File Binding (Syncplay).
 - **Fitur Komunikasi**:
   1. **Real-time Text Chat**: Pesan instan di dalam room, notifikasi status (user join/leave), dan emoji burst reactions.
   2. **Voice Chat (VoIP)**: Komunikasi audio dua arah berlatensi rendah dengan fitur toggle mic (Mute/Unmute) dan indikator berbicara (*speaking visualizer*).

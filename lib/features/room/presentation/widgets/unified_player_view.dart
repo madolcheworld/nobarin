@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/p2p_file_stream_service.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../../../../core/utils/time_formatter.dart';
@@ -697,22 +699,174 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                               const SizedBox(width: 4),
                               if (widget.title != null)
                                 Expanded(
-                                  child: Text(
-                                    widget.title!,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 4,
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          widget.title!,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            shadows: [
+                                              Shadow(
+                                                color: Colors.black,
+                                                blurRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (widget.player.isLocalFile) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.withValues(alpha: 0.5),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: Colors.purpleAccent,
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.folder_rounded,
+                                                  size: 10, color: Colors.white),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'File Lokal',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ] else if (widget.player.isP2PStream) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryNeon
+                                                .withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: AppColors.primaryNeon,
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.stream_rounded,
+                                                  size: 10,
+                                                  color: AppColors.primaryNeon),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'P2P Stream',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.primaryNeon,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
-                                    ),
-                                    maxLines: 1,
+                                    ],
                                   ),
                                 ),
+                              if (P2PFileStreamService.instance.activeMetadata != null &&
+                                  !P2PFileStreamService.instance.isHosting) ...[
+                                const SizedBox(width: 6),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () async {
+                                      final picked = await FilePicker.pickFile(
+                                        type: FileType.video,
+                                      );
+                                      if (picked != null &&
+                                          picked.path != null) {
+                                        final path = picked.path!;
+                                        P2PFileStreamService.instance
+                                            .setLocalOverride(path);
+                                        await widget.player.loadMedia(
+                                          'direct_url',
+                                          path,
+                                          autoPlay: widget.player.isPlaying,
+                                          startSeconds: widget.player.position,
+                                        );
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                  'Memutar salinan file lokal (Syncplay)'),
+                                              backgroundColor:
+                                                  AppColors.primaryNeon,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.4),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: Colors.white24, width: 0.8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            P2PFileStreamService
+                                                    .instance.hasLocalOverride
+                                                ? Icons.check_circle_outline_rounded
+                                                : Icons.folder_open_rounded,
+                                            size: 12,
+                                            color: P2PFileStreamService
+                                                    .instance.hasLocalOverride
+                                                ? AppColors.primaryNeon
+                                                : Colors.white,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            P2PFileStreamService
+                                                    .instance.hasLocalOverride
+                                                ? 'File Lokal Aktif'
+                                                : 'Punya File?',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: P2PFileStreamService
+                                                      .instance.hasLocalOverride
+                                                  ? AppColors.primaryNeon
+                                                  : Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
