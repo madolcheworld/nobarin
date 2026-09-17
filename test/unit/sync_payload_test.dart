@@ -12,6 +12,10 @@ void main() {
         timestampMs: 1725514800000,
         playbackSpeed: 1.25,
         controllerId: 'user-456',
+        seqId: 42,
+        action: 'play',
+        actionEpoch: 1725514800000,
+        maxDurationSeconds: 600.0,
       );
 
       final json = payload.toJson();
@@ -22,6 +26,10 @@ void main() {
       expect(json['timestamp_ms'], 1725514800000);
       expect(json['playback_speed'], 1.25);
       expect(json['controller_id'], 'user-456');
+      expect(json['seq_id'], 42);
+      expect(json['action'], 'play');
+      expect(json['action_epoch'], 1725514800000);
+      expect(json['max_duration_seconds'], 600.0);
 
       final fromJson = SyncPayload.fromJson(json);
       expect(fromJson.mediaType, payload.mediaType);
@@ -31,6 +39,10 @@ void main() {
       expect(fromJson.timestampMs, payload.timestampMs);
       expect(fromJson.playbackSpeed, payload.playbackSpeed);
       expect(fromJson.controllerId, payload.controllerId);
+      expect(fromJson.seqId, 42);
+      expect(fromJson.action, 'play');
+      expect(fromJson.actionEpoch, 1725514800000);
+      expect(fromJson.maxDurationSeconds, 600.0);
       expect(fromJson.isPlaying, isTrue);
       expect(fromJson.isPaused, isFalse);
     });
@@ -45,10 +57,17 @@ void main() {
         controllerId: 'user-1',
       );
 
-      final updated = payload.copyWith(state: 'playing', positionSeconds: 10.0);
+      final updated = payload.copyWith(
+        state: 'playing',
+        positionSeconds: 10.0,
+        seqId: 5,
+        action: 'seek',
+      );
       expect(updated.state, 'playing');
       expect(updated.positionSeconds, 10.0);
       expect(updated.mediaUrl, payload.mediaUrl);
+      expect(updated.seqId, 5);
+      expect(updated.action, 'seek');
     });
   });
 }

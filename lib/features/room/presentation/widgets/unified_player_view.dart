@@ -53,9 +53,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     super.initState();
     _lastIsPlaying = widget.player.isPlaying;
     widget.player.addListener(_onPlayerChanged);
+    widget.syncController.addListener(_onSyncChanged);
     if (widget.player.isPlaying) {
       _startHideTimerIfNeeded();
     }
+  }
+
+  void _onSyncChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -69,6 +74,10 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         _startHideTimerIfNeeded();
       }
     }
+    if (oldWidget.syncController != widget.syncController) {
+      oldWidget.syncController.removeListener(_onSyncChanged);
+      widget.syncController.addListener(_onSyncChanged);
+    }
   }
 
   @override
@@ -76,6 +85,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     _hideControlsTimer?.cancel();
     _doubleTapTimer?.cancel();
     widget.player.removeListener(_onPlayerChanged);
+    widget.syncController.removeListener(_onSyncChanged);
     super.dispose();
   }
 
@@ -158,6 +168,72 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     } else {
       _hideControlsTimer?.cancel();
     }
+  }
+
+  Widget _buildSyncStatusBadge() {
+    final status = widget.syncController.syncStatusLabel;
+    final driftMs = (widget.syncController.currentDriftSeconds * 1000).round();
+    final Color dotColor;
+    final String label;
+
+    switch (status) {
+      case 'synced':
+        dotColor = const Color(0xFF00E676);
+        label = 'Sinkron (${driftMs}ms)';
+        break;
+      case 'adjusting':
+        dotColor = const Color(0xFFFFD600);
+        label = 'Slewing (${driftMs}ms)';
+        break;
+      case 'seeking':
+        dotColor = const Color(0xFF2979FF);
+        label = 'Syncing...';
+        break;
+      default:
+        dotColor = const Color(0xFF9E9E9E);
+        label = 'Menghubungkan';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: dotColor.withValues(alpha: 0.4),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: dotColor.withValues(alpha: 0.6),
+                  blurRadius: 3,
+                  spreadRadius: 0.5,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -706,6 +782,10 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ),
                                   ),
                                 const Spacer(),
+                                if (widget.player.isLoaded) ...[
+                                  _buildSyncStatusBadge(),
+                                  const SizedBox(width: 4),
+                                ],
                                 Material(
                                   color: Colors.transparent,
                                   shape: const CircleBorder(),

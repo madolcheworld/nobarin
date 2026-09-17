@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/utils/ntp_clock_sync.dart';
 import '../../auth/domain/user_profile.dart';
 import '../models/room_model.dart';
 import '../models/sync_payload.dart';
@@ -22,8 +21,13 @@ class SyncController extends ChangeNotifier {
   bool _isApplyingRemoteSync = false;
   bool _isDisposed = false;
 
+  // Packet sequence number & ordering guard
+  int _seqIdCounter = 0;
+  int _lastProcessedSeqId = 0;
+
   // Track latest known sync payload
   SyncPayload? _latestPayload;
+  SyncPayload? get latestPayload => _latestPayload;
 
   SyncController({
     required this.room,
@@ -74,6 +78,27 @@ class SyncController extends ChangeNotifier {
     return false;
   }
 
+  /// Current measured drift in seconds from the latest known remote payload
+  double get currentDriftSeconds {
+    if (_latestPayload == null) return 0.0;
+    return syncEngine.calculateDrift(
+      _latestPayload!,
+      player.position,
+      null,
+      player.duration > 0 ? player.duration : null,
+    );
+  }
+
+  /// Human-readable synchronization status for QoE UI badges
+  String get syncStatusLabel {
+    if (_latestPayload == null) return 'connecting';
+    final drift = currentDriftSeconds;
+    if (drift < 0.08) return 'synced';
+    if (player.playbackSpeed != 1.0) return 'adjusting';
+    if (drift >= 1.8) return 'seeking';
+    return 'synced';
+  }
+
   void _initChannel() {
     if (supabase == null) return;
 
@@ -89,28 +114,63 @@ class SyncController extends ChangeNotifier {
         },
       );
 
+      // Instant Join Sync: when a new participant requests current snapshot
+      _realtimeChannel!.onBroadcast(
+        event: 'REQUEST_SYNC',
+        callback: (Map<String, dynamic> payloadMap) {
+          if (_isDisposed) return;
+          if (canControl) {
+            broadcastSync(action: 'snapshot');
+          }
+        },
+      );
+
       _realtimeChannel!.subscribe((status, error) {
         debugPrint(
             '[SyncController] Realtime channel status: $status (error: $error)');
+        // Once subscribed, send REQUEST_SYNC to instantly receive current host state
+        if (status == RealtimeSubscribeStatus.subscribed && !_isDisposed) {
+          _requestInitialSync();
+        }
       });
     } catch (e) {
       debugPrint('[SyncController] Error creating realtime channel: $e');
     }
   }
 
+  void _requestInitialSync() {
+    if (_realtimeChannel == null || _isDisposed) return;
+    try {
+      _realtimeChannel!.sendBroadcastMessage(
+        event: 'REQUEST_SYNC',
+        payload: {
+          'requester_id': currentUser.id,
+          'timestamp_ms': syncEngine.clockSync.synchronizedTimestampMs,
+        },
+      );
+    } catch (e) {
+      debugPrint('[SyncController] Failed to send REQUEST_SYNC: $e');
+    }
+  }
+
   void _setupPlayerListeners() {
     player.onPlaybackStateChanged = (state) {
       if (_isApplyingRemoteSync || !canControl) return;
-      broadcastSync(state: state);
+      broadcastSync(state: state, action: state);
     };
 
     player.onPositionChanged = (position) {
       if (_isApplyingRemoteSync) return;
-      // If we are currently micro-adjusting speed and drift is now < 0.1s (100ms),
-      // restore normal speed (1.0x) per Section 3 of plan.md
-      if (_latestPayload != null && player.playbackSpeed != 1.0) {
-        final drift = syncEngine.calculateDrift(_latestPayload!, position);
-        if (drift < 0.1) {
+      // If we are currently micro-adjusting speed and drift is now < 0.04s (40ms) with hysteresis,
+      // restore normal speed (1.0x) smoothly.
+      if (_latestPayload != null && player.playbackSpeed != 1.0 && player.isPlaying) {
+        final drift = syncEngine.calculateDrift(
+          _latestPayload!,
+          position,
+          null,
+          player.duration > 0 ? player.duration : null,
+        );
+        if (drift < 0.04) {
           player.setPlaybackSpeed(1.0);
         }
       }
@@ -118,12 +178,12 @@ class SyncController extends ChangeNotifier {
   }
 
   void _startHeartbeatTimer() {
-    // Periodic heartbeat every 3.5 seconds
+    // Periodic heartbeat every 3.0 seconds
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(milliseconds: 3000), (_) {
       if (_isDisposed) return;
       if (canControl && player.isPlaying) {
-        broadcastSync(state: 'playing');
+        broadcastSync(state: 'playing', action: 'heartbeat');
       }
     });
   }
@@ -131,14 +191,26 @@ class SyncController extends ChangeNotifier {
   /// Handle incoming SYNC_STATE broadcast from host/controller
   void _handleRemoteSync(Map<String, dynamic> payloadMap) async {
     final payload = SyncPayload.fromJson(payloadMap);
-    _latestPayload = payload;
 
     // Ignore self-broadcasts
     if (payload.controllerId == currentUser.id) {
       return;
     }
 
+    // Monotonic sequence numbering: discard out-of-order stale packets
+    if (payload.seqId > 0 && payload.seqId < _lastProcessedSeqId) {
+      debugPrint(
+        '[SyncController] Discarded out-of-order packet (seqId ${payload.seqId} < $_lastProcessedSeqId)',
+      );
+      return;
+    }
+    if (payload.seqId > 0) {
+      _lastProcessedSeqId = payload.seqId;
+    }
+
+    _latestPayload = payload;
     _isApplyingRemoteSync = true;
+
     try {
       final bool isP2pStream = payload.mediaUrl.startsWith('p2p://') ||
           payload.mediaType == 'local_p2p';
@@ -158,29 +230,75 @@ class SyncController extends ChangeNotifier {
           autoPlay: payload.isPlaying,
           startSeconds: payload.positionSeconds,
         );
+        syncEngine.resetFilter();
       }
 
-      // 2. Play / Pause State Synchronization
+      // 2. State-Aware Synchronization: Paused vs Playing
+      if (payload.isPaused) {
+        if (player.isPlaying) {
+          await player.pause();
+        }
+        // When paused, ensure viewer is on exact target frame (if drift > 50ms)
+        final target = payload.positionSeconds;
+        if ((player.position - target).abs() > 0.05) {
+          await player.seekTo(target);
+          syncEngine.recordSeek();
+        }
+        if (player.playbackSpeed != 1.0) {
+          await player.setPlaybackSpeed(1.0);
+        }
+        notifyListeners();
+        return;
+      }
+
+      // 3. Explicit Remote Seek Handling
+      if (payload.action == 'seek') {
+        await player.seekTo(payload.positionSeconds);
+        syncEngine.recordSeek();
+        if (payload.isPlaying && !player.isPlaying) {
+          await player.play();
+        }
+        notifyListeners();
+        return;
+      }
+
+      // 4. Playing State Synchronization & Multi-Tier Slewing
       if (payload.isPlaying && !player.isPlaying) {
         await player.play();
-      } else if (payload.isPaused && player.isPlaying) {
-        await player.pause();
       }
 
-      // 3. Drift Calculation & Multi-Tier Correction
       notifyListeners();
 
-      final action = syncEngine.evaluateCorrection(payload, player.position);
-      final double targetSpeed = syncEngine.getRecommendedSpeed(action);
+      final durationLimit = player.duration > 0 ? player.duration : null;
+      final action = syncEngine.evaluateCorrection(
+        payload,
+        player.position,
+        null,
+        durationLimit,
+      );
 
-      if (action == DriftAction.hardSeek) {
-        // Major desync (>= 2000ms): hard seek to target position
-        final target = syncEngine.calculateTargetPosition(payload);
+      final bool inSeekCooldown = syncEngine.isSeekInCooldown();
+
+      if (action == DriftAction.hardSeek && !inSeekCooldown) {
+        // Major desync (>= 1800ms): hard seek to target position with cooldown guard
+        final target = syncEngine.calculateTargetPosition(payload, null, durationLimit);
         await player.seekTo(target);
-      }
+        syncEngine.recordSeek();
+        if (player.playbackSpeed != 1.0) {
+          await player.setPlaybackSpeed(1.0);
+        }
+      } else if (action != DriftAction.hardSeek) {
+        // Multi-tier proportional adaptive speed
+        final double targetSpeed = syncEngine.calculateAdaptiveSpeed(
+          payload: payload,
+          currentLocalPositionSeconds: player.position,
+          maxDurationSeconds: durationLimit,
+          isYouTube: player.mediaType == 'youtube',
+        );
 
-      if (player.playbackSpeed != targetSpeed) {
-        await player.setPlaybackSpeed(targetSpeed);
+        if ((player.playbackSpeed - targetSpeed).abs() > 0.005) {
+          await player.setPlaybackSpeed(targetSpeed);
+        }
       }
     } finally {
       // Delay releasing flag briefly to avoid local echo
@@ -196,6 +314,7 @@ class SyncController extends ChangeNotifier {
     double? position,
     String? mediaType,
     String? mediaUrl,
+    String? action,
   }) async {
     if (!canControl) return;
 
@@ -210,14 +329,19 @@ class SyncController extends ChangeNotifier {
     }
     final targetUrl = mediaUrl ?? defaultUrl;
 
+    _seqIdCounter++;
     final payload = SyncPayload(
       mediaType: targetType,
       mediaUrl: targetUrl,
       state: targetState,
       positionSeconds: targetPos,
-      timestampMs: NtpClockSync().synchronizedTimestampMs,
+      timestampMs: syncEngine.clockSync.synchronizedTimestampMs,
       playbackSpeed: player.playbackSpeed,
       controllerId: currentUser.id,
+      seqId: _seqIdCounter,
+      action: action ?? (state ?? (position != null ? 'seek' : 'heartbeat')),
+      actionEpoch: syncEngine.clockSync.synchronizedTimestampMs,
+      maxDurationSeconds: player.duration > 0 ? player.duration : null,
     );
 
     _latestPayload = payload;
@@ -238,29 +362,32 @@ class SyncController extends ChangeNotifier {
   Future<void> requestPlay() async {
     if (!canControl) return;
     await player.play();
-    await broadcastSync(state: 'playing');
+    await broadcastSync(state: 'playing', action: 'play');
   }
 
   Future<void> requestPause() async {
     if (!canControl) return;
     await player.pause();
-    await broadcastSync(state: 'paused');
+    await broadcastSync(state: 'paused', action: 'pause');
   }
 
   Future<void> requestSeek(double seconds) async {
     if (!canControl) return;
+    syncEngine.recordSeek();
     await player.seekTo(seconds);
-    await broadcastSync(position: seconds);
+    await broadcastSync(position: seconds, action: 'seek');
   }
 
   Future<void> requestChangeMedia(String type, String url) async {
     if (!canControl) return;
+    syncEngine.resetFilter();
     await player.loadMedia(type, url, autoPlay: true);
     await broadcastSync(
       mediaType: type,
       mediaUrl: url,
       state: 'playing',
       position: 0.0,
+      action: 'media_change',
     );
   }
 
