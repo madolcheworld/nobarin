@@ -45,6 +45,51 @@ class ParticipantModerationSheet extends StatelessWidget {
     );
   }
 
+  static void _showProcessingDialog(BuildContext context, String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: Dialog(
+          backgroundColor: AppColors.surfaceElevated,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppColors.primaryNeon,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = roomController.currentUser;
@@ -367,10 +412,17 @@ class ParticipantModerationSheet extends StatelessWidget {
 
                   if (confirm == true && context.mounted) {
                     Navigator.of(context).pop();
-                    await roomController.promoteToHost(
-                      targetUser,
-                      chatController: chatController,
-                    );
+                    _showProcessingDialog(context, 'Mengalihkan Host...');
+                    try {
+                      await roomController.promoteToHost(
+                        targetUser,
+                        chatController: chatController,
+                      );
+                    } finally {
+                      if (context.mounted) {
+                        Navigator.of(context, rootNavigator: true).pop();
+                      }
+                    }
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -434,10 +486,20 @@ class ParticipantModerationSheet extends StatelessWidget {
 
                 if (confirm == true && context.mounted) {
                   Navigator.of(context).pop();
-                  await roomController.kickParticipant(
-                    targetUser,
-                    chatController: chatController,
+                  _showProcessingDialog(
+                    context,
+                    'Mengeluarkan ${targetUser.username}...',
                   );
+                  try {
+                    await roomController.kickParticipant(
+                      targetUser,
+                      chatController: chatController,
+                    );
+                  } finally {
+                    if (context.mounted) {
+                      Navigator.of(context, rootNavigator: true).pop();
+                    }
+                  }
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

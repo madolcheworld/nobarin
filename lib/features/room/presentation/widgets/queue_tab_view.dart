@@ -208,12 +208,16 @@ class _QueueItemCard extends StatelessWidget {
         ? AppColors.youtubeRed
         : item.isBstation
             ? AppColors.bstationBlue
-            : AppColors.secondaryNeon;
+            : item.isDailymotion
+                ? AppColors.dailymotionBlue
+                : AppColors.secondaryNeon;
     final String sourceBadge = item.isYouTube
         ? 'YOUTUBE'
         : item.isBstation
             ? 'BSTATION'
-            : item.mediaType.toUpperCase();
+            : item.isDailymotion
+                ? 'DAILYMOTION'
+                : item.mediaType.toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

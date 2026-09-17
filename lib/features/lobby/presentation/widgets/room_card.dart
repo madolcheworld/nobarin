@@ -28,6 +28,13 @@ class RoomCard extends StatelessWidget {
         color: AppColors.bstationBlue,
       );
     }
+    if (type == 'dailymotion') {
+      return (
+        label: 'Dailymotion',
+        icon: Icons.play_circle_filled_rounded,
+        color: AppColors.dailymotionBlue,
+      );
+    }
     if (type == 'direct_url') {
       return (
         label: 'Direct URL',

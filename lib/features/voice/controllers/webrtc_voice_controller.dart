@@ -4,6 +4,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/network/webrtc_signaling_helper.dart';
 import '../../room/controllers/unified_player_controller.dart';
+import '../models/audio_ducking_config.dart';
 
 enum VoiceStatus {
   disconnected,
@@ -41,7 +42,9 @@ class WebRtcVoiceController extends ChangeNotifier {
   VoiceStatus _status = VoiceStatus.disconnected;
   bool _isMicMuted = true;
   bool _isDeafened = false;
-  bool _audioDuckingEnabled = true;
+  AudioDuckingConfig _duckingConfig;
+  Timer? _duckingFadeTimer;
+  Timer? _duckingReleaseTimer;
   bool _isLocalSpeaking = false;
   bool _isDucking = false;
   double _savedVideoVolume = 1.0;
@@ -73,7 +76,10 @@ class WebRtcVoiceController extends ChangeNotifier {
   bool get isMicMuted => _isMicMuted;
   bool get isDeafened => _isDeafened;
   bool get isConnected => _status == VoiceStatus.connected;
-  bool get isAudioDuckingEnabled => _audioDuckingEnabled;
+  bool get isAudioDuckingEnabled => _duckingConfig.enabled;
+  AudioDuckingConfig get duckingConfig => _duckingConfig;
+  double get duckingFactor => _duckingConfig.duckingFactor;
+  bool get duckWhenSpeakingLocally => _duckingConfig.duckWhenSpeakingLocally;
   bool get isLocalSpeaking => _isLocalSpeaking;
   bool get isDucking => _isDucking;
   String? get errorMessage => _errorMessage;
@@ -106,6 +112,8 @@ class WebRtcVoiceController extends ChangeNotifier {
     'video': false,
   };
 
+  bool _hasCustomDuckingConfig;
+
   WebRtcVoiceController({
     required this.roomId,
     required this.userId,
@@ -114,11 +122,14 @@ class WebRtcVoiceController extends ChangeNotifier {
     this.supabase,
     this.iceConfiguration,
     this.sharedChannel,
+    AudioDuckingConfig? duckingConfig,
     bool? autoCaptureMic,
     UserMediaFunction? userMediaFunction,
     PeerConnectionFunction? peerConnectionFunction,
     AudioRouteHandler? audioRouteHandler,
-  })  : autoCaptureMic = autoCaptureMic ?? false,
+  })  : _hasCustomDuckingConfig = duckingConfig != null,
+        _duckingConfig = duckingConfig ?? const AudioDuckingConfig(),
+        autoCaptureMic = autoCaptureMic ?? false,
         _userMediaFunction = userMediaFunction ?? _defaultUserMedia,
         _peerConnectionFunction =
             peerConnectionFunction ?? _defaultPeerConnection,
@@ -226,6 +237,9 @@ class WebRtcVoiceController extends ChangeNotifier {
 
       // 2. Engage speakerphone & hardware AEC on Android
       await _audioRouteHandler(true);
+
+      // Load persistent ducking preferences if not passed
+      unawaited(_loadDuckingConfigFromPrefs());
 
       // 2. Setup Supabase Realtime signaling
       if (supabase == null) {
@@ -349,7 +363,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       _activeSpeakerIds.remove(senderId);
       _mutedUserIds.remove(senderId);
       await _closePeerConnection(senderId);
-      _handleAudioDucking();
+      _handleAudioDucking(immediate: true);
       notifyListeners();
       return;
     }
@@ -772,7 +786,7 @@ class WebRtcVoiceController extends ChangeNotifier {
 
     if (_isDeafened) {
       _activeSpeakerIds.removeWhere((id) => id != userId);
-      _handleAudioDucking();
+      _handleAudioDucking(immediate: true);
     }
 
     notifyListeners();
@@ -790,6 +804,10 @@ class WebRtcVoiceController extends ChangeNotifier {
       _activeSpeakerIds.remove(userId);
     }
 
+    if (_duckingConfig.duckWhenSpeakingLocally) {
+      _handleAudioDucking();
+    }
+
     _sendSignalingMessage('VOICE_STATE', {
       'sender_id': userId,
       'user_name': userName,
@@ -803,13 +821,13 @@ class WebRtcVoiceController extends ChangeNotifier {
 
   /// Manually marks a remote participant as speaking (for tests / manual VAD)
   @visibleForTesting
-  void setRemoteSpeaking(String peerId, bool speaking) {
+  void setRemoteSpeaking(String peerId, bool speaking, {bool immediate = true}) {
     if (speaking && !_isDeafened) {
       _activeSpeakerIds.add(peerId);
     } else {
       _activeSpeakerIds.remove(peerId);
     }
-    _handleAudioDucking();
+    _handleAudioDucking(immediate: immediate);
     notifyListeners();
   }
 
@@ -902,35 +920,196 @@ class WebRtcVoiceController extends ChangeNotifier {
     });
   }
 
-  /// Audio ducking: dynamically lowers video volume to 40% when participants talk
-  void _handleAudioDucking() {
-    if (!_audioDuckingEnabled || playerController == null) return;
+  /// Loads saved ducking preferences from SharedPreferences
+  Future<void> _loadDuckingConfigFromPrefs() async {
+    if (_hasCustomDuckingConfig) return;
+    try {
+      final loaded = await AudioDuckingConfig.loadFromPrefs();
+      if (!_isDisposed && !_hasCustomDuckingConfig) {
+        _duckingConfig = loaded;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  /// Audio ducking: dynamically lowers video volume when participants talk
+  void _handleAudioDucking({bool immediate = false}) {
+    if (!_duckingConfig.enabled || playerController == null) {
+      if (_isDucking) {
+        _duckingReleaseTimer?.cancel();
+        _duckingReleaseTimer = null;
+        _duckingFadeTimer?.cancel();
+        _duckingFadeTimer = null;
+        _isDucking = false;
+        playerController!.setVolume(_savedVideoVolume);
+        notifyListeners();
+      }
+      return;
+    }
 
     final bool someoneElseTalking =
-        _activeSpeakerIds.any((id) => id != userId);
+        !_isDeafened && _activeSpeakerIds.any((id) => id != userId);
+    final bool selfTalking = !_isMicMuted &&
+        _isLocalSpeaking &&
+        _duckingConfig.duckWhenSpeakingLocally;
+    final bool shouldDuck = someoneElseTalking || selfTalking;
 
-    if (someoneElseTalking && !_isDucking) {
-      _isDucking = true;
-      _savedVideoVolume = playerController!.volume;
-      // Duck down to 40% of normal volume
-      playerController!.setVolume(_savedVideoVolume * 0.4);
-    } else if (!someoneElseTalking && _isDucking) {
-      _isDucking = false;
-      // Restore original video volume
-      playerController!.setVolume(_savedVideoVolume);
+    if (shouldDuck) {
+      // Cancel any pending release hold timer since active speech is present
+      _duckingReleaseTimer?.cancel();
+      _duckingReleaseTimer = null;
+
+      if (!_isDucking) {
+        _isDucking = true;
+        _savedVideoVolume = playerController!.volume;
+        notifyListeners();
+      }
+
+      final targetVolume =
+          (_savedVideoVolume * _duckingConfig.duckingFactor).clamp(0.0, 1.0);
+
+      final bool useFade = !immediate &&
+          _duckingConfig.smoothTransition &&
+          _duckingConfig.attackDuration > Duration.zero;
+
+      if (!useFade) {
+        _duckingFadeTimer?.cancel();
+        _duckingFadeTimer = null;
+        playerController!.setVolume(targetVolume);
+      } else {
+        _fadeToVolume(targetVolume, _duckingConfig.attackDuration);
+      }
+    } else if (!shouldDuck && _isDucking) {
+      // Speech stopped: engage release hold timer or restore volume immediately
+      final bool useHold = !immediate &&
+          _duckingConfig.smoothTransition &&
+          _duckingConfig.releaseHoldDuration > Duration.zero;
+
+      if (!useHold) {
+        _duckingReleaseTimer?.cancel();
+        _duckingReleaseTimer = null;
+        _isDucking = false;
+
+        final bool useReleaseFade = !immediate &&
+            _duckingConfig.smoothTransition &&
+            _duckingConfig.releaseDuration > Duration.zero;
+
+        if (!useReleaseFade) {
+          _duckingFadeTimer?.cancel();
+          _duckingFadeTimer = null;
+          playerController!.setVolume(_savedVideoVolume);
+        } else {
+          _fadeToVolume(_savedVideoVolume, _duckingConfig.releaseDuration);
+        }
+        notifyListeners();
+      } else {
+        // Wait for releaseHoldDuration before restoring volume (anti-pumping protection)
+        if (_duckingReleaseTimer == null || !_duckingReleaseTimer!.isActive) {
+          _duckingReleaseTimer =
+              Timer(_duckingConfig.releaseHoldDuration, () {
+            if (_isDisposed || !_isDucking) return;
+            _isDucking = false;
+            if (!_duckingConfig.smoothTransition ||
+                _duckingConfig.releaseDuration == Duration.zero) {
+              _duckingFadeTimer?.cancel();
+              _duckingFadeTimer = null;
+              playerController?.setVolume(_savedVideoVolume);
+            } else {
+              _fadeToVolume(_savedVideoVolume, _duckingConfig.releaseDuration);
+            }
+            notifyListeners();
+          });
+        }
+      }
     }
+  }
+
+  void _fadeToVolume(double targetVolume, Duration duration) {
+    _duckingFadeTimer?.cancel();
+    if (playerController == null || duration == Duration.zero) {
+      playerController?.setVolume(targetVolume);
+      return;
+    }
+
+    final startVolume = playerController!.volume;
+    if ((startVolume - targetVolume).abs() < 0.01) {
+      playerController!.setVolume(targetVolume);
+      return;
+    }
+
+    final totalSteps = (duration.inMilliseconds / 25).round().clamp(2, 20);
+    final volumeDelta = targetVolume - startVolume;
+    int step = 0;
+
+    _duckingFadeTimer =
+        Timer.periodic(const Duration(milliseconds: 25), (timer) {
+      if (_isDisposed || playerController == null) {
+        timer.cancel();
+        return;
+      }
+      step++;
+      if (step >= totalSteps) {
+        timer.cancel();
+        _duckingFadeTimer = null;
+        playerController!.setVolume(targetVolume);
+      } else {
+        final progress = step / totalSteps;
+        final eased = 1.0 - (1.0 - progress) * (1.0 - progress);
+        final currentVol =
+            (startVolume + (volumeDelta * eased)).clamp(0.0, 1.0);
+        playerController!.setVolume(currentVol);
+      }
+    });
   }
 
   /// Toggles audio ducking feature
   void toggleAudioDucking() {
-    _audioDuckingEnabled = !_audioDuckingEnabled;
-    if (!_audioDuckingEnabled && _isDucking && playerController != null) {
+    _hasCustomDuckingConfig = true;
+    _duckingConfig = _duckingConfig.copyWith(enabled: !_duckingConfig.enabled);
+    _duckingConfig.saveToPrefs();
+    _duckingReleaseTimer?.cancel();
+    _duckingReleaseTimer = null;
+
+    if (!_duckingConfig.enabled && _isDucking && playerController != null) {
+      _duckingFadeTimer?.cancel();
+      _duckingFadeTimer = null;
       _isDucking = false;
       playerController!.setVolume(_savedVideoVolume);
-    } else if (_audioDuckingEnabled) {
+    } else if (_duckingConfig.enabled) {
+      _handleAudioDucking(immediate: true);
+    }
+    notifyListeners();
+  }
+
+  /// Updates complete ducking configuration and persists preferences
+  Future<void> updateDuckingConfig(AudioDuckingConfig newConfig) async {
+    _hasCustomDuckingConfig = true;
+    _duckingConfig = newConfig;
+    await _duckingConfig.saveToPrefs();
+
+    if (!_duckingConfig.enabled && _isDucking && playerController != null) {
+      _duckingReleaseTimer?.cancel();
+      _duckingReleaseTimer = null;
+      _duckingFadeTimer?.cancel();
+      _duckingFadeTimer = null;
+      _isDucking = false;
+      await playerController!.setVolume(_savedVideoVolume);
+    } else if (_duckingConfig.enabled) {
       _handleAudioDucking();
     }
     notifyListeners();
+  }
+
+  /// Sets custom ducking factor (attenuation factor, e.g. 0.4 for 40%)
+  Future<void> setDuckingFactor(double factor) async {
+    await updateDuckingConfig(_duckingConfig.copyWith(duckingFactor: factor));
+  }
+
+  /// Sets whether local user speaking also ducks video audio
+  Future<void> setDuckWhenSpeakingLocally(bool enable) async {
+    await updateDuckingConfig(
+      _duckingConfig.copyWith(duckWhenSpeakingLocally: enable),
+    );
   }
 
   /// Disconnects from voice room and cleans up active peer connections
@@ -938,6 +1117,10 @@ class WebRtcVoiceController extends ChangeNotifier {
     if (_status == VoiceStatus.disconnected) return;
 
     _vadTimer?.cancel();
+    _duckingReleaseTimer?.cancel();
+    _duckingReleaseTimer = null;
+    _duckingFadeTimer?.cancel();
+    _duckingFadeTimer = null;
 
     await _sendSignalingMessage('VOICE_STATE', {
       'sender_id': userId,
@@ -996,6 +1179,10 @@ class WebRtcVoiceController extends ChangeNotifier {
   @override
   void dispose() {
     _vadTimer?.cancel();
+    _duckingReleaseTimer?.cancel();
+    _duckingReleaseTimer = null;
+    _duckingFadeTimer?.cancel();
+    _duckingFadeTimer = null;
 
     if (_status == VoiceStatus.connected && _voiceChannel != null) {
       try {

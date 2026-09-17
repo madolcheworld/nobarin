@@ -1,0 +1,383 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+/// Controller for Dailymotion video player via WebViewController & HTML5 video bridge
+class DailymotionPlayerController extends ChangeNotifier {
+  WebViewController? _webViewController;
+  String _url = '';
+  String? _videoId;
+  double _position = 0.0;
+  double _duration = 0.0;
+  bool _isPlaying = false;
+  bool _isMuted = false;
+  double _volume = 1.0;
+  double _playbackSpeed = 1.0;
+  bool _isDisposed = false;
+
+  void Function(double position)? onPositionChanged;
+  void Function(double duration)? onDurationChanged;
+  void Function(bool isPlaying)? onPlayingChanged;
+  void Function()? onPlaybackEnded;
+  void Function(String error)? onError;
+
+  WebViewController? get webViewController => _webViewController;
+  String get url => _url;
+  String? get videoId => _videoId;
+  double get position => _position;
+  double get duration => _duration;
+  bool get isPlaying => _isPlaying;
+  bool get isMuted => _isMuted;
+  double get volume => _volume;
+  double get playbackSpeed => _playbackSpeed;
+
+  bool get _isSupportedMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  /// Extracts Dailymotion video ID from various URL formats
+  static String? extractVideoId(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return null;
+
+    final regex = RegExp(
+      r'(?:dailymotion\.com/(?:video/|embed/video/)|dai\.ly/|player\.html\?video=)([a-zA-Z0-9]+)',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(trimmed);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1);
+    }
+
+    // Direct video ID string (e.g. x7tgad0, x84sh87)
+    if (RegExp(r'^[a-zA-Z0-9]{4,12}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
+  /// Loads Dailymotion media URL and sets up webview & player hooks
+  Future<void> loadUrl(
+    String url, {
+    bool autoPlay = false,
+    double startSeconds = 0.0,
+  }) async {
+    _url = url;
+    _videoId = extractVideoId(url);
+    _position = startSeconds;
+    _isPlaying = autoPlay;
+    notifyListeners();
+
+    if (!_isSupportedMobilePlatform) {
+      return;
+    }
+
+    try {
+      final targetUri = _resolveTargetUri(url, autoPlay: autoPlay, startSeconds: startSeconds);
+
+      if (_webViewController == null) {
+        final controller = WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..setUserAgent(
+            'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+          )
+          ..setNavigationDelegate(
+            NavigationDelegate(
+              onPageFinished: (finishedUrl) {
+                _injectPlayerOptimizations(
+                  autoPlay: autoPlay,
+                  startSeconds: startSeconds,
+                );
+              },
+              onNavigationRequest: (request) {
+                final uri = Uri.tryParse(request.url);
+                if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+                  return NavigationDecision.prevent;
+                }
+                return NavigationDecision.navigate;
+              },
+              onWebResourceError: (error) {
+                onError?.call(error.description);
+              },
+            ),
+          )
+          ..addJavaScriptChannel(
+            'NobarDailymotionPlayer',
+            onMessageReceived: (message) {
+              _handlePlayerBridgeMessage(message.message);
+            },
+          );
+
+        await controller.loadRequest(targetUri);
+        _webViewController = controller;
+      } else {
+        await _webViewController!.loadRequest(targetUri);
+      }
+      notifyListeners();
+    } catch (e) {
+      onError?.call('Gagal menginisialisasi pemutar Dailymotion: $e');
+    }
+  }
+
+  /// Converts raw URL or video ID to Dailymotion player embed URI
+  Uri _resolveTargetUri(
+    String rawUrl, {
+    required bool autoPlay,
+    required double startSeconds,
+  }) {
+    final vId = _videoId ?? extractVideoId(rawUrl);
+    if (vId != null && vId.isNotEmpty) {
+      final startTimeParam = startSeconds > 0 ? '&startTime=${startSeconds.round()}' : '';
+      return Uri.parse(
+        'https://geo.dailymotion.com/player.html?video=$vId&autoplay=${autoPlay ? 1 : 0}&mute=0$startTimeParam',
+      );
+    }
+    return Uri.parse(rawUrl.trim());
+  }
+
+  /// Injects CSS and JavaScript to optimize player layout and hook into video events
+  Future<void> _injectPlayerOptimizations({
+    required bool autoPlay,
+    required double startSeconds,
+  }) async {
+    if (_webViewController == null || _isDisposed) return;
+
+    final script = '''
+      (function() {
+        // 1. Clean UI and ensure full-screen responsive presentation
+        var existingStyle = document.getElementById('nobar-dailymotion-style');
+        if (!existingStyle) {
+          var style = document.createElement('style');
+          style.id = 'nobar-dailymotion-style';
+          style.textContent = `
+            header, nav, footer, .dmp_Header, .dmp_EndScreen, .dmp_AdBreakBanner {
+              display: none !important;
+            }
+            html, body {
+              background-color: #000 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              width: 100% !important;
+              height: 100% !important;
+            }
+            #player, .player-container, .dmp_Container {
+              width: 100vw !important;
+              height: 100vh !important;
+              position: fixed !important;
+              top: 0 !important;
+              left: 0 !important;
+              z-index: 99999 !important;
+            }
+            video {
+              width: 100% !important;
+              height: 100% !important;
+              object-fit: contain !important;
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        // 2. Attach video bridge
+        function setupVideoBridge() {
+          var video = document.querySelector('video');
+          if (!video) return;
+
+          if (!video.__nobarAttached) {
+            video.__nobarAttached = true;
+
+            ${startSeconds > 0 ? "video.currentTime = $startSeconds;" : ""}
+            ${autoPlay ? "video.play().catch(function(){});" : ""}
+
+            video.addEventListener('timeupdate', function() {
+              if (window.NobarDailymotionPlayer) {
+                window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                  event: 'timeupdate',
+                  currentTime: video.currentTime,
+                  duration: video.duration || 0
+                }));
+              }
+            });
+
+            video.addEventListener('play', function() {
+              if (window.NobarDailymotionPlayer) {
+                window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                  event: 'play'
+                }));
+              }
+            });
+
+            video.addEventListener('pause', function() {
+              if (window.NobarDailymotionPlayer) {
+                window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                  event: 'pause'
+                }));
+              }
+            });
+
+            video.addEventListener('ended', function() {
+              if (window.NobarDailymotionPlayer) {
+                window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                  event: 'ended'
+                }));
+              }
+            });
+
+            video.addEventListener('durationchange', function() {
+              if (window.NobarDailymotionPlayer) {
+                window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                  event: 'durationchange',
+                  duration: video.duration || 0
+                }));
+              }
+            });
+          }
+        }
+
+        setInterval(setupVideoBridge, 600);
+        setupVideoBridge();
+      })();
+    ''';
+
+    try {
+      await _webViewController!.runJavaScript(script);
+    } catch (_) {}
+  }
+
+  void _handlePlayerBridgeMessage(String rawJson) {
+    if (_isDisposed) return;
+    try {
+      final data = jsonDecode(rawJson);
+      if (data is Map<String, dynamic>) {
+        final event = data['event'] as String? ?? '';
+        switch (event) {
+          case 'timeupdate':
+            final cur = (data['currentTime'] as num?)?.toDouble() ?? 0.0;
+            final dur = (data['duration'] as num?)?.toDouble() ?? 0.0;
+            if ((cur - _position).abs() >= 0.3) {
+              _position = cur;
+              notifyListeners();
+              onPositionChanged?.call(_position);
+            }
+            if (dur > 0 && dur != _duration) {
+              _duration = dur;
+              notifyListeners();
+              onDurationChanged?.call(_duration);
+            }
+            break;
+          case 'durationchange':
+            final dur = (data['duration'] as num?)?.toDouble() ?? 0.0;
+            if (dur > 0 && dur != _duration) {
+              _duration = dur;
+              notifyListeners();
+              onDurationChanged?.call(_duration);
+            }
+            break;
+          case 'play':
+            if (!_isPlaying) {
+              _isPlaying = true;
+              notifyListeners();
+              onPlayingChanged?.call(true);
+            }
+            break;
+          case 'pause':
+            if (_isPlaying) {
+              _isPlaying = false;
+              notifyListeners();
+              onPlayingChanged?.call(false);
+            }
+            break;
+          case 'ended':
+            _isPlaying = false;
+            notifyListeners();
+            onPlaybackEnded?.call();
+            break;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> play() async {
+    _isPlaying = true;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) v.play();",
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> pause() async {
+    _isPlaying = false;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) v.pause();",
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> seekTo(double seconds) async {
+    _position = seconds < 0 ? 0 : seconds;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) v.currentTime = $seconds;",
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    _playbackSpeed = speed;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) v.playbackRate = $speed;",
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> setVolume(double volume) async {
+    _volume = volume.clamp(0.0, 1.0);
+    _isMuted = _volume == 0;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) { v.volume = $_volume; v.muted = ($_volume === 0); }",
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> toggleMute() async {
+    _isMuted = !_isMuted;
+    notifyListeners();
+    if (_webViewController != null) {
+      try {
+        await _webViewController!.runJavaScript(
+          "var v = document.querySelector('video'); if (v) v.muted = !v.muted;",
+        );
+      } catch (_) {}
+    }
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    pause();
+    _webViewController = null;
+    super.dispose();
+  }
+}

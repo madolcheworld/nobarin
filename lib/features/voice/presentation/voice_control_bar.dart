@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import 'package:nobarin/core/utils/app_haptics.dart';
 import '../controllers/webrtc_voice_controller.dart';
+import 'audio_ducking_settings_sheet.dart';
 
 class VoiceControlBar extends StatelessWidget {
   final WebRtcVoiceController voiceController;
@@ -183,27 +184,65 @@ class VoiceControlBar extends StatelessWidget {
 
               const SizedBox(width: 2),
 
-              // Audio Ducking Toggle Button (Consistent IconButton)
+              // Audio Ducking Toggle Button (Consistent IconButton with active glow & long-press settings)
               Tooltip(
                 message: voiceController.isAudioDuckingEnabled
-                    ? 'Audio Ducking: Aktif'
-                    : 'Audio Ducking: Nonaktif',
-                child: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(4),
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
-                  icon: Icon(
-                    Icons.hearing_rounded,
-                    size: 18,
-                    color: voiceController.isAudioDuckingEnabled
-                        ? AppColors.secondaryNeon
-                        : AppColors.textSecondary,
-                  ),
-                  onPressed: () {
-                    AppHaptics.selection();
-                    voiceController.toggleAudioDucking();
+                    ? (voiceController.isDucking
+                        ? 'Audio Ducking: Meredam Video (${(voiceController.duckingFactor * 100).round()}%)\n(Tekan lama untuk pengaturan)'
+                        : 'Audio Ducking: Aktif (${(voiceController.duckingFactor * 100).round()}%)\n(Tekan lama untuk pengaturan)')
+                    : 'Audio Ducking: Nonaktif\n(Tekan lama untuk pengaturan)',
+                child: GestureDetector(
+                  onLongPress: () {
+                    AudioDuckingSettingsSheet.show(
+                      context,
+                      voiceController: voiceController,
+                    );
                   },
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(4),
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.hearing_rounded,
+                          size: 18,
+                          color: !voiceController.isAudioDuckingEnabled
+                              ? AppColors.textSecondary
+                              : (voiceController.isDucking
+                                  ? AppColors.primaryNeon
+                                  : AppColors.secondaryNeon),
+                        ),
+                        if (voiceController.isAudioDuckingEnabled &&
+                            voiceController.isDucking)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.primaryNeon,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primaryNeon,
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    onPressed: () {
+                      AppHaptics.selection();
+                      voiceController.toggleAudioDucking();
+                    },
+                  ),
                 ),
               ),
             ],

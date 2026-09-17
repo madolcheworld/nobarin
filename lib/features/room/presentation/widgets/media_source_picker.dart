@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
+import '../../../browser/presentation/dailymotion_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../../chat/controllers/chat_controller.dart';
 import '../../controllers/queue_controller.dart';
@@ -374,6 +375,98 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                                   widget.isAddingToQueueInitial
                                       ? 'Pilih anime untuk antrean'
                                       : 'Jelajahi anime dan serial video',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Dailymotion In-App Browser Option Card
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      DailymotionBrowserSheet.show(
+                        context,
+                        syncController: widget.syncController,
+                        queueController: widget.queueController,
+                        chatController: widget.chatController,
+                        mode: widget.isAddingToQueueInitial
+                            ? DailymotionBrowserMode.queueOnly
+                            : DailymotionBrowserMode.watchNow,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.dailymotionBlue.withValues(alpha: 0.18),
+                            AppColors.surfaceElevated,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.dailymotionBlue.withValues(alpha: 0.45),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: AppColors.dailymotionBlue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_circle_filled_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.isAddingToQueueInitial
+                                      ? 'Cari di Dailymotion'
+                                      : 'Dailymotion',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.isAddingToQueueInitial
+                                      ? 'Pilih video untuk antrean'
+                                      : 'Jelajahi video di Dailymotion',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,

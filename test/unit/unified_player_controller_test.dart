@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nobarin/features/room/controllers/dailymotion_player_controller.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 
 void main() {
@@ -122,6 +123,55 @@ void main() {
       expect(detectedShortUrl, isNotNull);
       expect(detectedShortUrl!.mediaType, equals('youtube'));
       expect(detectedShortUrl.mediaId, equals('dQw4w9WgXcQ'));
+    });
+
+    test('detectMediaFromUrl detects Dailymotion URLs correctly', () {
+      final detectedStandard = UnifiedPlayerController.detectMediaFromUrl(
+        'https://www.dailymotion.com/video/x7tgad0',
+      );
+      expect(detectedStandard, isNotNull);
+      expect(detectedStandard!.mediaType, equals('dailymotion'));
+      expect(detectedStandard.mediaId, equals('x7tgad0'));
+      expect(detectedStandard.isDailymotion, isTrue);
+      expect(detectedStandard.thumbnailUrl,
+          equals('https://www.dailymotion.com/thumbnail/video/x7tgad0'));
+
+      final detectedShort = UnifiedPlayerController.detectMediaFromUrl(
+        'https://dai.ly/x7tgad0',
+      );
+      expect(detectedShort, isNotNull);
+      expect(detectedShort!.mediaType, equals('dailymotion'));
+      expect(detectedShort.mediaId, equals('x7tgad0'));
+      expect(detectedShort.isDailymotion, isTrue);
+
+      final detectedEmbed = UnifiedPlayerController.detectMediaFromUrl(
+        'https://geo.dailymotion.com/player.html?video=x7tgad0',
+      );
+      expect(detectedEmbed, isNotNull);
+      expect(detectedEmbed!.mediaType, equals('dailymotion'));
+      expect(detectedEmbed.mediaId, equals('x7tgad0'));
+      expect(detectedEmbed.isDailymotion, isTrue);
+    });
+
+    test(
+        'extractVideoId in DailymotionPlayerController handles various URL shapes',
+        () {
+      expect(DailymotionPlayerController.extractVideoId(
+              'https://www.dailymotion.com/video/x8xyz12'),
+          'x8xyz12');
+      expect(DailymotionPlayerController.extractVideoId(
+              'https://dai.ly/x8xyz12'),
+          'x8xyz12');
+      expect(
+          DailymotionPlayerController.extractVideoId(
+              'https://geo.dailymotion.com/player.html?video=x8xyz12'),
+          'x8xyz12');
+      expect(
+          DailymotionPlayerController.extractVideoId(
+              'https://www.dailymotion.com/embed/video/x8xyz12'),
+          'x8xyz12');
+      expect(DailymotionPlayerController.extractVideoId('x8xyz12'), 'x8xyz12');
+      expect(DailymotionPlayerController.extractVideoId('invalid url'), isNull);
     });
   });
 }

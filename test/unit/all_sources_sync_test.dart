@@ -99,5 +99,58 @@ void main() {
         expect(detected.isDirectUrl, isTrue);
       });
     });
+
+    // -------------------------------------------------------------------------
+    // 2. Dailymotion Video Synchronization
+    // -------------------------------------------------------------------------
+    group('2. Dailymotion Sync', () {
+      const dailymotionUrl = 'https://www.dailymotion.com/video/x7tgad0';
+
+      test('Host Play action syncs state and extrapolates position for Viewer', () {
+        const hostTimestamp = 1000000;
+        final payload = SyncPayload(
+          mediaType: 'dailymotion',
+          mediaUrl: dailymotionUrl,
+          state: 'playing',
+          positionSeconds: 20.0,
+          timestampMs: hostTimestamp,
+          playbackSpeed: 1.0,
+          controllerId: 'host-user',
+        );
+
+        // Viewer receives packet 1000ms later (1.0s network delay)
+        const viewerReceiveTime = hostTimestamp + 1000;
+        final targetPos =
+            syncEngine.calculateTargetPosition(payload, viewerReceiveTime);
+
+        // Expected: 20.0 + 1.0 = 21.0 seconds
+        expect(targetPos, closeTo(21.0, 0.001));
+      });
+
+      test('Host Pause action freezes position for Viewer', () {
+        const hostTimestamp = 1000000;
+        final payload = SyncPayload(
+          mediaType: 'dailymotion',
+          mediaUrl: dailymotionUrl,
+          state: 'paused',
+          positionSeconds: 55.0,
+          timestampMs: hostTimestamp,
+          controllerId: 'host-user',
+        );
+
+        final targetPos =
+            syncEngine.calculateTargetPosition(payload, hostTimestamp + 4000);
+        expect(targetPos, 55.0);
+      });
+
+      test('Dailymotion media detection correctly parses URL', () {
+        final detected =
+            UnifiedPlayerController.detectMediaFromUrl(dailymotionUrl);
+        expect(detected, isNotNull);
+        expect(detected!.mediaType, 'dailymotion');
+        expect(detected.mediaId, 'x7tgad0');
+        expect(detected.isDailymotion, isTrue);
+      });
+    });
   });
 }

@@ -4,7 +4,9 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
+import '../../../browser/presentation/dailymotion_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
+import '../../../room/controllers/dailymotion_player_controller.dart';
 import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
 import '../lobby_controller.dart';
@@ -79,6 +81,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _selectedMediaType = 'bstation';
         _selectedVideoId = detected?.mediaId;
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Bstation';
+      } else if (detected?.mediaType == 'dailymotion' || widget.initialMediaType == 'dailymotion') {
+        _selectedMediaType = 'dailymotion';
+        _selectedVideoId = detected?.mediaId;
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Dailymotion';
       } else {
         _selectedMediaType = 'youtube';
         _selectedVideoId = detected?.mediaId;
@@ -136,6 +142,30 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _titleController.text = title.isNotEmpty && title != 'Video Bstation'
                 ? 'Nobar: $title'
                 : 'Nobar: Bstation';
+          }
+        });
+      },
+    );
+  }
+
+  void _openDailymotionBrowser() {
+    DailymotionBrowserSheet.show(
+      context,
+      mode: DailymotionBrowserMode.createRoom,
+      onVideoSelected: (type, url, title) {
+        final vId = DailymotionPlayerController.extractVideoId(url);
+        setState(() {
+          _selectedMediaType = 'dailymotion';
+          _selectedMediaUrl = url;
+          _selectedVideoTitle = title.isNotEmpty ? title : 'Video Dailymotion';
+          _selectedVideoId = vId;
+          _currentStep = 1;
+          if (_titleController.text == 'Nonton Bareng' ||
+              _titleController.text.isEmpty ||
+              _titleController.text.startsWith('Nobar:')) {
+            _titleController.text = title.isNotEmpty && title != 'Video Dailymotion'
+                ? 'Nobar: $title'
+                : 'Nobar: Dailymotion';
           }
         });
       },
@@ -382,6 +412,24 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           badgeText: 'Anime',
           onTap: _openBstationBrowser,
         ),
+        const SizedBox(height: 12),
+
+        // 3. Dailymotion Option Card
+        _buildSourceOptionCard(
+          title: 'Dailymotion',
+          subtitle: 'Video berita, musik, & hiburan',
+          icon: Icons.play_circle_filled_rounded,
+          iconColor: Colors.white,
+          iconBackgroundColor: AppColors.dailymotionBlue,
+          borderColor: AppColors.dailymotionBlue.withValues(alpha: 0.45),
+          gradientColors: [
+            AppColors.dailymotionBlue.withValues(alpha: 0.16),
+            AppColors.surfaceElevated,
+          ],
+          accentColor: AppColors.dailymotionBlue,
+          badgeText: 'Trending',
+          onTap: _openDailymotionBrowser,
+        ),
 
         // If a video was already selected and user clicked "Ganti Video" / back to step 1
         if (_selectedMediaUrl != null && _selectedMediaUrl!.isNotEmpty) ...[
@@ -626,6 +674,127 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  Widget _buildDailymotionPreviewCard() {
+    final thumbUrl = _selectedVideoId != null
+        ? 'https://www.dailymotion.com/thumbnail/video/$_selectedVideoId'
+        : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.dailymotionBlue.withValues(alpha: 0.5),
+          width: 1.2,
+        ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Video Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: thumbUrl != null
+                    ? Image.network(
+                        thumbUrl,
+                        width: 84,
+                        height: 54,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: 84,
+                          height: 54,
+                          color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
+                          child: const Icon(
+                            Icons.play_circle_filled_rounded,
+                            color: AppColors.dailymotionBlue,
+                            size: 26,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: 84,
+                        height: 54,
+                        color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
+                        child: const Icon(
+                          Icons.play_circle_filled_rounded,
+                          color: AppColors.dailymotionBlue,
+                          size: 26,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+
+              // Title and Source Badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.dailymotionBlue.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_circle_filled_rounded,
+                              size: 11, color: AppColors.dailymotionBlue),
+                          SizedBox(width: 4),
+                          Text(
+                            'Dailymotion',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.dailymotionBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _selectedVideoTitle ?? 'Video Dailymotion',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => setState(() => _currentStep = 0),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryNeon,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep2RoomSettings() {
     return Form(
       key: _formKey,
@@ -644,6 +813,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 8),
           if (_selectedMediaType == 'bstation') ...[
             _buildBstationPreviewCard(),
+          ] else if (_selectedMediaType == 'dailymotion') ...[
+            _buildDailymotionPreviewCard(),
           ] else ...[
             _buildYouTubePreviewCard(),
           ],
@@ -834,9 +1005,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     final safeBottom = MediaQuery.of(context).padding.bottom;
 
     return PopScope(
-      canPop: _currentStep == 0,
+      canPop: !_isLoading && _currentStep == 0,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop || _isLoading) return;
         if (_currentStep == 1) {
           setState(() => _currentStep = 0);
         }
@@ -859,104 +1030,173 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           ),
           child: Material(
             color: Colors.transparent,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Stack(
               children: [
-                // Drag handle
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 12, bottom: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(2),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag handle
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        margin: const EdgeInsets.only(top: 12, bottom: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
 
-                // Header Bar
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
-                  child: Row(
-                    children: [
-                      if (_currentStep == 1) ...[
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back_rounded,
-                              color: AppColors.textPrimary, size: 22),
-                          onPressed: () => setState(() => _currentStep = 0),
-                          tooltip: 'Kembali ke pilih video',
-                        ),
-                      ] else ...[
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.video_camera_front_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _currentStep == 0
-                                  ? 'Pilih Sumber Video'
-                                  : 'Pengaturan Room',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
+                    // Header Bar
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
+                      child: Row(
+                        children: [
+                          if (_currentStep == 1) ...[
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_rounded,
+                                  color: AppColors.textPrimary, size: 22),
+                              onPressed: _isLoading
+                                  ? null
+                                  : () => setState(() => _currentStep = 0),
+                              tooltip: 'Kembali ke pilih video',
+                            ),
+                          ] else ...[
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                gradient: AppColors.primaryGradient,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.video_camera_front_rounded,
+                                color: Colors.white,
+                                size: 20,
                               ),
                             ),
-                            Text(
-                              _currentStep == 0
-                                  ? 'Langkah 1 dari 2'
-                                  : 'Langkah 2 dari 2',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
+                            const SizedBox(width: 12),
                           ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currentStep == 0
+                                      ? 'Pilih Sumber Video'
+                                      : 'Pengaturan Room',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  _currentStep == 0
+                                      ? 'Langkah 1 dari 2'
+                                      : 'Langkah 2 dari 2',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded,
+                                color: AppColors.textSecondary, size: 22),
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.of(context).pop(),
+                            tooltip: 'Tutup',
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Step progress bar
+                    _buildStepProgressBar(),
+
+                    const Divider(color: AppColors.border, height: 1),
+
+                    // Step content
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          20,
+                          16,
+                          20,
+                          18 + bottomInset + (safeBottom > 0 ? safeBottom : 12),
+                        ),
+                        child: _currentStep == 0
+                            ? _buildStep1VideoSelection()
+                            : _buildStep2RoomSettings(),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Full loading overlay when room creation is in progress
+                if (_isLoading)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface.withValues(alpha: 0.92),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded,
-                            color: AppColors.textSecondary, size: 22),
-                        onPressed: () => Navigator.of(context).pop(),
-                        tooltip: 'Tutup',
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 68,
+                                height: 68,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: AppColors.primaryGradient,
+                                  boxShadow: AppColors.neonVioletGlow,
+                                ),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Sedang Membuat Room...',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Mendaftarkan room & menyiapkan media player',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-
-                // Step progress bar
-                _buildStepProgressBar(),
-
-                const Divider(color: AppColors.border, height: 1),
-
-                // Step content
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      16,
-                      20,
-                      18 + bottomInset + (safeBottom > 0 ? safeBottom : 12),
                     ),
-                    child: _currentStep == 0
-                        ? _buildStep1VideoSelection()
-                        : _buildStep2RoomSettings(),
                   ),
-                ),
               ],
             ),
           ),

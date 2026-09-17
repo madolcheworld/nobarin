@@ -12,6 +12,7 @@ import '../../../../core/utils/time_formatter.dart';
 import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
 import 'bstation_player_widget.dart';
+import 'dailymotion_player_widget.dart';
 import 'video_quality_sheet.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
@@ -258,6 +259,12 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             widget.player.bstationController != null) {
           playerWidget = BstationPlayerWidget(
             controller: widget.player.bstationController!,
+            aspectRatio: 16 / 9,
+          );
+        } else if (widget.player.mediaType == 'dailymotion' &&
+            widget.player.dailymotionController != null) {
+          playerWidget = DailymotionPlayerWidget(
+            controller: widget.player.dailymotionController!,
             aspectRatio: 16 / 9,
           );
         } else if (kIsWeb && widget.player.webVideoWidget != null) {

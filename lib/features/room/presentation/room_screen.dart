@@ -25,10 +25,12 @@ import '../controllers/room_controller.dart';
 import '../controllers/sync_controller.dart';
 import '../controllers/unified_player_controller.dart';
 import '../models/room_model.dart';
+import 'widgets/exit_room_dialog.dart';
 import 'widgets/media_source_picker.dart';
 import 'widgets/participants_tab_view.dart';
 import 'widgets/queue_tab_view.dart';
 import 'widgets/room_controls_bar.dart';
+import 'widgets/room_loading_view.dart';
 import 'widgets/unified_player_view.dart';
 
 class RoomScreen extends ConsumerStatefulWidget {
@@ -490,13 +492,55 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       return;
     }
 
-    final navigator = GoRouter.of(context);
     final shouldLeave = await _onWillPop();
-    if (shouldLeave && mounted) {
+    if (!shouldLeave || !mounted) return;
+
+    final user = ref.read(authControllerProvider).asData?.value;
+    final isHost = _roomController?.isHost ?? false;
+    final otherParticipants = _roomController?.state.participants
+            .where((p) =>
+                p.id != user?.id &&
+                p.username != user?.username &&
+                p.id != _roomController?.currentUser.id &&
+                p.username != _roomController?.currentUser.username)
+            .toList() ??
+        [];
+
+    final String exitMessage;
+    final String? exitSubMessage;
+    if (isHost) {
+      if (otherParticipants.isNotEmpty) {
+        otherParticipants.sort((a, b) => a.id.compareTo(b.id));
+        final nextHost = otherParticipants.first;
+        exitMessage = 'Mengalihkan Host & Keluar...';
+        exitSubMessage = 'Menyerahkan peran Host ke ${nextHost.username}';
+      } else {
+        exitMessage = 'Menutup Room...';
+        exitSubMessage = 'Membersihkan sesi dan menghapus room dari lobby';
+      }
+    } else {
+      exitMessage = 'Sedang Keluar Room...';
+      exitSubMessage = 'Memutuskan koneksi dan kembali ke lobby';
+    }
+
+    // Show non-dismissible exit dialog
+    ExitRoomLoadingDialog.show(
+      context,
+      message: exitMessage,
+      subMessage: exitSubMessage,
+    );
+
+    try {
       await _cleanupAndLeave();
+    } catch (e) {
+      debugPrint('[RoomScreen] Error during _cleanupAndLeave: $e');
+    } finally {
       if (mounted) {
+        if (Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
         ref.read(lobbyControllerProvider.notifier).refreshRooms();
-        navigator.go('/lobby');
+        GoRouter.of(context).go('/lobby');
       }
     }
   }
@@ -620,10 +664,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryNeon),
-        ),
+      return RoomLoadingView(
+        roomCode: widget.roomCode,
+        roomTitle: widget.initialRoom?.title,
+        onCancel: () {
+          if (mounted) {
+            GoRouter.of(context).go('/lobby');
+          }
+        },
       );
     }
 

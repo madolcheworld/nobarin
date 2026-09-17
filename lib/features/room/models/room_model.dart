@@ -52,6 +52,28 @@ class RoomModel {
       return trimmed;
     }
 
+    // YouTube thumbnail resolution
+    if (type == 'youtube' || lower.contains('youtube.com') || lower.contains('youtu.be')) {
+      final regExp = RegExp(r'(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]{11})');
+      final match = regExp.firstMatch(trimmed);
+      if (match != null && match.group(1) != null) {
+        return 'https://img.youtube.com/vi/${match.group(1)}/hqdefault.jpg';
+      }
+    }
+
+    // Dailymotion thumbnail resolution
+    if (type == 'dailymotion' || lower.contains('dailymotion.com') || lower.contains('dai.ly')) {
+      final regExp = RegExp(r'(?:dailymotion\.com\/(?:video|embed\/video)\/([a-zA-Z0-9]+)|dai\.ly\/([a-zA-Z0-9]+)|video=([a-zA-Z0-9]+))');
+      final match = regExp.firstMatch(trimmed);
+      final id = match?.group(1) ?? match?.group(2) ?? match?.group(3);
+      if (id != null && id.isNotEmpty) {
+        return 'https://www.dailymotion.com/thumbnail/video/$id';
+      }
+      if (RegExp(r'^[a-zA-Z0-9]+$').hasMatch(trimmed)) {
+        return 'https://www.dailymotion.com/thumbnail/video/$trimmed';
+      }
+    }
+
     return null;
   }
 

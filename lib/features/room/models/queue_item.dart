@@ -25,6 +25,7 @@ class QueueItem {
 
   bool get isYouTube => mediaType == 'youtube';
   bool get isBstation => mediaType == 'bstation' || mediaType == 'bilibili';
+  bool get isDailymotion => mediaType == 'dailymotion';
   bool get isDirectUrl => mediaType == 'direct_url';
 
   factory QueueItem.fromJson(Map<String, dynamic> json) {

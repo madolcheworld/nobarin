@@ -125,8 +125,56 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       ),
                     );
                     if (confirm == true && context.mounted) {
-                      ref.read(authControllerProvider.notifier).logout();
-                      context.go('/');
+                      showDialog<void>(
+                        context: context,
+                        barrierDismissible: false,
+                        useRootNavigator: true,
+                        builder: (_) => PopScope(
+                          canPop: false,
+                          child: Dialog(
+                            backgroundColor: AppColors.surfaceElevated,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: const BorderSide(color: AppColors.border),
+                            ),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 20,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: AppColors.primaryNeon,
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Text(
+                                    'Sedang keluar akun...',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                      await ref.read(authControllerProvider.notifier).logout();
+                      if (context.mounted) {
+                        if (Navigator.of(context, rootNavigator: true).canPop()) {
+                          Navigator.of(context, rootNavigator: true).pop();
+                        }
+                        context.go('/');
+                      }
                     }
                   }
                 },

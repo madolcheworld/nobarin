@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
+import 'package:nobarin/features/voice/models/audio_ducking_config.dart';
+import 'package:nobarin/features/voice/presentation/audio_ducking_settings_sheet.dart';
 import 'package:nobarin/features/voice/presentation/speaking_avatar_indicator.dart';
 import 'package:nobarin/features/voice/presentation/voice_control_bar.dart';
 
@@ -244,6 +247,14 @@ class FakeSupabaseClient implements SupabaseClient {
 }
 
 void main() {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+  });
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('WebRtcVoiceController Unit Tests', () {
     late WebRtcVoiceController controller;
     late FakePlayerController fakePlayer;
@@ -1046,6 +1057,202 @@ void main() {
 
       expect(find.byType(VoiceControlBar), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Smart Audio Ducking Advanced Tests', () {
+    late WebRtcVoiceController controller;
+    late FakePlayerController fakePlayer;
+    late FakeMediaStream fakeStream;
+    late FakeRTCPeerConnection fakePeerConnection;
+
+    setUp(() {
+      fakePlayer = FakePlayerController();
+      fakeStream = FakeMediaStream();
+      fakePeerConnection = FakeRTCPeerConnection();
+    });
+
+    tearDown(() {
+      controller.dispose();
+    });
+
+    test('Custom ducking factor presets attenuate volume accurately', () async {
+      controller = WebRtcVoiceController(
+        roomId: 'test-presets',
+        userId: 'user-alice',
+        userName: 'Alice',
+        playerController: fakePlayer,
+        duckingConfig: const AudioDuckingConfig(duckingFactor: 0.6),
+        autoCaptureMic: true,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            fakePeerConnection,
+      );
+
+      await controller.connect();
+      expect(controller.duckingFactor, 0.6);
+
+      // Trigger ducking
+      controller.setRemoteSpeaking('user-bob', true);
+      expect(controller.isDucking, isTrue);
+      expect(fakePlayer.volume, closeTo(0.6, 0.01));
+
+      // Update to aggressive (15%)
+      await controller.setDuckingFactor(0.15);
+      expect(controller.duckingFactor, 0.15);
+      expect(fakePlayer.volume, closeTo(0.15, 0.01));
+
+      // Update to mute (0%)
+      await controller.setDuckingFactor(0.0);
+      expect(controller.duckingFactor, 0.0);
+      expect(fakePlayer.volume, closeTo(0.0, 0.01));
+    });
+
+    test('duckWhenSpeakingLocally ducks volume when local user speaks',
+        () async {
+      controller = WebRtcVoiceController(
+        roomId: 'test-duck-self',
+        userId: 'user-alice',
+        userName: 'Alice',
+        playerController: fakePlayer,
+        duckingConfig: const AudioDuckingConfig(
+          duckingFactor: 0.3,
+          duckWhenSpeakingLocally: true,
+        ),
+        autoCaptureMic: true,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            fakePeerConnection,
+      );
+
+      await controller.connect();
+      await controller.toggleMic(); // Unmute
+      expect(fakePlayer.volume, 1.0);
+
+      // Local user speaks -> ducks video!
+      controller.setLocalSpeaking(true);
+      expect(controller.isDucking, isTrue);
+      expect(fakePlayer.volume, closeTo(0.3, 0.01));
+
+      // Local user stops speaking -> volume restores
+      controller.setLocalSpeaking(false);
+      expect(controller.isDucking, isFalse);
+      expect(fakePlayer.volume, closeTo(1.0, 0.01));
+    });
+
+    test(
+        'Release hold timer prevents premature volume restore during brief silence',
+        () async {
+      controller = WebRtcVoiceController(
+        roomId: 'test-hold',
+        userId: 'user-alice',
+        userName: 'Alice',
+        playerController: fakePlayer,
+        duckingConfig: const AudioDuckingConfig(
+          duckingFactor: 0.4,
+          smoothTransition: true,
+          attackDuration: Duration.zero,
+          releaseDuration: Duration.zero,
+          releaseHoldDuration: Duration(milliseconds: 200),
+        ),
+        autoCaptureMic: true,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            fakePeerConnection,
+      );
+
+      await controller.connect();
+
+      // Bob speaks
+      controller.setRemoteSpeaking('user-bob', true, immediate: false);
+      expect(controller.isDucking, isTrue);
+      expect(fakePlayer.volume, closeTo(0.4, 0.01));
+
+      // Bob pauses speaking for 50ms (< 200ms hold duration)
+      controller.setRemoteSpeaking('user-bob', false, immediate: false);
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Still ducked!
+      expect(controller.isDucking, isTrue);
+      expect(fakePlayer.volume, closeTo(0.4, 0.01));
+
+      // Bob speaks again before hold expires -> remains ducked seamlessly!
+      controller.setRemoteSpeaking('user-bob', true, immediate: false);
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(controller.isDucking, isTrue);
+
+      // Now Bob stops and silence persists for > 200ms
+      controller.setRemoteSpeaking('user-bob', false, immediate: false);
+      await Future.delayed(const Duration(milliseconds: 260));
+
+      // Now volume is restored
+      expect(controller.isDucking, isFalse);
+      expect(fakePlayer.volume, closeTo(1.0, 0.01));
+    });
+  });
+
+  group('AudioDuckingSettingsSheet Widget Tests', () {
+    late WebRtcVoiceController controller;
+    late FakePlayerController fakePlayer;
+    late FakeMediaStream fakeStream;
+    late FakeRTCPeerConnection fakePeerConnection;
+
+    setUp(() {
+      fakePlayer = FakePlayerController();
+      fakeStream = FakeMediaStream();
+      fakePeerConnection = FakeRTCPeerConnection();
+
+      controller = WebRtcVoiceController(
+        roomId: 'test-sheet',
+        userId: 'user-alice',
+        userName: 'Alice',
+        playerController: fakePlayer,
+        supabase: null,
+        audioRouteHandler: (_) async {},
+        duckingConfig: const AudioDuckingConfig(duckingFactor: 0.4),
+        autoCaptureMic: true,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            fakePeerConnection,
+      );
+    });
+
+    tearDown(() {
+      controller.dispose();
+    });
+
+    testWidgets('renders all controls and toggles ducking settings properly',
+        (tester) async {
+      await controller.connect();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AudioDuckingSettingsSheet(voiceController: controller),
+          ),
+        ),
+      );
+
+      expect(find.text('Smart Audio Ducking'), findsOneWidget);
+      expect(find.text('Aktifkan Audio Ducking'), findsOneWidget);
+      expect(find.text('Lembut'), findsOneWidget);
+      expect(find.text('Standar'), findsOneWidget);
+      expect(find.text('Agresif'), findsOneWidget);
+      expect(find.text('Hening'), findsOneWidget);
+      expect(find.text('Kecilkan saat saya berbicara'), findsOneWidget);
+      expect(find.text('Transisi Suara Halus (Smooth Fade)'), findsOneWidget);
+
+      // Tap 'Lembut' preset (60%)
+      await tester.tap(find.text('Lembut'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(controller.duckingFactor, closeTo(0.6, 0.01));
+
+      // Tap 'Hening' preset (0%)
+      await tester.tap(find.text('Hening'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(controller.duckingFactor, closeTo(0.0, 0.01));
     });
   });
 }

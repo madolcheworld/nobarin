@@ -7,11 +7,12 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/utils/fullscreen/fullscreen_helper.dart';
 import '../models/video_quality.dart';
 import 'bstation_player_controller.dart';
+import 'dailymotion_player_controller.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
 /// Normalized result of detecting media platform, URLs, and IDs
 class DetectedMedia {
-  final String mediaType; // 'direct_url' | 'youtube' | 'bstation'
+  final String mediaType; // 'direct_url' | 'youtube' | 'bstation' | 'dailymotion'
   final String mediaUrl;
   final String? mediaId;
   final String title;
@@ -29,6 +30,7 @@ class DetectedMedia {
   bool get isYoutube => mediaType == 'youtube';
   bool get isYouTube => isYoutube;
   bool get isBstation => mediaType == 'bstation';
+  bool get isDailymotion => mediaType == 'dailymotion';
 }
 
 class UnifiedPlayerController extends ChangeNotifier {
@@ -57,6 +59,9 @@ class UnifiedPlayerController extends ChangeNotifier {
   // Bstation Web / Mobile Player Controller
   BstationPlayerController? _bstationController;
 
+  // Dailymotion Web / Mobile Player Controller
+  DailymotionPlayerController? _dailymotionController;
+
   // MediaKit Player & VideoController (Native desktop / mobile direct URL)
   Player? _mkPlayer;
   VideoController? _mkVideoController;
@@ -82,6 +87,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   VideoController? get mkVideoController => _mkVideoController;
   YoutubePlayerController? get ytController => _ytController;
   BstationPlayerController? get bstationController => _bstationController;
+  DailymotionPlayerController? get dailymotionController => _dailymotionController;
   Widget? get webVideoWidget => _webVideoAdapter?.buildVideoWidget();
 
   List<VideoQuality> get availableQualities =>
@@ -339,6 +345,19 @@ class UnifiedPlayerController extends ChangeNotifier {
       );
     }
 
+    if (trimmed.contains('dailymotion.com') || trimmed.contains('dai.ly')) {
+      final dmId = DailymotionPlayerController.extractVideoId(trimmed);
+      if (dmId != null && dmId.isNotEmpty) {
+        return DetectedMedia(
+          mediaType: 'dailymotion',
+          mediaUrl: 'https://www.dailymotion.com/video/$dmId',
+          mediaId: dmId,
+          title: 'Dailymotion Video ($dmId)',
+          thumbnailUrl: 'https://www.dailymotion.com/thumbnail/video/$dmId',
+        );
+      }
+    }
+
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       final uri = Uri.tryParse(trimmed);
       final filename = uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'Direct Video';
@@ -423,6 +442,43 @@ class UnifiedPlayerController extends ChangeNotifier {
     };
   }
 
+  void _setupDailymotionListeners() {
+    if (_dailymotionController == null) return;
+    _dailymotionController!.onPositionChanged = (pos) {
+      if (_isDisposed || _mediaType != 'dailymotion') return;
+      if ((pos - _position).abs() >= 0.25) {
+        _position = pos;
+        notifyListeners();
+        onPositionChanged?.call(_position);
+      }
+    };
+    _dailymotionController!.onDurationChanged = (dur) {
+      if (_isDisposed || _mediaType != 'dailymotion') return;
+      if (dur > 0 && dur != _duration) {
+        _duration = dur;
+        notifyListeners();
+      }
+    };
+    _dailymotionController!.onPlayingChanged = (playing) {
+      if (_isDisposed || _mediaType != 'dailymotion') return;
+      if (_isPlaying != playing) {
+        _isPlaying = playing;
+        notifyListeners();
+        onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+      }
+    };
+    _dailymotionController!.onPlaybackEnded = () {
+      if (_isDisposed || _mediaType != 'dailymotion') return;
+      onPlaybackEnded?.call();
+    };
+    _dailymotionController!.onError = (err) {
+      if (_isDisposed || _mediaType != 'dailymotion') return;
+      _errorMessage = err;
+      _isPlaying = false;
+      notifyListeners();
+    };
+  }
+
   /// Loads media into player
   Future<void> loadMedia(
     String type,
@@ -445,8 +501,9 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
 
     if (type == 'youtube') {
-      // Pause direct video player and Bstation player if active
+      // Pause direct video player, Bstation, and Dailymotion player if active
       await _bstationController?.pause();
+      await _dailymotionController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
@@ -490,12 +547,13 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
 
     if (type == 'bstation') {
-      // Pause YouTube and direct video player if active
+      // Pause YouTube, Dailymotion, and direct video player if active
       if (_ytController != null) {
         try {
           await _ytController!.pauseVideo();
         } catch (_) {}
       }
+      await _dailymotionController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
@@ -520,8 +578,41 @@ class UnifiedPlayerController extends ChangeNotifier {
       return;
     }
 
-    // Direct URL: pause YouTube and Bstation player if active
+    if (type == 'dailymotion') {
+      // Pause YouTube, Bstation, and direct video player if active
+      if (_ytController != null) {
+        try {
+          await _ytController!.pauseVideo();
+        } catch (_) {}
+      }
+      await _bstationController?.pause();
+      if (kIsWeb && _webVideoAdapter != null) {
+        await _webVideoAdapter?.pause();
+      } else if (_mkPlayer != null) {
+        await _mkPlayer?.pause();
+      }
+
+      try {
+        _dailymotionController ??= DailymotionPlayerController();
+        _setupDailymotionListeners();
+        await _dailymotionController!.loadUrl(
+          url,
+          autoPlay: autoPlay,
+          startSeconds: startSeconds,
+        );
+        _isPlaying = autoPlay;
+      } catch (e) {
+        debugPrint('[UnifiedPlayerController] Dailymotion load error: $e');
+        _errorMessage = 'Gagal memuat Dailymotion video: $e';
+        _isPlaying = false;
+      }
+      notifyListeners();
+      return;
+    }
+
+    // Direct URL: pause YouTube, Bstation, and Dailymotion player if active
     await _bstationController?.pause();
+    await _dailymotionController?.pause();
     if (_ytController != null) {
       try {
         await _ytController!.pauseVideo();
@@ -573,6 +664,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _ytController?.playVideo();
       } else if (_mediaType == 'bstation') {
         await _bstationController?.play();
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.play();
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.play();
         if (_webVideoAdapter!.isMuted != _isMuted) {
@@ -598,6 +691,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _ytController?.pauseVideo();
       } else if (_mediaType == 'bstation') {
         await _bstationController?.pause();
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.pause();
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else {
@@ -617,6 +712,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _ytController?.seekTo(seconds: seconds, allowSeekAhead: true);
       } else if (_mediaType == 'bstation') {
         await _bstationController?.seekTo(seconds);
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.seekTo(seconds);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.seekTo(seconds);
       } else {
@@ -638,6 +735,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _ytController?.setPlaybackRate(speed);
       } else if (_mediaType == 'bstation') {
         await _bstationController?.setPlaybackSpeed(speed);
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.setPlaybackSpeed(speed);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.setPlaybackSpeed(speed);
       } else {
@@ -663,6 +762,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         }
       } else if (_mediaType == 'bstation') {
         await _bstationController?.setVolume(_volume);
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.setVolume(_volume);
       } else if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.setVolume(_volume);
       } else {
@@ -684,6 +785,8 @@ class UnifiedPlayerController extends ChangeNotifier {
           await _ytController?.mute();
         } else if (_mediaType == 'bstation') {
           await _bstationController?.toggleMute();
+        } else if (_mediaType == 'dailymotion') {
+          await _dailymotionController?.toggleMute();
         } else if (kIsWeb && _webVideoAdapter != null) {
           await _webVideoAdapter?.setMuted(true);
         } else {
@@ -753,6 +856,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
     _ytController?.close();
     _bstationController?.dispose();
+    _dailymotionController?.dispose();
     _webVideoAdapter?.dispose();
     _mkPlayer?.dispose();
     super.dispose();
