@@ -269,8 +269,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                               children: [
                                 Text(
                                   widget.isAddingToQueueInitial
-                                      ? 'Cari YouTube untuk Antrean'
-                                      : 'Jelajahi YouTube (In-App)',
+                                      ? 'Cari di YouTube'
+                                      : 'YouTube',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -280,8 +280,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                                 const SizedBox(height: 2),
                                 Text(
                                   widget.isAddingToQueueInitial
-                                      ? 'Buka browser YouTube & tambahkan video ke antrean'
-                                      : 'Buka browser, cari & putar video langsung',
+                                      ? 'Pilih video untuk antrean'
+                                      : 'Jelajahi video di YouTube',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,
@@ -361,8 +361,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                               children: [
                                 Text(
                                   widget.isAddingToQueueInitial
-                                      ? 'Cari Bstation untuk Antrean'
-                                      : 'Jelajahi Bstation (In-App)',
+                                      ? 'Cari di Bstation'
+                                      : 'Bstation / Bilibili',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -372,8 +372,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                                 const SizedBox(height: 2),
                                 Text(
                                   widget.isAddingToQueueInitial
-                                      ? 'Buka browser Bstation & tambahkan video ke antrean'
-                                      : 'Buka browser, cari & tonton anime/video langsung',
+                                      ? 'Pilih anime untuk antrean'
+                                      : 'Jelajahi anime dan serial video',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,
@@ -401,7 +401,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Text(
-                        'atau masukkan link langsung',
+                        'atau tempel link',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary.withValues(alpha: 0.7),
@@ -416,7 +416,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
 
                 // URL Input Field
                 const Text(
-                  'URL Video (YouTube / Bstation / MP4 / HLS / WebM)',
+                  'Link Video / Stream',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -428,7 +428,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                   controller: _urlController,
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: InputDecoration(
-                    hintText: 'https://youtube.com/... atau https://bilibili.tv/... atau direct video',
+                    hintText: 'Tempel tautan video di sini...',
                     prefixIcon: const Icon(Icons.link_rounded,
                         color: AppColors.secondaryNeon, size: 20),
                     filled: true,

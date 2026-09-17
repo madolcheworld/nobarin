@@ -224,36 +224,38 @@ class ParticipantsTabView extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Audio status badge
-                  Icon(
-                    isMuted
-                        ? Icons.mic_off_rounded
-                        : (isSpeaking
-                            ? Icons.graphic_eq_rounded
-                            : Icons.mic_none_rounded),
-                    size: 17,
-                    color: isMuted
-                        ? AppColors.textMuted
-                        : (isSpeaking
-                            ? AppColors.accentGreen
-                            : AppColors.textSecondary),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSpeaking
+                          ? AppColors.accentGreen.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                    ),
+                    child: Icon(
+                      isMuted
+                          ? Icons.mic_off_rounded
+                          : (isSpeaking
+                              ? Icons.graphic_eq_rounded
+                              : Icons.mic_none_rounded),
+                      size: 17,
+                      color: isMuted
+                          ? AppColors.textMuted
+                          : (isSpeaking
+                              ? AppColors.accentGreen
+                              : AppColors.textSecondary),
+                    ),
                   ),
 
-                  // Moderation button
+                  // Moderation cue (only if inspectable/moderatable)
                   if (roomController != null && (!isMe || roomController!.isHost))
-                    IconButton(
-                      icon: const Icon(Icons.more_vert_rounded, size: 18),
-                      color: AppColors.textSecondary,
-                      onPressed: () {
-                        AppHaptics.selection();
-                        ParticipantModerationSheet.show(
-                          context,
-                          targetUser: user,
-                          roomController: roomController!,
-                          chatController: chatController,
-                          isSpeaking: isSpeaking,
-                          isMuted: isMuted,
-                        );
-                      },
+                    const Padding(
+                      padding: EdgeInsets.only(left: 2),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                 ],
               ),

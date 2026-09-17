@@ -82,7 +82,10 @@ void main() {
 
       // Verify no duplicate "Pilih Video" in controls bar (it is on the player stage)
       expect(find.text('Pilih Video'), findsNothing);
-      expect(find.text('Panggung Siap'), findsOneWidget);
+      // Verify redundant "Panggung Siap" badge is eliminated
+      expect(find.text('Panggung Siap'), findsNothing);
+      // Verify control mode pill is present
+      expect(find.text('👑 Host Only'), findsOneWidget);
     });
 
     testWidgets(

@@ -65,7 +65,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               height: 34,
               decoration: BoxDecoration(
                 gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: AppColors.neonVioletGlow,
               ),
               child: const Icon(
                 Icons.play_arrow_rounded,
@@ -81,15 +82,24 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           ],
         ),
         actions: [
-          // User profile pill
+          // User profile menu
           if (user != null) ...[
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
-              child: Material(
+              decoration: BoxDecoration(
                 color: AppColors.surfaceElevated,
                 borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  onTap: () async {
+                border: Border.all(color: AppColors.border),
+              ),
+              child: PopupMenuButton<String>(
+                tooltip: 'Menu Profil',
+                color: AppColors.surfaceElevated,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+                onSelected: (val) async {
+                  if (val == 'logout') {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
@@ -118,31 +128,49 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       ref.read(authControllerProvider.notifier).logout();
                       context.go('/');
                     }
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'logout',
+                    child: const Row(
                       children: [
-                        Text(user.avatarUrl,
-                            style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 6),
+                        Icon(Icons.logout_rounded, size: 18, color: AppColors.accentRed),
+                        SizedBox(width: 8),
                         Text(
-                          user.username,
-                          style: const TextStyle(
+                          'Keluar Akun',
+                          style: TextStyle(
+                            color: AppColors.accentRed,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
                           ),
                         ),
                       ],
                     ),
+                  ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(user.avatarUrl, style: const TextStyle(fontSize: 16)),
+                      const SizedBox(width: 6),
+                      Text(
+                        user.username,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ],
                   ),
                 ),
               ),

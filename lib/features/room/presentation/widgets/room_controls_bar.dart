@@ -79,14 +79,8 @@ class RoomControlsBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: AppColors.atmosphericCardShadow,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -317,45 +311,33 @@ class RoomControlsBar extends StatelessWidget {
         ]),
         builder: (context, _) {
           final bool hasMedia = player.mediaUrl.isNotEmpty;
-          final String mediaType = player.mediaType;
 
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. Media Status Badge
-                hasMedia
-                    ? _buildMediaTypeBadge(mediaType)
-                    : _buildReadyStatusBadge(),
-                const SizedBox(width: 6),
+          return SizedBox(
+            height: 38,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 1. Media Action Button: Ganti Video (when media is loaded and canControl)
+                  if (hasMedia && canControl) ...[
+                    _buildMediaActionButton(),
+                    const SizedBox(width: 8),
+                  ],
 
-                // 2. Action: Ganti Video (only when media is loaded and canControl)
-                if (hasMedia && canControl) ...[
-                  _buildMediaActionButton(hasMedia),
-                  const SizedBox(width: 6),
+                  // 2. Screen Share Button
+                  if (screenShareController != null) ...[
+                    _buildScreenShareButton(context, screenShareController!),
+                    const SizedBox(width: 8),
+                  ],
+
+                  // 3. Room Control Mode Pill
+                  _buildControlModePill(context, isHost),
                 ],
-
-                // Divider
-                Container(
-                  width: 1,
-                  height: 16,
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  color: AppColors.borderLight,
-                ),
-                const SizedBox(width: 6),
-
-                // 3. Screen share button
-                if (screenShareController != null) ...[
-                  _buildScreenShareButton(context, screenShareController!),
-                  const SizedBox(width: 6),
-                ],
-
-                // 4. Control Mode Pill
-                _buildControlModePill(context, isHost),
-              ],
+              ),
             ),
           );
         },
@@ -363,113 +345,7 @@ class RoomControlsBar extends StatelessWidget {
     );
   }
 
-  Widget _buildReadyStatusBadge() {
-    return Container(
-      height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.borderLight,
-          width: 0.8,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.accentGreen,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accentGreen.withValues(alpha: 0.5),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 5),
-          const Text(
-            'Panggung Siap',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMediaTypeBadge(String type) {
-    final IconData icon;
-    final Color color;
-    final String label;
-
-    switch (type.toLowerCase()) {
-      case 'youtube':
-        icon = Icons.smart_display_rounded;
-        color = const Color(0xFFFF0000);
-        label = 'YouTube';
-        break;
-      case 'bstation':
-      case 'bilibili':
-        icon = Icons.tv_rounded;
-        color = AppColors.bstationBlue;
-        label = 'Bstation';
-        break;
-      case 'screenshare':
-      case 'screen':
-        icon = Icons.screen_share_rounded;
-        color = Colors.cyanAccent;
-        label = 'Layar';
-        break;
-      default:
-        icon = Icons.movie_outlined;
-        color = AppColors.secondaryNeon;
-        label = 'Direct Video';
-    }
-
-    return Container(
-      height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color.withValues(alpha: 0.45),
-          width: 0.8,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMediaActionButton(bool hasMedia) {
-    final label = hasMedia ? 'Ganti' : 'Pilih Video';
-    final icon = hasMedia ? Icons.swap_horiz_rounded : Icons.add_link_rounded;
-    final color = hasMedia ? AppColors.secondaryNeon : AppColors.primaryNeon;
-
+  Widget _buildMediaActionButton() {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -480,26 +356,27 @@ class RoomControlsBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Container(
           height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
+            color: AppColors.secondaryNeon.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: color.withValues(alpha: 0.45),
+              color: AppColors.secondaryNeon.withValues(alpha: 0.45),
               width: 0.8,
             ),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
+              Icon(Icons.swap_horiz_rounded,
+                  size: 14, color: AppColors.secondaryNeon),
+              SizedBox(width: 4),
               Text(
-                label,
+                'Ganti',
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.bold,
-                  color: color,
+                  color: AppColors.secondaryNeon,
                 ),
               ),
             ],

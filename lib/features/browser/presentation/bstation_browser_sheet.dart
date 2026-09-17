@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -57,6 +58,7 @@ class BstationBrowserSheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
+      enableDrag: false,
       builder: (ctx) => BstationBrowserSheet(
         syncController: syncController,
         queueController: queueController,
@@ -79,6 +81,9 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
   String? _detectedVideoUrl;
   String _detectedTitle = '';
   String? _detectedThumbnail;
+  bool _isBannerMinimized = false;
+  String? _dismissedVideoUrl;
+  bool _canPop = false;
   final TextEditingController _fallbackUrlController = TextEditingController();
 
   bool get _isSupportedMobilePlatform =>
@@ -263,6 +268,16 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
     }
     _currentUrl = url;
 
+    // Reset dismissed state if user navigates to a different URL
+    if (_dismissedVideoUrl != null && _dismissedVideoUrl != url) {
+      _dismissedVideoUrl = null;
+    }
+
+    // If this URL was dismissed by user, do not re-trigger banner
+    if (url == _dismissedVideoUrl) {
+      return;
+    }
+
     // Check whether the URL points to a Bstation / Bilibili video page
     final lower = url.toLowerCase();
     final isBstationVideo = lower.contains('/play/') ||
@@ -324,6 +339,7 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
     final syncCtrl = widget.syncController;
     final chatCtrl = widget.chatController;
 
+    _canPop = true;
     if (mounted) {
       Navigator.of(context).pop({
         'type': 'bstation',
@@ -435,52 +451,64 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.94,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: Column(
-          children: [
-            // Top Drag Handle & Navigation Header
-            _buildTopBar(context),
+    return PopScope(
+      canPop: !_isSupportedMobilePlatform || _canPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (_webViewController != null && await _webViewController!.canGoBack()) {
+          await _webViewController!.goBack();
+          return;
+        }
+        if (context.mounted) {
+          _pauseWebViewMedia();
+          _canPop = true;
+          Navigator.of(context).pop();
+        }
+      },
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.94,
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: Column(
+            children: [
+              // Top Drag Handle & Navigation Header
+              _buildTopBar(context),
 
-            // Progress bar
-            if (_isLoading && _loadProgress > 0 && _loadProgress < 1)
-              LinearProgressIndicator(
-                value: _loadProgress,
-                backgroundColor: Colors.transparent,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.bstationBlue,
+              // Progress bar
+              if (_isLoading && _loadProgress > 0 && _loadProgress < 1)
+                LinearProgressIndicator(
+                  value: _loadProgress,
+                  backgroundColor: Colors.transparent,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.bstationBlue,
+                  ),
+                  minHeight: 2.5,
                 ),
-                minHeight: 2.5,
+
+              // Browser Body or Fallback (takes available vertical space)
+              Expanded(
+                child: _isSupportedMobilePlatform && _webViewController != null
+                    ? WebViewWidget(
+                        controller: _webViewController!,
+                        gestureRecognizers: {
+                          Factory<OneSequenceGestureRecognizer>(
+                            () => EagerGestureRecognizer(),
+                          ),
+                        },
+                      )
+                    : _buildUnsupportedPlatformFallback(),
               ),
 
-            // Browser Body or Fallback
-            Expanded(
-              child: Stack(
-                children: [
-                  if (_isSupportedMobilePlatform && _webViewController != null)
-                    WebViewWidget(controller: _webViewController!)
-                  else
-                    _buildUnsupportedPlatformFallback(),
-
-                  // Bottom Detection Banner (Overlay)
-                  if (_detectedVideoUrl != null)
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      bottom: 16,
-                      child: _buildDetectionBanner(context),
-                    ),
-                ],
-              ),
-            ),
-          ],
+              // Docked Detection Bar (Bottom Action Bar)
+              if (_detectedVideoUrl != null)
+                _buildDetectionBanner(context),
+            ],
+          ),
         ),
       ),
     );
@@ -631,225 +659,331 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
   }
 
   Widget _buildDetectionBanner(BuildContext context) {
+    if (_isBannerMinimized) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceElevated,
+          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.bstationBlue.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.tv_rounded,
+                  color: AppColors.bstationBlue,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _detectedTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => setState(() => _isBannerMinimized = false),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.bstationBlue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppColors.bstationBlue.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Buka Panel',
+                        style: TextStyle(
+                          color: AppColors.bstationBlue,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        color: AppColors.bstationBlue,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    size: 18, color: AppColors.textSecondary),
+                onPressed: () {
+                  setState(() {
+                    _dismissedVideoUrl = _detectedVideoUrl;
+                    _detectedVideoUrl = null;
+                  });
+                },
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Abaikan',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: widget.mode == BstationBrowserMode.queueOnly
-              ? AppColors.primaryNeon.withValues(alpha: 0.8)
-              : AppColors.bstationBlue.withValues(alpha: 0.8),
-          width: 1.5,
+        color: AppColors.surfaceElevated,
+        border: const Border(
+          top: BorderSide(color: AppColors.border, width: 1.2),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Video Thumbnail
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _detectedThumbnail != null && _detectedThumbnail!.isNotEmpty
-                    ? Image.network(
-                        _detectedThumbnail!,
-                        width: 72,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Video Thumbnail
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _detectedThumbnail != null && _detectedThumbnail!.isNotEmpty
+                      ? Image.network(
+                          _detectedThumbnail!,
+                          width: 72,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            width: 72,
+                            height: 48,
+                            color: AppColors.bstationBlue.withValues(alpha: 0.2),
+                            child: const Icon(Icons.tv_rounded,
+                                color: AppColors.bstationBlue),
+                          ),
+                        )
+                      : Container(
                           width: 72,
                           height: 48,
                           color: AppColors.bstationBlue.withValues(alpha: 0.2),
                           child: const Icon(Icons.tv_rounded,
                               color: AppColors.bstationBlue),
                         ),
-                      )
-                    : Container(
-                        width: 72,
-                        height: 48,
-                        color: AppColors.bstationBlue.withValues(alpha: 0.2),
-                        child: const Icon(Icons.tv_rounded,
-                            color: AppColors.bstationBlue),
-                      ),
-              ),
-              const SizedBox(width: 10),
+                ),
+                const SizedBox(width: 10),
 
-              // Video Title & Detection Badge
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.bstationBlue.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle_rounded,
-                              color: AppColors.bstationBlue, size: 12),
-                          SizedBox(width: 4),
-                          Text(
-                            'Video Bstation Terdeteksi',
-                            style: TextStyle(
-                              color: AppColors.bstationBlue,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                // Video Title & Detection Badge
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.bstationBlue.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_rounded,
+                                color: AppColors.bstationBlue, size: 12),
+                            SizedBox(width: 4),
+                            Text(
+                              'Video Bstation Terdeteksi',
+                              style: TextStyle(
+                                color: AppColors.bstationBlue,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _detectedTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Minimize & Dismiss Buttons
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.textSecondary, size: 22),
+                      onPressed: () {
+                        setState(() {
+                          _isBannerMinimized = true;
+                        });
+                      },
+                      tooltip: 'Kecilkan',
+                      visualDensity: VisualDensity.compact,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _detectedTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppColors.textSecondary, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _dismissedVideoUrl = _detectedVideoUrl;
+                          _detectedVideoUrl = null;
+                        });
+                      },
+                      tooltip: 'Abaikan',
+                      visualDensity: VisualDensity.compact,
                     ),
                   ],
                 ),
-              ),
-
-              // Dismiss Button
-              IconButton(
-                icon: const Icon(Icons.close_rounded,
-                    color: AppColors.textSecondary, size: 20),
-                onPressed: () {
-                  setState(() {
-                    _detectedVideoUrl = null;
-                  });
-                },
-                tooltip: 'Abaikan',
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          // Action Buttons per Mode
-          if (widget.mode == BstationBrowserMode.queueOnly) ...[
-            ElevatedButton.icon(
-              onPressed: _applyAddToQueue,
-              icon: const Icon(Icons.playlist_add_rounded, size: 20),
-              label: const Text(
-                '+ Tambahkan ke Antrean',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
+              ],
             ),
-          ] else if (widget.mode == BstationBrowserMode.createRoom) ...[
-            ElevatedButton.icon(
-              onPressed: _applyWatchNow,
-              icon: const Icon(Icons.meeting_room_rounded, size: 20),
-              label: const Text(
-                'Buka Room dengan Video Ini',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+
+            const SizedBox(height: 10),
+
+            // Action Buttons per Mode
+            if (widget.mode == BstationBrowserMode.queueOnly) ...[
+              ElevatedButton.icon(
+                onPressed: _applyAddToQueue,
+                icon: const Icon(Icons.playlist_add_rounded, size: 20),
+                label: const Text(
+                  '+ Tambahkan ke Antrean',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
-              ),
-            ),
-          ] else if (widget.mode == BstationBrowserMode.watchNow) ...[
-            ElevatedButton.icon(
-              onPressed: _applyWatchNow,
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: const Text(
-                'Putar Sekarang di Room',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ] else ...[
-            // General mode
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: ElevatedButton.icon(
-                    onPressed: _applyWatchNow,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                    label: const Text(
-                      'Tonton Sekarang',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      backgroundColor: AppColors.primaryNeon,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: AppColors.primaryNeon,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                if (widget.queueController != null) ...[
-                  const SizedBox(width: 8),
+              ),
+            ] else if (widget.mode == BstationBrowserMode.createRoom) ...[
+              ElevatedButton.icon(
+                onPressed: _applyWatchNow,
+                icon: const Icon(Icons.meeting_room_rounded, size: 20),
+                label: const Text(
+                  'Buka Room dengan Video Ini',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: AppColors.primaryNeon,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ] else if (widget.mode == BstationBrowserMode.watchNow) ...[
+              ElevatedButton.icon(
+                onPressed: _applyWatchNow,
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                label: const Text(
+                  'Putar Sekarang di Room',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: AppColors.primaryNeon,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // General mode
+              Row(
+                children: [
                   Expanded(
-                    flex: 2,
-                    child: OutlinedButton.icon(
-                      onPressed: _applyAddToQueue,
-                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                      label: const Text('+ Antrean'),
-                      style: OutlinedButton.styleFrom(
+                    flex: 3,
+                    child: ElevatedButton.icon(
+                      onPressed: _applyWatchNow,
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: const Text(
+                        'Tonton Sekarang',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        foregroundColor: AppColors.primaryNeon,
-                        side: const BorderSide(color: AppColors.primaryNeon),
+                        backgroundColor: AppColors.primaryNeon,
+                        foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
                   ),
+                  if (widget.queueController != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: _applyAddToQueue,
+                        icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                        label: const Text('+ Antrean'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          foregroundColor: AppColors.primaryNeon,
+                          side: const BorderSide(color: AppColors.primaryNeon),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildUnsupportedPlatformFallback() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Center(
         child: ConstrainedBox(

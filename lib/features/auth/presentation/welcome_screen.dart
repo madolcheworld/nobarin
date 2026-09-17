@@ -94,15 +94,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF090B14),
-              Color(0xFF141829),
-              Color(0xFF0D0E15),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          gradient: AppColors.heroGradient,
         ),
         child: SafeArea(
           child: Center(
@@ -122,13 +114,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: AppColors.primaryGradient,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryNeon.withValues(alpha: 0.4),
-                              blurRadius: 28,
-                              spreadRadius: 2,
-                            ),
-                          ],
+                          boxShadow: AppColors.neonVioletGlow,
                         ),
                         child: const Icon(
                           Icons.play_arrow_rounded,
@@ -159,7 +145,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     const SizedBox(height: 8),
 
                     const Text(
-                      'Nonton bareng video stream dengan sinkronisasi real-time & Voice Chat.',
+                      'Nonton bareng video streaming dengan sinkronisasi & Voice Chat real-time.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -168,21 +154,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                       ),
                     ).animate().fadeIn(delay: 300.ms),
 
-                    const SizedBox(height: 18),
-
-                    // Feature highlights chips
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildFeatureBadge('⚡ Sinkron Real-time', AppColors.primaryNeon),
-                        _buildFeatureBadge('🎙️ VoIP Live Suara', AppColors.accentGreen),
-                        _buildFeatureBadge('📺 Video Stream', AppColors.secondaryNeon),
-                      ],
-                    ).animate().fadeIn(delay: 350.ms),
-
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 24),
 
                     // Card Form Container
                     Container(
@@ -312,9 +284,9 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
                           // Name Input
                           const Text(
-                            'Nama / Nickname Kamu',
+                            'Nama Kamu',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textSecondary,
                             ),
@@ -408,29 +380,6 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: color.withValues(alpha: 0.35),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-          letterSpacing: 0.2,
         ),
       ),
     );

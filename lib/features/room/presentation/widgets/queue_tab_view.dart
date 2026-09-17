@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
-import '../../../browser/presentation/bstation_browser_sheet.dart';
-import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/unified_player_controller.dart';
 import '../../models/queue_item.dart';
@@ -21,289 +19,69 @@ class QueueTabView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([queueController, player]),
+      listenable: queueController,
       builder: (context, _) {
         final items = queueController.items;
         final bool canManage = queueController.canManageQueue;
         final bool canAdd = queueController.canAddToQueue;
-        final hasMedia = player.mediaUrl.isNotEmpty;
-        final bool isYouTube = player.mediaType == 'youtube';
-        final bool isBstation = player.mediaType == 'bstation';
-        final Color sourceColor = isYouTube
-            ? AppColors.youtubeRed
-            : isBstation
-                ? AppColors.bstationBlue
-                : AppColors.secondaryNeon;
-        final String sourceLabel = isYouTube
-            ? 'YouTube'
-            : isBstation
-                ? 'Bstation'
-                : 'Direct Video';
 
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           children: [
-            // Top Action Row
+            // Top Action Row: Unified Add Video to Queue
             if (canAdd) ...[
-              Row(
-                children: [
-                  // Dedicated YouTube Queue Button
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.youtubeRed,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 8),
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () {
-                        AppHaptics.selection();
-                        YouTubeBrowserSheet.show(
-                          context,
-                          queueController: queueController,
-                          chatController: queueController.chatController,
-                          mode: YouTubeBrowserMode.queueOnly,
-                        );
-                      },
-                      icon: const Icon(Icons.smart_display_rounded, size: 15),
-                      label: const Text(
-                        '+ YouTube',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryNeon,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 11),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  const SizedBox(width: 6),
-
-                  // Dedicated Bstation Queue Button
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.bstationBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 8),
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () {
-                        AppHaptics.selection();
-                        BstationBrowserSheet.show(
-                          context,
-                          queueController: queueController,
-                          chatController: queueController.chatController,
-                          mode: BstationBrowserMode.queueOnly,
-                        );
-                      },
-                      icon: const Icon(Icons.tv_rounded, size: 15),
-                      label: const Text(
-                        '+ Bstation',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  onPressed: () {
+                    AppHaptics.selection();
+                    MediaSourcePicker.show(
+                      context,
+                      syncController: queueController.syncController,
+                      chatController: queueController.chatController,
+                      queueController: queueController,
+                      isAddingToQueueInitial: true,
+                    );
+                  },
+                  icon: const Icon(Icons.add_to_photos_rounded, size: 17),
+                  label: const Text(
+                    'Tambah Video ke Antrean',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
                     ),
                   ),
-                  const SizedBox(width: 6),
-
-                  // Direct URL / Other Media Button
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.surfaceElevated,
-                      foregroundColor: AppColors.primaryNeon,
-                      side: const BorderSide(
-                          color: AppColors.primaryNeon, width: 1),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
-                      visualDensity: VisualDensity.compact,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () {
-                      AppHaptics.selection();
-                      MediaSourcePicker.show(
-                        context,
-                        syncController: queueController.syncController,
-                        chatController: queueController.chatController,
-                        queueController: queueController,
-                        isAddingToQueueInitial: true,
-                      );
-                    },
-                    icon: const Icon(Icons.link_rounded, size: 15),
-                    label: const Text(
-                      '+ Link',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 12),
             ],
 
-            // Now Playing Card
-            Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: 6),
-              child: Text(
-                'SEDANG DIPUTAR',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: AppColors.primaryNeon.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-
-            if (hasMedia)
-              Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: 68,
-                        height: 44,
-                        color: sourceColor.withValues(alpha: 0.15),
-                        child: Icon(
-                          Icons.movie_outlined,
-                          color: sourceColor,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: sourceColor.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  sourceLabel,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: sourceColor,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              if (player.isPlaying)
-                                const Row(
-                                  children: [
-                                    Icon(Icons.graphic_eq_rounded,
-                                        size: 13, color: AppColors.accentGreen),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'Playing',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: AppColors.accentGreen,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            player.mediaUrl,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderLight),
-                ),
-                child: const Text(
-                  'Belum ada video yang sedang diputar.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-
-            // Section 2: Up Next
+            // Queue List Header
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'BERIKUTNYA (${items.length})',
+                    'DAFTAR ANTREAN (${items.length})',
                     style: const TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
+                      letterSpacing: 0.5,
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  if (canManage && items.length > 1)
-                    const Text(
-                      'Tahan & geser untuk atur urutan',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
                 ],
               ),
             ),

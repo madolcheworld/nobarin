@@ -65,13 +65,7 @@ class RoomCard extends StatelessWidget {
               color: AppColors.borderLight,
               width: 1.2,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
+            boxShadow: AppColors.atmosphericCardShadow,
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(18),
@@ -120,108 +114,66 @@ class RoomCard extends StatelessWidget {
 
                       const SizedBox(height: 12),
 
-                      // Bottom Row: Host info, Mode, & Room Code
+                      // Bottom Row: Host info & Room Code
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Left side: Host and Control Mode pills
-                          Expanded(
-                            child: Row(
-                              children: [
-                                // Host Pill
-                                Flexible(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 3.5),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: AppColors.border,
-                                        width: 0.8,
+                          // Host Pill
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.border,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('👑',
+                                      style: TextStyle(fontSize: 10)),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      room.hostName ?? 'Host',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text('👑',
-                                            style: TextStyle(fontSize: 10)),
-                                        const SizedBox(width: 4),
-                                        Flexible(
-                                          child: Text(
-                                            room.hostName ?? 'Host',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppColors.textSecondary,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ),
-
-                                const SizedBox(width: 5),
-
-                                // Control Mode Pill
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 3.5),
-                                  decoration: BoxDecoration(
-                                    color: room.isHostOnly
-                                        ? AppColors.accentYellow
-                                            .withValues(alpha: 0.12)
-                                        : AppColors.secondaryNeon
-                                            .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: room.isHostOnly
-                                          ? AppColors.accentYellow
-                                              .withValues(alpha: 0.3)
-                                          : AppColors.secondaryNeon
-                                              .withValues(alpha: 0.3),
-                                      width: 0.6,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    room.isHostOnly ? 'Host-Only' : 'Kolaboratif',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: room.isHostOnly
-                                          ? AppColors.accentYellow
-                                          : AppColors.secondaryNeon,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
 
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
 
                           // Room Code Badge
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 7, vertical: 3.5),
                             decoration: BoxDecoration(
-                              color:
-                                  AppColors.primaryNeon.withValues(alpha: 0.12),
+                              color: AppColors.surfaceHighlight,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: AppColors.primaryNeon
-                                    .withValues(alpha: 0.4),
-                                width: 1,
+                                color: AppColors.border,
+                                width: 0.8,
                               ),
                             ),
                             child: Text(
                               room.code,
                               style: const TextStyle(
                                 fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primaryNeon,
-                                letterSpacing: 0.8,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textSecondary,
+                                letterSpacing: 0.6,
                               ),
                             ),
                           ),

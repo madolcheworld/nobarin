@@ -261,10 +261,6 @@ class ParticipantModerationSheet extends StatelessWidget {
                 'Matikan Mikrofon',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
-              subtitle: const Text(
-                'Paksa matikan mic peserta ini jika bising',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
               onTap: () async {
                 Navigator.of(context).pop();
                 await roomController.forceMuteParticipant(
@@ -303,13 +299,6 @@ class ParticipantModerationSheet extends StatelessWidget {
                   isTargetCoHost ? 'Cabut Peran Co-Host' : 'Jadikan Co-Host',
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                subtitle: Text(
-                  isTargetCoHost
-                      ? 'Kembalikan hak peserta menjadi Viewer biasa'
-                      : 'Izinkan peserta mengontrol video & antrean',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.textMuted),
                 ),
                 onTap: () async {
                   Navigator.of(context).pop();
@@ -350,10 +339,6 @@ class ParticipantModerationSheet extends StatelessWidget {
                 title: const Text(
                   'Alihkan Peran Host',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                subtitle: const Text(
-                  'Jadikan peserta ini sebagai Host utama room',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
                 onTap: () async {
                   final confirm = await showDialog<bool>(
@@ -421,10 +406,6 @@ class ParticipantModerationSheet extends StatelessWidget {
                   fontSize: 14,
                   color: AppColors.accentRed,
                 ),
-              ),
-              subtitle: const Text(
-                'Keluarkan peserta dari room nobar ini',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
               ),
               onTap: () async {
                 final confirm = await showDialog<bool>(

@@ -32,6 +32,7 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      enableDrag: false,
       builder: (_) => CreateRoomDialog(
         initialMediaType: initialMediaType,
         initialMediaUrl: initialMediaUrl,
@@ -189,119 +190,28 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
   Widget _buildStepProgressBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _currentStep == 0
-                            ? AppColors.primaryNeon
-                            : AppColors.accentGreen,
-                      ),
-                      child: Center(
-                        child: _currentStep > 0
-                            ? const Icon(Icons.check, size: 12, color: Colors.black)
-                            : const Text(
-                                '1',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Pilih Video',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: _currentStep == 0
-                            ? AppColors.primaryNeon
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryNeon,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ],
+            child: Container(
+              height: 3,
+              decoration: BoxDecoration(
+                color: AppColors.primaryNeon,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _currentStep == 1
-                            ? AppColors.primaryNeon
-                            : AppColors.surfaceElevated,
-                        border: Border.all(
-                          color: _currentStep == 1
-                              ? AppColors.primaryNeon
-                              : AppColors.border,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '2',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: _currentStep == 1
-                                ? Colors.black
-                                : AppColors.textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Pengaturan Room',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: _currentStep == 1
-                            ? AppColors.primaryNeon
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: _currentStep == 1
-                        ? AppColors.primaryNeon
-                        : AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ],
+            child: Container(
+              height: 3,
+              decoration: BoxDecoration(
+                color: _currentStep == 1
+                    ? AppColors.primaryNeon
+                    : AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
         ],
@@ -319,35 +229,46 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     required List<Color> gradientColors,
     required Color accentColor,
     required VoidCallback onTap,
+    String? badgeText,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: gradientColors,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderColor, width: 1.2),
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: iconBackgroundColor,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconBackgroundColor.withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 22,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: iconColor,
+                    size: 24,
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -355,13 +276,38 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        if (badgeText != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: accentColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -369,15 +315,27 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
+                        height: 1.2,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: accentColor,
+              const SizedBox(width: 8),
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 13,
+                    color: accentColor,
+                  ),
+                ),
               ),
             ],
           ),
@@ -390,54 +348,38 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Pilih Sumber Video',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Tentukan video yang ingin ditonton bersama. Pilih platform di bawah:',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 16),
-
         // 1. YouTube Option Card
         _buildSourceOptionCard(
           title: 'YouTube',
-          subtitle: 'Jelajahi dan pilih video langsung di YouTube',
+          subtitle: 'Streaming dan video musik',
           icon: Icons.smart_display_rounded,
           iconColor: Colors.white,
           iconBackgroundColor: AppColors.youtubeRed,
-          borderColor: AppColors.youtubeRed.withValues(alpha: 0.5),
+          borderColor: AppColors.youtubeRed.withValues(alpha: 0.45),
           gradientColors: [
-            AppColors.youtubeRed.withValues(alpha: 0.18),
+            AppColors.youtubeRed.withValues(alpha: 0.16),
             AppColors.surfaceElevated,
           ],
           accentColor: AppColors.youtubeRed,
+          badgeText: 'Populer',
           onTap: _openYouTubeBrowser,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
         // 2. Bstation Option Card
         _buildSourceOptionCard(
           title: 'Bstation / Bilibili',
-          subtitle: 'Jelajahi anime dan serial video di Bstation',
+          subtitle: 'Anime & serial video',
           icon: Icons.tv_rounded,
           iconColor: Colors.white,
           iconBackgroundColor: AppColors.bstationBlue,
-          borderColor: AppColors.bstationBlue.withValues(alpha: 0.5),
+          borderColor: AppColors.bstationBlue.withValues(alpha: 0.45),
           gradientColors: [
-            AppColors.bstationBlue.withValues(alpha: 0.18),
+            AppColors.bstationBlue.withValues(alpha: 0.16),
             AppColors.surfaceElevated,
           ],
           accentColor: AppColors.bstationBlue,
+          badgeText: 'Anime',
           onTap: _openBstationBrowser,
         ),
 
@@ -781,7 +723,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               Expanded(
                 child: _SelectionCard(
                   title: 'Host Only',
-                  subtitle: 'Hanya host yang bisa play/pause/seek',
+                  subtitle: 'Hanya host yang mengontrol',
                   icon: Icons.admin_panel_settings_rounded,
                   isSelected: _controlMode == 'host_only',
                   onTap: () => setState(() => _controlMode = 'host_only'),
@@ -791,7 +733,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               Expanded(
                 child: _SelectionCard(
                   title: 'Kolaboratif',
-                  subtitle: 'Semua peserta bebas mengontrol',
+                  subtitle: 'Semua peserta bisa kontrol',
                   icon: Icons.groups_rounded,
                   isSelected: _controlMode == 'collaborative',
                   onTap: () => setState(() => _controlMode = 'collaborative'),
@@ -833,8 +775,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                       ),
                       Text(
                         _isPublic
-                            ? 'Dapat ditemukan di lobby publik'
-                            : 'Hanya dapat diakses via kode room',
+                            ? 'Tampil di lobby publik'
+                            : 'Hanya via kode room',
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary,
@@ -889,6 +831,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
 
     return PopScope(
       canPop: _currentStep == 0,
@@ -1003,7 +946,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 // Step content
                 Flexible(
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomInset),
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      18 + bottomInset + (safeBottom > 0 ? safeBottom : 12),
+                    ),
                     child: _currentStep == 0
                         ? _buildStep1VideoSelection()
                         : _buildStep2RoomSettings(),

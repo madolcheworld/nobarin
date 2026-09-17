@@ -111,27 +111,7 @@ class VoiceControlBar extends StatelessWidget {
 
               const SizedBox(width: 8),
 
-              // Status Dot
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: statusColor,
-                  boxShadow: status == VoiceStatus.connected && !isMuted
-                      ? [
-                          BoxShadow(
-                            color: statusColor.withValues(alpha: 0.5),
-                            blurRadius: 4,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Status Text (takes all available remaining space and truncates if needed)
+              // Status Text
               Expanded(
                 child: status == VoiceStatus.error
                     ? InkWell(
@@ -178,8 +158,8 @@ class VoiceControlBar extends StatelessWidget {
               // Deafen Toggle Button
               Tooltip(
                 message: isDeafened
-                    ? 'Batal Bungkam: Dengar audio teman'
-                    : 'Bungkam Suara Teman',
+                    ? 'Batal Bungkam Audio Teman'
+                    : 'Bungkam Audio Teman',
                 child: IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.all(4),
@@ -203,51 +183,27 @@ class VoiceControlBar extends StatelessWidget {
 
               const SizedBox(width: 2),
 
-              // Audio Ducking Switch
+              // Audio Ducking Toggle Button (Consistent IconButton)
               Tooltip(
-                message:
-                    'Audio Ducking: Kecilkan video saat ada yang berbicara',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.hearing_rounded,
-                      size: 13,
-                      color: voiceController.isDucking
-                          ? AppColors.secondaryNeon
-                          : (voiceController.isAudioDuckingEnabled
-                              ? AppColors.textSecondary
-                              : AppColors.textMuted),
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      'Duck',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: voiceController.isDucking
-                            ? AppColors.secondaryNeon
-                            : (voiceController.isAudioDuckingEnabled
-                                ? AppColors.textSecondary
-                                : AppColors.textMuted),
-                        fontWeight: voiceController.isDucking
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    Transform.scale(
-                      scale: 0.6,
-                      child: Switch(
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        value: voiceController.isAudioDuckingEnabled,
-                        activeThumbColor: AppColors.secondaryNeon,
-                        onChanged: (_) {
-                          AppHaptics.light();
-                          voiceController.toggleAudioDucking();
-                        },
-                      ),
-                    ),
-                  ],
+                message: voiceController.isAudioDuckingEnabled
+                    ? 'Audio Ducking: Aktif'
+                    : 'Audio Ducking: Nonaktif',
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: Icon(
+                    Icons.hearing_rounded,
+                    size: 18,
+                    color: voiceController.isAudioDuckingEnabled
+                        ? AppColors.secondaryNeon
+                        : AppColors.textSecondary,
+                  ),
+                  onPressed: () {
+                    AppHaptics.selection();
+                    voiceController.toggleAudioDucking();
+                  },
                 ),
               ),
             ],

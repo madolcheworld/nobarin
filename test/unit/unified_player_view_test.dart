@@ -396,7 +396,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders Bunyikan Suara chip when playing and muted',
+    testWidgets('renders volume button and toggles mute/unmute when playing and muted',
         (tester) async {
       await playerController.loadMedia(
         'direct_url',
@@ -421,10 +421,10 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Bunyikan Suara'), findsOneWidget);
+      expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
 
-      // Tapping Bunyikan Suara unmutes
-      await tester.tap(find.text('Bunyikan Suara'));
+      // Tapping volume icon unmutes
+      await tester.tap(find.byIcon(Icons.volume_off_rounded));
       await tester.pumpAndSettle();
 
       expect(playerController.isMuted, isFalse);

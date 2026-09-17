@@ -66,7 +66,6 @@ void main() {
       expect(find.text('WP1234'), findsOneWidget);
       expect(find.text('15'), findsOneWidget);
       expect(find.text('Direct URL'), findsOneWidget);
-      expect(find.text('Host-Only'), findsOneWidget);
 
       // Verify tap
       await tester.tap(find.byType(RoomCard));
@@ -96,7 +95,6 @@ void main() {
       expect(find.text('GamerX'), findsOneWidget);
       expect(find.text('WP5678'), findsOneWidget);
       expect(find.text('42'), findsOneWidget);
-      expect(find.text('Kolaboratif'), findsOneWidget);
     });
   });
 }

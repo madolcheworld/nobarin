@@ -706,57 +706,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ),
                                   ),
                                 const Spacer(),
-                                // Muted autoplay hint pill if browser started video muted
-                                if (widget.player.isPlaying &&
-                                    widget.player.isMuted)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 6),
-                                    child: InkWell(
-                                      onTap: () {
-                                        widget.player.toggleMute();
-                                        if (widget.player.isPlaying) {
-                                          _startHideTimerIfNeeded(reset: true);
-                                        }
-                                      },
-                                      borderRadius: BorderRadius.circular(16),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentYellow
-                                              .withValues(alpha: 0.25),
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          border: Border.all(
-                                            color: AppColors.accentYellow
-                                                .withValues(alpha: 0.6),
-                                          ),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.volume_off_rounded,
-                                              size: 13,
-                                              color: AppColors.accentYellow,
-                                            ),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'Bunyikan Suara',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.accentYellow,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 Material(
                                   color: Colors.transparent,
                                   shape: const CircleBorder(),

@@ -311,10 +311,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                       ),
               ),
 
-              // Quick Reactions Row
+              // Quick Reactions Row (Compact & Streamlined)
               if (widget.showReactions)
                 Container(
-                  height: 42,
+                  height: 34,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: const BoxDecoration(
                     color: AppColors.surfaceElevated,
@@ -324,34 +324,43 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                   ),
                   child: Row(
                     children: [
-                      // Full Picker Button
-                      IconButton(
-                        icon: const Icon(
-                          Icons.add_reaction_outlined,
-                          size: 18,
-                          color: AppColors.secondaryNeon,
-                        ),
-                        tooltip: 'Koleksi Emoticon & Callouts',
-                        onPressed: _openEmojiPickerForFloating,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
+                      const Icon(
+                        Icons.bolt_rounded,
+                        size: 14,
+                        color: AppColors.primaryNeon,
                       ),
-                      Container(
-                        height: 18,
-                        width: 1,
-                        color: AppColors.borderLight,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                      ),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
-                          itemCount: ApiConstants.quickReactions.length,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: ApiConstants.quickReactions.length + 1,
                           separatorBuilder: (_, _) => const SizedBox(width: 4),
                           itemBuilder: (context, index) {
+                            if (index == ApiConstants.quickReactions.length) {
+                              return InkWell(
+                                onTap: _openEmojiPickerForFloating,
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceHighlight,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: AppColors.borderLight,
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_rounded,
+                                    size: 14,
+                                    color: AppColors.secondaryNeon,
+                                  ),
+                                ),
+                              );
+                            }
                             final emoji = ApiConstants.quickReactions[index];
                             return InkWell(
                               onTap: () {
@@ -359,13 +368,13 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                                 widget.chatController.sendReaction(emoji);
                                 _scrollToBottom();
                               },
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(14),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                    horizontal: 6, vertical: 2),
                                 child: Text(
                                   emoji,
-                                  style: const TextStyle(fontSize: 18),
+                                  style: const TextStyle(fontSize: 16),
                                 ),
                               ),
                             );
@@ -554,8 +563,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                               color: isMe
                                   ? (msg.status == MessageStatus.failed
                                       ? AppColors.accentRed
-                                      : AppColors.primaryNeon.withValues(alpha: 0.55))
-                                  : AppColors.border,
+                                      : AppColors.primaryNeon.withValues(alpha: 0.5))
+                                  : AppColors.borderLight,
                               width: 1,
                             ),
                       boxShadow: (!isSingleEmoji &&

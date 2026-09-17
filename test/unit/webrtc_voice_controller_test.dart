@@ -1018,9 +1018,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(controller.isDeafened, isTrue);
 
-      // Tap ducking switch
+      // Tap ducking toggle button
       expect(controller.isAudioDuckingEnabled, isTrue);
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byIcon(Icons.hearing_rounded));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(controller.isAudioDuckingEnabled, isFalse);

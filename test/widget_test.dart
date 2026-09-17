@@ -28,7 +28,7 @@ void main() {
     // Verify WelcomeScreen elements
     expect(find.text('Nobarin'), findsOneWidget);
     expect(find.text('Pilih Avatar'), findsOneWidget);
-    expect(find.text('Nama / Nickname Kamu'), findsOneWidget);
+    expect(find.text('Nama Kamu'), findsOneWidget);
     expect(find.text('Mulai Nonton'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
   });

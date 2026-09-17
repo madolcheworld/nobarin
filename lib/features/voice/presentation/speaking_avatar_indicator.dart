@@ -47,22 +47,8 @@ class SpeakingAvatarIndicator extends StatelessWidget {
               width: isSpeaking ? 2.5 : ((isHost || isCoHost) ? 1.8 : 1.2),
             ),
             boxShadow: isSpeaking
-                ? [
-                    BoxShadow(
-                      color: AppColors.accentGreen.withValues(alpha: 0.6),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : (isCoHost
-                    ? [
-                        BoxShadow(
-                          color: AppColors.secondaryNeon.withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null),
+                ? AppColors.voiceActiveGlow
+                : (isCoHost ? AppColors.neonCyanGlow : null),
           ),
           child: Center(
             child: Text(
