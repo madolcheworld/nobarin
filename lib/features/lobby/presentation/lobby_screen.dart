@@ -88,20 +88,20 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         AppHaptics.selection();
         ref.read(lobbyFilterCategoryProvider.notifier).state = category;
       },
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryNeon.withValues(alpha: 0.2)
-              : AppColors.surfaceElevated,
-          borderRadius: BorderRadius.circular(10),
+              ? AppColors.primaryNeon.withValues(alpha: 0.22)
+              : AppColors.glassFillLight,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
                 ? AppColors.primaryNeon
-                : AppColors.borderLight,
-            width: isSelected ? 1.4 : 0.9,
+                : AppColors.glassBorder,
+            width: isSelected ? 1.4 : 1.0,
           ),
           boxShadow: isSelected ? AppColors.neonVioletGlow : null,
         ),
@@ -110,7 +110,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           children: [
             if (icon != null) ...[
               Icon(icon, size: 14, color: iconColor ?? AppColors.textPrimary),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
             ],
             Text(
               label,
@@ -125,12 +125,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             if (count != null) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppColors.primaryNeon
-                      : AppColors.surface,
-                  borderRadius: BorderRadius.circular(6),
+                      : AppColors.surfaceHighlight,
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '$count',
@@ -421,18 +421,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 14, vertical: 16),
                                 decoration: BoxDecoration(
-                                  color: AppColors.surfaceElevated,
+                                  color: AppColors.glassFill,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                     color: AppColors.secondaryNeon
-                                        .withValues(alpha: 0.6),
+                                        .withValues(alpha: 0.45),
                                     width: 1.2,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: AppColors.secondaryNeon
-                                          .withValues(alpha: 0.12),
-                                      blurRadius: 12,
+                                          .withValues(alpha: 0.15),
+                                      blurRadius: 14,
                                       offset: const Offset(0, 3),
                                     ),
                                   ],

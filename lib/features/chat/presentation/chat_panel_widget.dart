@@ -320,10 +320,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
               // Input Bar
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
+                decoration: BoxDecoration(
+                  color: AppColors.glassFillHeavy,
                   border: Border(
-                    top: BorderSide(color: AppColors.border),
+                    top: BorderSide(color: AppColors.glassBorder, width: 0.9),
                   ),
                 ),
                 child: Row(
@@ -478,8 +478,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                           : (isMe
                               ? (msg.status == MessageStatus.failed
                                   ? AppColors.accentRed.withValues(alpha: 0.2)
-                                  : const Color(0xFF2B1F45))
-                              : AppColors.surfaceElevated),
+                                  : const Color(0xFF281C44))
+                              : AppColors.glassFill),
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
@@ -492,8 +492,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                               color: isMe
                                   ? (msg.status == MessageStatus.failed
                                       ? AppColors.accentRed
-                                      : AppColors.primaryNeon.withValues(alpha: 0.5))
-                                  : AppColors.borderLight,
+                                      : AppColors.primaryNeon.withValues(alpha: 0.45))
+                                  : AppColors.glassBorder,
                               width: 1,
                             ),
                       boxShadow: (!isSingleEmoji &&
@@ -501,9 +501,9 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                           ? [
                               BoxShadow(
                                 color: isMe
-                                    ? AppColors.primaryNeon.withValues(alpha: 0.12)
-                                    : Colors.black.withValues(alpha: 0.15),
-                                blurRadius: isMe ? 6 : 4,
+                                    ? AppColors.primaryNeon.withValues(alpha: 0.15)
+                                    : Colors.black.withValues(alpha: 0.20),
+                                blurRadius: isMe ? 8 : 4,
                                 offset: const Offset(0, 2),
                               ),
                             ]

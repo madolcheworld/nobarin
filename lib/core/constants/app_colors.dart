@@ -1,30 +1,40 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Atmospheric Void Backgrounds (Deep Cosmic Obsidian)
-  static const Color background = Color(0xFF080912); // Deep cosmic void
-  static const Color surface = Color(0xFF0F1221); // Midnight indigo surface
-  static const Color surfaceElevated = Color(0xFF161B30); // Elevated cards & modals
-  static const Color surfaceHighlight = Color(0xFF1F2642); // Active/hover states
+  // Atmospheric Void Backgrounds (Deep Cosmic Slate Void)
+  static const Color background = Color(0xFF0A0D18); // Deep cosmic slate void
+  static const Color surface = Color(0xFF0F1424); // Cosmic slate navy surface
+  static const Color surfaceElevated = Color(0xFF151B2E); // Elevated cards & containers
+  static const Color surfaceHighlight = Color(0xFF1E2640); // Active/hover states
 
-  // Neon Rave Accents (Harmonized)
-  static const Color primaryNeon = Color(0xFFA855F7); // Electric Violet / Neon Purple
-  static const Color primaryNeonDark = Color(0xFF9333EA); // Rich Violet for primary CTAs
-  static const Color primaryNeonGlow = Color(0x40A855F7); // Soft glow
+  // Modern Neon Accents
+  static const Color primaryNeon = Color(0xFF8B5CF6); // Electric Violet
+  static const Color primaryNeonDark = Color(0xFF7C3AED); // Deep Violet for CTA
+  static const Color primaryNeonLight = Color(0xFFA78BFA); // Soft Violet highlight
+  static const Color primaryNeonGlow = Color(0x358B5CF6); // Soft violet aura
   static const Color secondaryNeon = Color(0xFF06B6D4); // Cyber Cyan
-  static const Color secondaryNeonGlow = Color(0x3306B6D4);
-  static const Color accentPink = Color(0xFFF43F5E); // Hot Rave Pink
-  static const Color accentPinkGlow = Color(0x33F43F5E);
+  static const Color secondaryNeonGlow = Color(0x3006B6D4); // Soft cyan aura
+  static const Color accentPink = Color(0xFFF43F5E); // Hot Neon Pink
+  static const Color accentPinkGlow = Color(0x30F43F5E);
   static const Color accentGreen = Color(0xFF10B981); // Emerald Green (Voice Active / Online)
   static const Color accentGreenGlow = Color(0x4010B981);
   static const Color accentYellow = Color(0xFFF59E0B); // Host Crown / Warning
   static const Color accentRed = Color(0xFFEF4444); // Error / Danger
 
   // Border & Dividers
-  static const Color border = Color(0xFF1E253E);
-  static const Color borderGlow = Color(0x44A855F7);
-  static const Color borderCyanGlow = Color(0x3306B6D4);
-  static const Color divider = Color(0xFF181D33);
+  static const Color border = Color(0xFF1B2338);
+  static const Color borderGlow = Color(0x408B5CF6);
+  static const Color borderCyanGlow = Color(0x3006B6D4);
+  static const Color divider = Color(0xFF182033);
+  static const Color borderLight = Color(0x1AFFFFFF);
+
+  // Frosted Glass Presets
+  static final Color glassFill = const Color(0xFF121829).withValues(alpha: 0.70);
+  static final Color glassFillHeavy = const Color(0xFF0F1424).withValues(alpha: 0.88);
+  static final Color glassFillLight = Colors.white.withValues(alpha: 0.05);
+  static final Color glassBorder = Colors.white.withValues(alpha: 0.11);
+  static final Color glassBorderHighlight = Colors.white.withValues(alpha: 0.22);
+  static final Color surfaceGlass = const Color(0xFF0F1424).withValues(alpha: 0.78);
 
   // Text (High Contrast & Comfortable Readability)
   static const Color textPrimary = Color(0xFFF8FAFC); // Crisp Off-White
@@ -33,7 +43,7 @@ class AppColors {
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF9333EA), Color(0xFFEC4899)],
+    colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -45,20 +55,40 @@ class AppColors {
   );
 
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF12162A), Color(0xFF0D101E)],
+    colors: [Color(0xFF141A2D), Color(0xFF0F1424)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient glassCardGradient = LinearGradient(
+    colors: [Color(0x18FFFFFF), Color(0x06FFFFFF)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient glassBorderGradient = LinearGradient(
+    colors: [Color(0x38FFFFFF), Color(0x0DFFFFFF)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient neonBorderGradient = LinearGradient(
+    colors: [primaryNeon, secondaryNeon],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Color(0xFF18112E), Color(0xFF0B1124), Color(0xFF080912)],
+    colors: [Color(0xFF181530), Color(0xFF0D1222), Color(0xFF0A0D18)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
-  // Glass & Elevated
-  static final Color surfaceGlass = const Color(0xFF0F1221).withValues(alpha: 0.75);
-  static const Color borderLight = Color(0x1FFFFFFF);
+  static const LinearGradient dockGradient = LinearGradient(
+    colors: [Color(0xF012182B), Color(0xF00D1222)],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
 
   // Platform Brand Colors
   static const Color youtubeRed = Color(0xFFFF0000);
@@ -67,13 +97,13 @@ class AppColors {
   static const Color bstationBlue = Color(0xFF00A1D6);
 
   // Shimmer / Skeleton Loading
-  static const Color shimmerBase = Color(0xFF111528);
-  static const Color shimmerHighlight = Color(0xFF1D2440);
+  static const Color shimmerBase = Color(0xFF10162A);
+  static const Color shimmerHighlight = Color(0xFF1D2644);
 
   // Standardized Glow & Shadow Presets
   static final List<BoxShadow> neonVioletGlow = [
     BoxShadow(
-      color: primaryNeon.withValues(alpha: 0.35),
+      color: primaryNeon.withValues(alpha: 0.32),
       blurRadius: 18,
       spreadRadius: -2,
     ),
@@ -81,7 +111,7 @@ class AppColors {
 
   static final List<BoxShadow> neonCyanGlow = [
     BoxShadow(
-      color: secondaryNeon.withValues(alpha: 0.3),
+      color: secondaryNeon.withValues(alpha: 0.28),
       blurRadius: 16,
       spreadRadius: -2,
     ),
@@ -89,7 +119,7 @@ class AppColors {
 
   static final List<BoxShadow> voiceActiveGlow = [
     BoxShadow(
-      color: accentGreen.withValues(alpha: 0.5),
+      color: accentGreen.withValues(alpha: 0.50),
       blurRadius: 14,
       spreadRadius: 2,
     ),
@@ -97,9 +127,17 @@ class AppColors {
 
   static final List<BoxShadow> atmosphericCardShadow = [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.55),
-      blurRadius: 16,
+      color: Colors.black.withValues(alpha: 0.45),
+      blurRadius: 18,
       offset: const Offset(0, 6),
+    ),
+  ];
+
+  static final List<BoxShadow> glassDockShadow = [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.50),
+      blurRadius: 24,
+      offset: const Offset(0, -4),
     ),
   ];
 }

@@ -296,10 +296,10 @@ class RoomControlsBar extends StatelessWidget {
     final isHost = roomController.isHost;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: AppColors.glassFillHeavy,
         border: Border(
-          bottom: BorderSide(color: AppColors.border, width: 0.8),
+          bottom: BorderSide(color: AppColors.glassBorder, width: 0.8),
         ),
       ),
       child: ListenableBuilder(
@@ -394,13 +394,13 @@ class RoomControlsBar extends StatelessWidget {
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
-          color: AppColors.surfaceElevated,
+          color: AppColors.glassFillLight,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isHostOnly
-                ? AppColors.accentYellow.withValues(alpha: 0.4)
-                : AppColors.secondaryNeon.withValues(alpha: 0.4),
-            width: 0.8,
+                ? AppColors.accentYellow.withValues(alpha: 0.45)
+                : AppColors.secondaryNeon.withValues(alpha: 0.45),
+            width: 0.9,
           ),
         ),
         child: Row(
@@ -455,13 +455,13 @@ class RoomControlsBar extends StatelessWidget {
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
-          color: AppColors.surfaceElevated,
+          color: AppColors.glassFillLight,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isHostOnly
                 ? AppColors.accentYellow.withValues(alpha: 0.45)
                 : AppColors.secondaryNeon.withValues(alpha: 0.45),
-            width: 0.8,
+            width: 0.9,
           ),
         ),
         child: Row(

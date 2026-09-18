@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/time_formatter.dart';
+import '../../../../core/widgets/frosted_glass_box.dart';
 import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
 
@@ -65,189 +66,173 @@ class RoomCard extends StatelessWidget {
     final source = _getSourceInfo(room.currentMediaType, room.currentMediaUrl);
     final timeAgo = TimeFormatter.formatTimeAgo(room.createdAt);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          AppHaptics.light();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(16),
-        splashColor: AppColors.primaryNeonGlow,
-        highlightColor: AppColors.surfaceHighlight,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isPlaying
-                  ? AppColors.primaryNeon.withValues(alpha: 0.25)
-                  : AppColors.borderLight,
-              width: 1.1,
-            ),
-            boxShadow: AppColors.atmosphericCardShadow,
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Left Thumbnail (16:9 ratio, fixed width)
-              SizedBox(
-                width: 124,
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: _buildThumbnail(context, source, isPlaying),
-                  ),
-                ),
+    return FrostedGlassBox.card(
+      onTap: () {
+        AppHaptics.light();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(18),
+      isHighlighted: isPlaying,
+      highlightColor: AppColors.primaryNeon,
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Left Thumbnail (16:9 ratio, fixed width)
+          SizedBox(
+            width: 124,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildThumbnail(context, source, isPlaying),
               ),
+            ),
+          ),
 
-              const SizedBox(width: 12),
+          const SizedBox(width: 12),
 
-              // 2. Right Info Section
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+          // 2. Right Info Section
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Title
+                Text(
+                  room.title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    height: 1.25,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                const SizedBox(height: 6),
+
+                // Host & Time row
+                Row(
                   children: [
-                    // Title
-                    Text(
-                      room.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                        height: 1.25,
+                    // Host icon + name
+                    const Text('👑', style: TextStyle(fontSize: 10)),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        room.hostName ?? 'Host',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
 
-                    const SizedBox(height: 6),
+                    // Time ago
+                    if (timeAgo.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        timeAgo,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
 
-                    // Host & Time row
-                    Row(
-                      children: [
-                        // Host icon + name
-                        const Text('👑', style: TextStyle(fontSize: 10)),
-                        const SizedBox(width: 3),
-                        Flexible(
-                          child: Text(
-                            room.hostName ?? 'Host',
+                const SizedBox(height: 8),
+
+                // Badges row: Control Mode & Source pill
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Mode Control Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.glassFillLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.glassBorder,
+                          width: 0.9,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            room.isHostOnly
+                                ? Icons.lock_rounded
+                                : Icons.group_rounded,
+                            size: 10.5,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            room.isHostOnly ? 'Host' : 'Bebas',
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textSecondary,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
 
-                        // Time ago
-                        if (timeAgo.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 3,
-                            height: 3,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
+                    // Source platform indicator
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: source.color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: source.color.withValues(alpha: 0.35),
+                          width: 0.9,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(source.icon,
+                              size: 10.5, color: source.color),
+                          const SizedBox(width: 4),
                           Text(
-                            timeAgo,
-                            style: const TextStyle(
+                            source.label,
+                            style: TextStyle(
                               fontSize: 10.5,
-                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.bold,
+                              color: source.color,
                             ),
                           ),
                         ],
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Badges row: Control Mode & Source pill
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        // Mode Control Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                room.isHostOnly
-                                    ? Icons.lock_rounded
-                                    : Icons.group_rounded,
-                                size: 10,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                room.isHostOnly ? 'Host' : 'Bebas',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Source platform indicator
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: source.color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: source.color.withValues(alpha: 0.3),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(source.icon,
-                                  size: 10, color: source.color),
-                              const SizedBox(width: 3),
-                              Text(
-                                source.label,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: source.color,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -23,7 +23,7 @@ class AppTheme {
         onError: Colors.white,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         scrolledUnderElevation: 0,
@@ -36,43 +36,43 @@ class AppTheme {
         iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: AppColors.glassFill,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.borderLight, width: 1),
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: AppColors.glassBorder, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceElevated,
-        elevation: 12,
+        elevation: 16,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: AppColors.borderGlow, width: 1.2),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceElevated,
+        fillColor: AppColors.glassFill,
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppColors.glassBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppColors.glassBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           borderSide:
               const BorderSide(color: AppColors.primaryNeon, width: 1.6),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.accentRed),
         ),
       ),
@@ -83,7 +83,7 @@ class AppTheme {
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
@@ -94,11 +94,11 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primaryNeon,
-          side: const BorderSide(color: AppColors.primaryNeon, width: 1.2),
+          foregroundColor: AppColors.primaryNeonLight,
+          side: const BorderSide(color: AppColors.borderGlow, width: 1.2),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
@@ -122,7 +122,7 @@ class AppTheme {
           fontWeight: FontWeight.w500,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: AppColors.borderGlow),
         ),
         behavior: SnackBarBehavior.floating,
@@ -131,13 +131,13 @@ class AppTheme {
         backgroundColor: AppColors.surface,
         modalBackgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
           side: BorderSide(color: AppColors.borderLight, width: 1),
         ),
         showDragHandle: false,
       ),
       tabBarTheme: TabBarThemeData(
-        labelColor: AppColors.primaryNeon,
+        labelColor: AppColors.primaryNeonLight,
         unselectedLabelColor: AppColors.textMuted,
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: UnderlineTabIndicator(
@@ -155,25 +155,25 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceElevated,
-        selectedColor: AppColors.primaryNeon.withValues(alpha: 0.18),
+        backgroundColor: AppColors.glassFillLight,
+        selectedColor: AppColors.primaryNeon.withValues(alpha: 0.22),
         labelStyle: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppColors.borderLight),
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: AppColors.glassBorder),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.primaryNeonDark,
         foregroundColor: Colors.white,
-        elevation: 4,
+        elevation: 6,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
         ),
       ),
       dividerTheme: const DividerThemeData(

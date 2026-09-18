@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1224,23 +1225,26 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       },
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: 600,
-            maxHeight: MediaQuery.of(context).size.height * 0.90,
-          ),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(
-              top: BorderSide(color: AppColors.border),
-              left: BorderSide(color: AppColors.border),
-              right: BorderSide(color: AppColors.border),
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: Stack(
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.of(context).size.height * 0.90,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.glassFillHeavy,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border.all(
+                  color: AppColors.glassBorderHighlight,
+                  width: 1.1,
+                ),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: Stack(
               children: [
                 Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1412,7 +1416,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
@@ -1435,18 +1441,19 @@ class _SelectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryNeon.withValues(alpha: 0.1)
-              : AppColors.surfaceElevated,
-          borderRadius: BorderRadius.circular(12),
+              ? AppColors.primaryNeon.withValues(alpha: 0.15)
+              : AppColors.glassFill,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? AppColors.primaryNeon : AppColors.border,
+            color: isSelected ? AppColors.primaryNeon : AppColors.glassBorder,
             width: isSelected ? 1.5 : 1.0,
           ),
+          boxShadow: isSelected ? AppColors.neonVioletGlow : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

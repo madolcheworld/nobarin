@@ -52,12 +52,13 @@ class VoiceControlBar extends StatelessWidget {
         }
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceElevated,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.glassFillHeavy,
             border: Border(
-              top: BorderSide(color: AppColors.border),
+              top: BorderSide(color: AppColors.glassBorderHighlight, width: 1.0),
             ),
+            boxShadow: AppColors.glassDockShadow,
           ),
           child: Row(
             children: [

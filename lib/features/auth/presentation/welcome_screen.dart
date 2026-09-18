@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_haptics.dart';
+import '../../../core/widgets/frosted_glass_box.dart';
 import 'auth_controller.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
@@ -157,23 +158,20 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     const SizedBox(height: 24),
 
                     // Card Form Container
-                    Container(
+                    FrostedGlassBox(
                       padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: AppColors.borderLight,
-                          width: 1.2,
+                      borderRadius: BorderRadius.circular(24),
+                      backgroundColor: AppColors.glassFillHeavy,
+                      borderColor: AppColors.glassBorderHighlight,
+                      borderWidth: 1.2,
+                      blur: 16.0,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
+                      ],
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -322,7 +320,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.primaryNeon.withValues(alpha: 0.35),
@@ -336,7 +334,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
                                 onPressed: _isLoading ? null : _handleStart,
