@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../screenshare/controllers/webrtc_screenshare_controller.dart';
+import '../../../voice/controllers/webrtc_voice_controller.dart';
+import '../../../voice/presentation/audio_ducking_settings_sheet.dart';
 import '../../controllers/queue_controller.dart';
 import '../../controllers/room_controller.dart';
 import '../../controllers/sync_controller.dart';
@@ -15,6 +17,7 @@ class RoomControlsBar extends StatelessWidget {
   final RoomController roomController;
   final QueueController? queueController;
   final WebRtcScreenShareController? screenShareController;
+  final WebRtcVoiceController? voiceController;
   final VoidCallback onOpenMediaPicker;
   final VoidCallback? onOpenQueue;
 
@@ -25,6 +28,7 @@ class RoomControlsBar extends StatelessWidget {
     required this.roomController,
     this.queueController,
     this.screenShareController,
+    this.voiceController,
     required this.onOpenMediaPicker,
     this.onOpenQueue,
   });
@@ -308,39 +312,239 @@ class RoomControlsBar extends StatelessWidget {
           player,
           ?queueController,
           ?screenShareController,
+          ?voiceController,
         ]),
         builder: (context, _) {
           final bool hasMedia = player.mediaUrl.isNotEmpty;
 
           return SizedBox(
-            height: 38,
+            height: 44,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 1. Media Action Button: Ganti Video (when media is loaded and canControl)
+                  // 1. Unified Voice Capsule (Mic + Deafen + Audio Ducking)
+                  if (voiceController != null) ...[
+                    _buildVoiceCapsule(context, voiceController!),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 18,
+                      width: 1,
+                      color: AppColors.borderLight.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+
+                  // 2. Media Action Button: Ganti Video (when media is loaded and canControl)
                   if (hasMedia && canControl) ...[
                     _buildMediaActionButton(),
                     const SizedBox(width: 8),
                   ],
 
-                  // 2. Screen Share Button
+                  // 3. Screen Share Button
                   if (screenShareController != null) ...[
                     _buildScreenShareButton(context, screenShareController!),
                     const SizedBox(width: 8),
                   ],
 
-                  // 3. Room Control Mode Pill
+                  // 4. Room Control Mode Pill
                   _buildControlModePill(context, isHost),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildVoiceCapsule(BuildContext context, WebRtcVoiceController voice) {
+    final isMuted = voice.isMicMuted;
+    final isSpeaking = voice.isLocalSpeaking;
+    final isDeafened = voice.isDeafened;
+    final status = voice.status;
+
+    String label;
+    if (status == VoiceStatus.connecting) {
+      label = 'Koneksi...';
+    } else if (status == VoiceStatus.error) {
+      label = 'Error';
+    } else if (isSpeaking) {
+      label = 'Bicara...';
+    } else {
+      label = isMuted ? 'Mic Mati' : 'Mic Aktif';
+    }
+
+    final Color statusColor = isMuted
+        ? AppColors.accentRed
+        : (status == VoiceStatus.error
+            ? AppColors.accentRed
+            : (status == VoiceStatus.connecting
+                ? AppColors.accentYellow
+                : AppColors.accentGreen));
+
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: isMuted
+            ? AppColors.accentRed.withValues(alpha: 0.10)
+            : AppColors.accentGreen.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isMuted
+              ? AppColors.accentRed.withValues(alpha: 0.35)
+              : AppColors.accentGreen.withValues(alpha: 0.5),
+          width: 1.0,
+        ),
+        boxShadow: !isMuted && isSpeaking
+            ? [
+                BoxShadow(
+                  color: AppColors.accentGreen.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. Mic Button with status label
+          Tooltip(
+            message: isMuted ? 'Nyalakan Mikrofon' : 'Matikan Mikrofon',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  AppHaptics.medium();
+                  voice.toggleMic();
+                },
+                borderRadius:
+                    const BorderRadius.horizontal(left: Radius.circular(16)),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isMuted
+                            ? Icons.mic_off_rounded
+                            : (isSpeaking
+                                ? Icons.graphic_eq_rounded
+                                : Icons.mic_rounded),
+                        size: 15,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              isMuted ? FontWeight.w600 : FontWeight.bold,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Divider inside voice capsule
+          Container(
+            width: 1,
+            height: 16,
+            color: isMuted
+                ? AppColors.accentRed.withValues(alpha: 0.25)
+                : AppColors.accentGreen.withValues(alpha: 0.3),
+          ),
+
+          // 2. Deafen Button (headset)
+          Tooltip(
+            message: isDeafened
+                ? 'Batal Bungkam Audio Teman'
+                : 'Bungkam Audio Teman',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  AppHaptics.selection();
+                  voice.toggleDeafen();
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Icon(
+                    isDeafened
+                        ? Icons.headset_off_rounded
+                        : Icons.headset_rounded,
+                    size: 15,
+                    color: isDeafened
+                        ? AppColors.accentRed
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Audio Ducking / Voice Settings Button
+          Tooltip(
+            message: voice.isAudioDuckingEnabled
+                ? 'Audio Ducking: Aktif (${(voice.duckingFactor * 100).round()}%)\nTap untuk buka pengaturan suara'
+                : 'Pengaturan Suara & Audio Ducking',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  AppHaptics.selection();
+                  AudioDuckingSettingsSheet.show(
+                    context,
+                    voiceController: voice,
+                  );
+                },
+                borderRadius:
+                    const BorderRadius.horizontal(right: Radius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                      left: 4, right: 9, top: 6, bottom: 6),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        Icons.hearing_rounded,
+                        size: 15,
+                        color: voice.isAudioDuckingEnabled
+                            ? AppColors.secondaryNeon
+                            : AppColors.textMuted,
+                      ),
+                      if (voice.isAudioDuckingEnabled && voice.isDucking)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            width: 5,
+                            height: 5,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.primaryNeon,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -355,7 +559,7 @@ class RoomControlsBar extends StatelessWidget {
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 30,
+          height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: AppColors.secondaryNeon.withValues(alpha: 0.12),
@@ -391,7 +595,7 @@ class RoomControlsBar extends StatelessWidget {
 
     if (!isHost) {
       return Container(
-        height: 30,
+        height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
           color: AppColors.glassFillLight,
@@ -452,7 +656,7 @@ class RoomControlsBar extends StatelessWidget {
         ),
       ],
       child: Container(
-        height: 30,
+        height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
           color: AppColors.glassFillLight,
@@ -504,7 +708,7 @@ class RoomControlsBar extends StatelessWidget {
           },
           borderRadius: BorderRadius.circular(16),
           child: Container(
-            height: 30,
+            height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
               color: AppColors.accentRed.withValues(alpha: 0.2),
@@ -569,7 +773,7 @@ class RoomControlsBar extends StatelessWidget {
           },
           borderRadius: BorderRadius.circular(16),
           child: Container(
-            height: 30,
+            height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
@@ -659,7 +863,7 @@ class RoomControlsBar extends StatelessWidget {
               },
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 30,
+          height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 9),
           decoration: BoxDecoration(
             color: AppColors.surfaceElevated,

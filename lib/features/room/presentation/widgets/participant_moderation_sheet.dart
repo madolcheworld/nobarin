@@ -237,16 +237,17 @@ class ParticipantModerationSheet extends StatelessWidget {
                                   : Icons.mic_rounded,
                               size: 13,
                               color: isMuted
-                                  ? AppColors.textMuted
+                                  ? AppColors.accentRed
                                   : AppColors.accentGreen,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              isMuted ? 'Muted' : 'Mic Aktif',
+                              isMuted ? 'Mic Mati' : 'Mic Aktif',
                               style: TextStyle(
                                 fontSize: 11,
+                                fontWeight: FontWeight.w600,
                                 color: isMuted
-                                    ? AppColors.textMuted
+                                    ? AppColors.accentRed
                                     : AppColors.accentGreen,
                               ),
                             ),

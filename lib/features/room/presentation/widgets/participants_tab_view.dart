@@ -84,8 +84,12 @@ class ParticipantsTabView extends StatelessWidget {
                   user.username == hostName);
           final isCoHost = coHostUserIds.contains(user.id) ||
               coHostUserIds.contains(user.username);
-          final isSpeaking = speakingUserIds.contains(user.id);
-          final isMuted = mutedUserIds.contains(user.id);
+          final isSpeaking = isMe
+              ? (voiceController?.isLocalSpeaking ?? false)
+              : speakingUserIds.contains(user.id);
+          final isMuted = isMe
+              ? (voiceController?.isMicMuted ?? true)
+              : mutedUserIds.contains(user.id);
 
           return Container(
             margin: const EdgeInsets.only(bottom: 6),
@@ -230,20 +234,22 @@ class ParticipantsTabView extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: isSpeaking
                           ? AppColors.accentGreen.withValues(alpha: 0.15)
-                          : Colors.transparent,
+                          : (isMuted
+                              ? AppColors.accentRed.withValues(alpha: 0.12)
+                              : AppColors.accentGreen.withValues(alpha: 0.08)),
                     ),
                     child: Icon(
                       isMuted
                           ? Icons.mic_off_rounded
                           : (isSpeaking
                               ? Icons.graphic_eq_rounded
-                              : Icons.mic_none_rounded),
+                              : Icons.mic_rounded),
                       size: 17,
                       color: isMuted
-                          ? AppColors.textMuted
+                          ? AppColors.accentRed
                           : (isSpeaking
                               ? AppColors.accentGreen
-                              : AppColors.textSecondary),
+                              : AppColors.accentGreen),
                     ),
                   ),
 

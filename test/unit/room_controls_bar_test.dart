@@ -7,6 +7,27 @@ import 'package:nobarin/features/room/controllers/sync_controller.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 import 'package:nobarin/features/room/models/room_model.dart';
 import 'package:nobarin/features/room/presentation/widgets/room_controls_bar.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
+
+class _FakeMediaStreamTrack implements MediaStreamTrack {
+  @override
+  bool enabled = true;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeMediaStream implements MediaStream {
+  final List<MediaStreamTrack> _tracks = [_FakeMediaStreamTrack()];
+  @override
+  List<MediaStreamTrack> getAudioTracks() => _tracks;
+  @override
+  List<MediaStreamTrack> getTracks() => _tracks;
+  @override
+  Future<void> dispose() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   group('RoomControlsBar Widget Tests', () {
@@ -233,6 +254,48 @@ void main() {
 
       // Verify Host Only pill is rendered
       expect(find.text('👑 Host Only'), findsOneWidget);
+    });
+
+    testWidgets('renders Mic, Deafen, and Audio Ducking buttons when voiceController is provided',
+        (tester) async {
+      final voice = WebRtcVoiceController(
+        roomId: baseRoom.id,
+        userId: testHost.id,
+        userName: testHost.username,
+        supabase: null,
+        userMediaFunction: (_) async => _FakeMediaStream(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              voiceController: voice,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify Mic pill is present with "Mic Mati" initially
+      expect(find.text('Mic Mati'), findsOneWidget);
+      expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.headset_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.hearing_rounded), findsOneWidget);
+
+      // Tap Mic pill to toggle
+      await tester.tap(find.text('Mic Mati'));
+      await tester.pump();
+
+      expect(voice.isMicMuted, isFalse);
+      expect(find.text('Mic Aktif'), findsOneWidget);
+
+      voice.dispose();
     });
   });
 }

@@ -319,62 +319,67 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
 
               // Input Bar
               Container(
-                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: AppColors.glassFillHeavy,
                   border: Border(
                     top: BorderSide(color: AppColors.glassBorder, width: 0.9),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    // Emoji Picker for text input
-                    IconButton(
-                      icon: const Icon(
-                        Icons.mood_rounded,
-                        size: 22,
-                        color: AppColors.textMuted,
-                      ),
-                      tooltip: 'Sisipkan Emoticon',
-                      onPressed: _openEmojiPickerForInput,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: TextField(
-                        controller: _inputController,
-                        style: const TextStyle(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Tulis pesan...',
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide:
-                                const BorderSide(color: AppColors.border),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      children: [
+                        // Emoji Picker for text input
+                        IconButton(
+                          icon: const Icon(
+                            Icons.mood_rounded,
+                            size: 22,
+                            color: AppColors.textMuted,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide:
-                                const BorderSide(color: AppColors.border),
+                          tooltip: 'Sisipkan Emoticon',
+                          onPressed: _openEmojiPickerForInput,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: TextField(
+                            controller: _inputController,
+                            style: const TextStyle(fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Tulis pesan...',
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide:
+                                    const BorderSide(color: AppColors.border),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide:
+                                    const BorderSide(color: AppColors.border),
+                              ),
+                            ),
+                            onSubmitted: (_) => _sendMessage(),
                           ),
                         ),
-                        onSubmitted: (_) => _sendMessage(),
-                      ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AppColors.primaryGradient,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.send_rounded,
+                                size: 18, color: Colors.white),
+                            onPressed: _sendMessage,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.primaryGradient,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.send_rounded,
-                            size: 18, color: Colors.white),
-                        onPressed: _sendMessage,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],

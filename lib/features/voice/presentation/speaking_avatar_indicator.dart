@@ -103,16 +103,20 @@ class SpeakingAvatarIndicator extends StatelessWidget {
             bottom: -2,
             right: -2,
             child: Container(
-              width: size * 0.28,
-              height: size * 0.28,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceHighlight,
+              width: size * 0.32,
+              height: size * 0.32,
+              decoration: BoxDecoration(
+                color: AppColors.accentRed,
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.surfaceElevated,
+                  width: 1.5,
+                ),
               ),
               child: Icon(
                 Icons.mic_off_rounded,
-                size: size * 0.18,
-                color: AppColors.textMuted,
+                size: size * 0.20,
+                color: Colors.white,
               ),
             ),
           ),

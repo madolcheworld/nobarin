@@ -20,7 +20,6 @@ import '../../pip/services/pip_service.dart';
 import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
 import '../../screenshare/presentation/widgets/screen_share_view.dart';
 import '../../voice/controllers/webrtc_voice_controller.dart';
-import '../../voice/presentation/voice_control_bar.dart';
 import '../controllers/queue_controller.dart';
 import '../controllers/room_controller.dart';
 import '../controllers/sync_controller.dart';
@@ -797,7 +796,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         (authProfile != null ? [authProfile] : const []);
     final speakingIds = _voiceController?.activeSpeakerIds ?? {};
     final mutedIds = _voiceController?.mutedUserIds ?? {};
-    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final bool isFullscreen = _player.isFullscreen;
     final bool isInPip = PipService.instance.isInPipMode;
 
@@ -1005,6 +1003,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                           roomController: _roomController!,
                           queueController: _queueController,
                           screenShareController: _screenShareController,
+                          voiceController: _voiceController,
                           onOpenMediaPicker: _openMediaPicker,
                           onOpenQueue: _openQueueSheet,
                         ),
@@ -1014,31 +1013,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
                   const VerticalDivider(width: 1, color: AppColors.border),
 
-                  // Right Sidebar: Unified Social Hub + Voice Bar
+                  // Right Sidebar: Unified Social Hub
                   Expanded(
                     flex: 4,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: _buildSocialHub(
-                            currentRoom: currentRoom,
-                            participants: participants,
-                            speakingIds: speakingIds,
-                            mutedIds: mutedIds,
-                          ),
-                        ),
-                        if (_voiceController != null)
-                          VoiceControlBar(
-                            voiceController: _voiceController!,
-                          ),
-                      ],
+                    child: _buildSocialHub(
+                      currentRoom: currentRoom,
+                      participants: participants,
+                      speakingIds: speakingIds,
+                      mutedIds: mutedIds,
                     ),
                   ),
                 ],
               );
             }
 
-            // Mobile Portrait Layout: Top video, Middle controls, Bottom Unified Social Hub
+            // Mobile Portrait Layout: Top video, Middle controls (including Mic), Bottom Unified Social Hub
             return Stack(
               children: [
                 Column(
@@ -1063,18 +1052,19 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         showTopBar: false,
                       ),
 
-                    // Controls Bar
+                    // Controls Bar (Media + VoIP Voice Mic controls)
                     RoomControlsBar(
                       syncController: _syncController!,
                       player: _player,
                       roomController: _roomController!,
                       queueController: _queueController,
                       screenShareController: _screenShareController,
+                      voiceController: _voiceController,
                       onOpenMediaPicker: _openMediaPicker,
                       onOpenQueue: _openQueueSheet,
                     ),
 
-                    // Unified Social Hub (fills rest of screen)
+                    // Unified Social Hub (fills rest of screen right down to bottom)
                     Expanded(
                       child: _buildSocialHub(
                         currentRoom: currentRoom,
@@ -1083,12 +1073,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         mutedIds: mutedIds,
                       ),
                     ),
-
-                    // Bottom VoIP Voice Control Bar (hidden while soft keyboard is active)
-                    if (_voiceController != null && !isKeyboardOpen)
-                      VoiceControlBar(
-                        voiceController: _voiceController!,
-                      ),
                   ],
                 ),
                 if (_chatController != null)
