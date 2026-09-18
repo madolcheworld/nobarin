@@ -160,7 +160,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
     final allRooms = roomsAsync.asData?.value ?? [];
     final allRoomsCount = allRooms.length;
-    final liveRoomsCount = allRooms.where((r) => r.isPlaying).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -527,13 +526,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             category: LobbyFilterCategory.all,
                             selectedCategory: selectedCategory,
                           ),
-                          const SizedBox(width: 8),
-                          _buildFilterChip(
-                            label: '🔴 Sedang Live',
-                            count: liveRoomsCount,
-                            category: LobbyFilterCategory.liveOnly,
-                            selectedCategory: selectedCategory,
-                          ),
+
                           const SizedBox(width: 8),
                           _buildFilterChip(
                             label: 'YouTube',
