@@ -67,6 +67,8 @@ void main() {
       // Supported Options
       expect(find.text('YouTube'), findsOneWidget);
       expect(find.text('Bstation / Bilibili'), findsOneWidget);
+      expect(find.text('Dailymotion'), findsOneWidget);
+      expect(find.text('File Video Lokal (P2P)'), findsOneWidget);
 
       // Verify Direct Video is cleanly removed
       expect(find.textContaining('Direct Video'), findsNothing);
@@ -76,6 +78,27 @@ void main() {
       expect(find.textContaining('Lewati'), findsNothing);
       expect(find.textContaining('lewati'), findsNothing);
       expect(find.textContaining('pilih nanti'), findsNothing);
+    });
+
+    testWidgets('Opening with local file initialMediaUrl opens directly at Step 2 with local file preview',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        buildTestableDialog(
+          initialMediaType: 'direct_url',
+          initialMediaUrl: '/storage/emulated/0/Download/anime_movie.mp4',
+          initialTitle: 'Nobar: anime_movie.mp4',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Pengaturan Room'), findsAtLeast(1));
+      expect(find.text('Langkah 2 dari 2'), findsOneWidget);
+      expect(find.text('Nobar: anime_movie.mp4'), findsAtLeast(1));
+      expect(find.text('File Lokal P2P'), findsOneWidget);
     });
 
     testWidgets('Opening with YouTube initialMediaUrl opens directly at Step 2',

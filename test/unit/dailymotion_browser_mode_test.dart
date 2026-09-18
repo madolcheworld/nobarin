@@ -203,5 +203,52 @@ void main() {
       expect(queueController.items.first.mediaType, equals('dailymotion'));
       expect(queueController.items.first.isDailymotion, isTrue);
     });
+
+    testWidgets('displays back button and close button in top bar',
+        (tester) async {
+      bool popped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DailymotionBrowserSheet(
+                      mode: DailymotionBrowserMode.createRoom,
+                    ),
+                  ),
+                ).then((_) => popped = true);
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Verify back button (Kembali) with arrow_back_rounded exists
+      final backBtn = find.byTooltip('Kembali');
+      expect(backBtn, findsOneWidget);
+      expect(
+        find.descendant(of: backBtn, matching: find.byIcon(Icons.arrow_back_rounded)),
+        findsOneWidget,
+      );
+
+      // Verify close button (Tutup) with close_rounded exists
+      final closeBtn = find.byTooltip('Tutup');
+      expect(closeBtn, findsOneWidget);
+      expect(
+        find.descendant(of: closeBtn, matching: find.byIcon(Icons.close_rounded)),
+        findsOneWidget,
+      );
+
+      // Tap back button and verify sheet pops
+      await tester.tap(backBtn);
+      await tester.pumpAndSettle();
+      expect(popped, isTrue);
+    });
   });
 }

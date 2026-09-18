@@ -11,6 +11,9 @@ class NtpClockSync {
   factory NtpClockSync() => _instance;
   NtpClockSync._internal();
 
+  @visibleForTesting
+  NtpClockSync.custom({int offsetMs = 0}) : _clockOffsetMs = offsetMs;
+
   int _clockOffsetMs = 0;
   int? _monotonicAnchorEpochMs;
   final Stopwatch _monotonicStopwatch = Stopwatch();

@@ -1,7 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/p2p_file_stream_service.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
@@ -60,6 +62,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   String? _selectedMediaUrl;
   String? _selectedVideoTitle;
   String? _selectedVideoId;
+  String? _selectedLocalFileSize;
 
   String _controlMode = 'host_only'; // 'host_only' or 'collaborative'
   bool _isPublic = true;
@@ -85,6 +88,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _selectedMediaType = 'dailymotion';
         _selectedVideoId = detected?.mediaId;
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Dailymotion';
+      } else if (detected?.isDirectUrl == true && UnifiedPlayerController.isLocalFilePath(widget.initialMediaUrl!)) {
+        _selectedMediaType = 'direct_url';
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'File Video Lokal';
       } else {
         _selectedMediaType = 'youtube';
         _selectedVideoId = detected?.mediaId;
@@ -172,6 +178,56 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  void _pickLocalVideoFile() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.video,
+      );
+      if (picked == null) return;
+
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File tidak memiliki path yang valid di perangkat ini.'),
+              backgroundColor: AppColors.accentRed,
+            ),
+          );
+        }
+        return;
+      }
+
+      final fileName = picked.name;
+      final fileLength = await picked.length();
+      final sizeMb = (fileLength / (1024 * 1024)).toStringAsFixed(1);
+
+      setState(() {
+        _selectedMediaType = 'direct_url';
+        _selectedMediaUrl = path;
+        _selectedVideoTitle = fileName;
+        _selectedVideoId = null;
+        _selectedLocalFileSize = '$sizeMb MB';
+        _currentStep = 1;
+        if (_titleController.text == 'Nonton Bareng' ||
+            _titleController.text.isEmpty ||
+            _titleController.text.startsWith('Nobar:')) {
+          _titleController.text = 'Nobar: $fileName';
+        }
+      });
+    } catch (e) {
+      debugPrint('[CreateRoomDialog] Error picking local file: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memilih file video: $e'),
+            backgroundColor: AppColors.accentRed,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -192,6 +248,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     }
 
     setState(() => _isLoading = true);
+
+    // If local video file is selected, initiate P2P hosting so LAN server is immediately available
+    if (_selectedMediaType == 'direct_url' &&
+        _selectedMediaUrl != null &&
+        UnifiedPlayerController.isLocalFilePath(_selectedMediaUrl!)) {
+      try {
+        await P2PFileStreamService.instance.hostFile(
+          filePath: _selectedMediaUrl!,
+          hostUserId: user.id,
+          hostUserName: user.username,
+        );
+      } catch (e) {
+        debugPrint('[CreateRoomDialog] P2P host notice: $e');
+      }
+    }
 
     final room = await ref.read(lobbyControllerProvider.notifier).createRoom(
           title: _titleController.text.trim(),
@@ -429,6 +500,24 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           accentColor: AppColors.dailymotionBlue,
           badgeText: 'Trending',
           onTap: _openDailymotionBrowser,
+        ),
+        const SizedBox(height: 12),
+
+        // 4. Local Video File (Direct P2P Streaming) Option Card
+        _buildSourceOptionCard(
+          title: 'File Video Lokal (P2P)',
+          subtitle: 'Stream video dari memori HP/PC tanpa upload',
+          icon: Icons.folder_special_rounded,
+          iconColor: Colors.white,
+          iconBackgroundColor: Colors.purpleAccent,
+          borderColor: Colors.purpleAccent.withValues(alpha: 0.45),
+          gradientColors: [
+            Colors.purpleAccent.withValues(alpha: 0.16),
+            AppColors.surfaceElevated,
+          ],
+          accentColor: Colors.purpleAccent,
+          badgeText: 'P2P',
+          onTap: _pickLocalVideoFile,
         ),
 
         // If a video was already selected and user clicked "Ganti Video" / back to step 1
@@ -795,6 +884,123 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  Widget _buildLocalVideoPreviewCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.purpleAccent.withValues(alpha: 0.5),
+          width: 1.2,
+        ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 84,
+                  height: 54,
+                  color: Colors.purpleAccent.withValues(alpha: 0.15),
+                  child: const Center(
+                    child: Icon(
+                      Icons.folder_special_rounded,
+                      color: Colors.purpleAccent,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Title, File Size and Source Badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.purpleAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.stream_rounded,
+                                  size: 11, color: Colors.purpleAccent),
+                              SizedBox(width: 4),
+                              Text(
+                                'File Lokal P2P',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.purpleAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_selectedLocalFileSize != null) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            _selectedLocalFileSize!,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _selectedVideoTitle ?? 'File Video Lokal',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => setState(() => _currentStep = 0),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryNeon,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep2RoomSettings() {
     return Form(
       key: _formKey,
@@ -815,6 +1021,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _buildBstationPreviewCard(),
           ] else if (_selectedMediaType == 'dailymotion') ...[
             _buildDailymotionPreviewCard(),
+          ] else if (_selectedMediaType == 'direct_url' &&
+              _selectedMediaUrl != null &&
+              UnifiedPlayerController.isLocalFilePath(_selectedMediaUrl!)) ...[
+            _buildLocalVideoPreviewCard(),
           ] else ...[
             _buildYouTubePreviewCard(),
           ],

@@ -15,6 +15,8 @@ class SyncController extends ChangeNotifier {
   final SupabaseClient? supabase;
   final bool Function()? isHostProvider;
   final bool Function()? canControlProvider;
+  final void Function(String event, Map<String, dynamic> payload)?
+      onBroadcastSentForTesting;
 
   RealtimeChannel? _realtimeChannel;
   Timer? _heartbeatTimer;
@@ -37,6 +39,7 @@ class SyncController extends ChangeNotifier {
     this.supabase,
     this.isHostProvider,
     this.canControlProvider,
+    this.onBroadcastSentForTesting,
   })  : syncEngine = engine ?? SyncEngine() {
     _initChannel();
     _setupPlayerListeners();
@@ -139,14 +142,17 @@ class SyncController extends ChangeNotifier {
   }
 
   void _requestInitialSync() {
+    final payloadMap = {
+      'requester_id': currentUser.id,
+      'timestamp_ms': syncEngine.clockSync.synchronizedTimestampMs,
+    };
+    onBroadcastSentForTesting?.call('REQUEST_SYNC', payloadMap);
+
     if (_realtimeChannel == null || _isDisposed) return;
     try {
       _realtimeChannel!.sendBroadcastMessage(
         event: 'REQUEST_SYNC',
-        payload: {
-          'requester_id': currentUser.id,
-          'timestamp_ms': syncEngine.clockSync.synchronizedTimestampMs,
-        },
+        payload: payloadMap,
       );
     } catch (e) {
       debugPrint('[SyncController] Failed to send REQUEST_SYNC: $e');
@@ -345,6 +351,7 @@ class SyncController extends ChangeNotifier {
     );
 
     _latestPayload = payload;
+    onBroadcastSentForTesting?.call('SYNC_STATE', payload.toJson());
 
     if (_realtimeChannel != null) {
       try {
@@ -389,6 +396,23 @@ class SyncController extends ChangeNotifier {
       position: 0.0,
       action: 'media_change',
     );
+  }
+
+  @visibleForTesting
+  void handleRemoteSyncForTesting(Map<String, dynamic> payloadMap) {
+    _handleRemoteSync(payloadMap);
+  }
+
+  @visibleForTesting
+  void handleRequestSyncForTesting() {
+    if (canControl) {
+      broadcastSync(action: 'snapshot');
+    }
+  }
+
+  @visibleForTesting
+  void requestInitialSyncForTesting() {
+    _requestInitialSync();
   }
 
   @override

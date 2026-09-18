@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/network/supabase_client.dart';
 import '../data/lobby_repository.dart';
+import '../../room/controllers/unified_player_controller.dart';
 import '../../room/models/room_model.dart';
 
 final lobbyRepositoryProvider = Provider<LobbyRepository>((ref) {
@@ -238,6 +239,7 @@ enum LobbyFilterCategory {
   youtube,
   bstation,
   dailymotion,
+  p2pFile,
 }
 
 final lobbySearchQueryProvider = StateProvider<String>((ref) => '');
@@ -275,6 +277,13 @@ final filteredRoomsProvider = Provider<List<RoomModel>>((ref) {
       } else if (category == LobbyFilterCategory.dailymotion) {
         result = result
             .where((r) => r.currentMediaType == 'dailymotion')
+            .toList();
+      } else if (category == LobbyFilterCategory.p2pFile) {
+        result = result
+            .where((r) =>
+                r.currentMediaType == 'direct_url' &&
+                (r.currentMediaUrl?.startsWith('p2p://') == true ||
+                 UnifiedPlayerController.isLocalFilePath(r.currentMediaUrl ?? '')))
             .toList();
       }
 

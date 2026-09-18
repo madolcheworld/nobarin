@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/time_formatter.dart';
+import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
 
 class RoomCard extends StatelessWidget {
@@ -14,7 +15,7 @@ class RoomCard extends StatelessWidget {
     required this.onTap,
   });
 
-  ({String label, IconData icon, Color color}) _getSourceInfo(String? type) {
+  ({String label, IconData icon, Color color}) _getSourceInfo(String? type, [String? url]) {
     if (type == 'youtube') {
       return (
         label: 'YouTube',
@@ -37,6 +38,14 @@ class RoomCard extends StatelessWidget {
       );
     }
     if (type == 'direct_url') {
+      if (url != null &&
+          (url.startsWith('p2p://') || UnifiedPlayerController.isLocalFilePath(url))) {
+        return (
+          label: 'File P2P',
+          icon: Icons.folder_special_rounded,
+          color: Colors.purpleAccent,
+        );
+      }
       return (
         label: 'Direct URL',
         icon: Icons.videocam_rounded,
@@ -53,7 +62,7 @@ class RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isPlaying = room.isPlaying;
-    final source = _getSourceInfo(room.currentMediaType);
+    final source = _getSourceInfo(room.currentMediaType, room.currentMediaUrl);
     final timeAgo = TimeFormatter.formatTimeAgo(room.createdAt);
 
     return Material(

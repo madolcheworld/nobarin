@@ -74,7 +74,8 @@ class VideoQuality {
         mode: QualityControlMode.webviewBridge,
       );
     }
-    final parsedHeight = int.tryParse(q);
+    final clean = q.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsedHeight = clean.isNotEmpty ? int.tryParse(clean) : null;
     return VideoQuality(
       id: q,
       label: parsedHeight != null ? '${parsedHeight}p' : q,

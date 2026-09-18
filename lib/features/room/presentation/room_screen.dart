@@ -12,6 +12,7 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
+import '../../../../core/network/p2p_file_stream_service.dart';
 import '../../chat/presentation/widgets/fullscreen_reaction_bar.dart';
 import '../../lobby/presentation/lobby_controller.dart';
 import '../../pip/presentation/pip_button.dart';
@@ -330,6 +331,23 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       // Initial media load
       if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
         final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
+
+        // If host enters room with a local file, ensure P2P hosting is active
+        if (_roomController?.isHost == true &&
+            UnifiedPlayerController.isLocalFilePath(room.currentMediaUrl!)) {
+          if (!P2PFileStreamService.instance.isHosting) {
+            try {
+              await P2PFileStreamService.instance.hostFile(
+                filePath: room.currentMediaUrl!,
+                hostUserId: user.id,
+                hostUserName: user.username,
+              );
+            } catch (e) {
+              debugPrint('[RoomScreen] Failed to host local file: $e');
+            }
+          }
+        }
+
         _player.loadMedia(
           room.currentMediaType ?? 'direct_url',
           room.currentMediaUrl!,

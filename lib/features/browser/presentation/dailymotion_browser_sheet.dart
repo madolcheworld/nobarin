@@ -380,13 +380,25 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
     }
   }
 
-  void _handleVideoSelection(String actionType) {
+  Future<void> _pauseWebViewMedia() async {
+    if (_webViewController == null) return;
+    try {
+      await _webViewController!.runJavaScript(
+        "document.querySelectorAll('video').forEach(function(v){ v.pause(); });",
+      );
+    } catch (_) {}
+  }
+
+  void _handleVideoSelection(String actionType) async {
     final url = _detectedVideoUrl;
     if (url == null || url.isEmpty) return;
 
     final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
         ? _detectedTitle
         : 'Video Dailymotion';
+
+    await _pauseWebViewMedia();
+    if (!mounted) return;
 
     // 1. Create Room Mode
     if (widget.mode == DailymotionBrowserMode.createRoom) {
@@ -449,6 +461,7 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
       await _webViewController!.goBack();
       return;
     }
+    await _pauseWebViewMedia();
     if (mounted) {
       setState(() => _canPop = true);
       Navigator.of(context).pop();
@@ -550,83 +563,132 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
 
     return Container(
       color: AppColors.surfaceElevated,
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: const EdgeInsets.fromLTRB(6, 6, 8, 8),
       child: SafeArea(
         bottom: false,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.close_rounded, color: AppColors.textPrimary, size: 22),
-              onPressed: () => Navigator.of(context).pop(),
-              tooltip: 'Tutup',
-            ),
+            // Drag Handle
             Container(
-              padding: const EdgeInsets.all(6),
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: modeColor.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                modeIcon,
-                color: modeColor,
-                size: 18,
+                color: AppColors.textSecondary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
+            Row(
+              children: [
+                // Tombol Kembali (Back to previous screen/dialog)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded,
+                      color: AppColors.textPrimary, size: 22),
+                  onPressed: () {
+                    _pauseWebViewMedia();
+                    Navigator.of(context).pop();
+                  },
+                  tooltip: 'Kembali',
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: modeColor.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    modeIcon,
+                    color: modeColor,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        modeTitle,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (widget.mode == DailymotionBrowserMode.queueOnly) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'ANTREAN',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryNeon,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              modeTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
                           ),
+                          if (widget.mode == DailymotionBrowserMode.queueOnly) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'ANTREAN',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryNeon,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Text(
+                        _isSupportedMobilePlatform ? _currentUrl : modeSubtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary.withValues(alpha: 0.7),
                         ),
-                      ],
+                      ),
                     ],
                   ),
-                  Text(
-                    _isSupportedMobilePlatform ? _currentUrl : modeSubtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textSecondary.withValues(alpha: 0.7),
-                    ),
+                ),
+                // Navigation Actions: Halaman Sebelumnya (Web Back) & Muat Ulang
+                if (_isSupportedMobilePlatform && _webViewController != null) ...[
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: AppColors.textSecondary, size: 17),
+                    tooltip: 'Halaman Sebelumnya',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      if (await _webViewController!.canGoBack()) {
+                        _webViewController!.goBack();
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded,
+                        color: AppColors.textSecondary, size: 19),
+                    tooltip: 'Muat Ulang',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _webViewController?.reload(),
                   ),
                 ],
-              ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      color: AppColors.textSecondary, size: 20),
+                  tooltip: 'Tutup',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    _pauseWebViewMedia();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
             ),
-            if (_isSupportedMobilePlatform) ...[
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 20),
-                onPressed: () => _webViewController?.reload(),
-                tooltip: 'Muat ulang',
-              ),
-            ],
           ],
         ),
       ),
@@ -748,42 +810,114 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
 
   Widget _buildActionButtons() {
     if (widget.mode == DailymotionBrowserMode.createRoom) {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.dailymotionBlue,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        onPressed: () => _handleVideoSelection('createRoom'),
-        icon: const Icon(Icons.meeting_room_rounded, size: 17),
-        label: const Text(
-          'Buka Room dengan Video Ini',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
+      return Row(
+        children: [
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              setState(() {
+                _dismissedVideoUrl = _detectedVideoUrl;
+                _detectedVideoUrl = null;
+              });
+            },
+            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            label: const Text(
+              'Pilih Lain',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.dailymotionBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => _handleVideoSelection('createRoom'),
+              icon: const Icon(Icons.meeting_room_rounded, size: 17),
+              label: const Text(
+                'Buka Room dengan Video Ini',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
     if (widget.mode == DailymotionBrowserMode.queueOnly) {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryNeon,
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        onPressed: () => _handleVideoSelection('queue'),
-        icon: const Icon(Icons.playlist_add_rounded, size: 18),
-        label: const Text(
-          'Tambahkan ke Antrean',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
+      return Row(
+        children: [
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              setState(() {
+                _dismissedVideoUrl = _detectedVideoUrl;
+                _detectedVideoUrl = null;
+              });
+            },
+            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            label: const Text(
+              'Pilih Lain',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryNeon,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => _handleVideoSelection('queue'),
+              icon: const Icon(Icons.playlist_add_rounded, size: 18),
+              label: const Text(
+                'Tambahkan ke Antrean',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
     // Default / watchNow mode
     return Row(
       children: [
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+            side: const BorderSide(color: AppColors.border),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: () {
+            setState(() {
+              _dismissedVideoUrl = _detectedVideoUrl;
+              _detectedVideoUrl = null;
+            });
+          },
+          icon: const Icon(Icons.arrow_back_rounded, size: 16),
+          label: const Text(
+            'Pilih Lain',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(

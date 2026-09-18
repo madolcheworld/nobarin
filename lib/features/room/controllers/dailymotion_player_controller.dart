@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../models/video_quality.dart';
 
 /// Controller for Dailymotion video player via WebViewController & HTML5 video bridge
@@ -22,8 +24,19 @@ class DailymotionPlayerController extends ChangeNotifier {
       label: 'Auto (Otomatis Dailymotion)',
       mode: QualityControlMode.webviewBridge,
     ),
+    VideoQuality.dailymotion('1080'),
+    VideoQuality.dailymotion('720'),
+    VideoQuality.dailymotion('480'),
+    VideoQuality.dailymotion('360'),
+    VideoQuality.dailymotion('240'),
   ];
   VideoQuality? _selectedQuality;
+  int? _detectedHeight;
+  int? _detectedWidth;
+
+  DailymotionPlayerController() {
+    _selectedQuality = _availableQualities.first;
+  }
 
   void Function(double position)? onPositionChanged;
   void Function(double duration)? onDurationChanged;
@@ -44,6 +57,8 @@ class DailymotionPlayerController extends ChangeNotifier {
   double get playbackSpeed => _playbackSpeed;
   List<VideoQuality> get availableQualities => List.unmodifiable(_availableQualities);
   VideoQuality? get selectedQuality => _selectedQuality;
+  int? get detectedHeight => _detectedHeight;
+  int? get detectedWidth => _detectedWidth;
 
   bool get _isSupportedMobilePlatform =>
       !kIsWeb &&
@@ -82,20 +97,10 @@ class DailymotionPlayerController extends ChangeNotifier {
     _videoId = extractVideoId(url);
     _position = startSeconds;
     _isPlaying = autoPlay;
-    _availableQualities = [
-      const VideoQuality.auto(
-        label: 'Auto (Otomatis Dailymotion)',
-        mode: QualityControlMode.webviewBridge,
-      ),
-    ];
     _selectedQuality = _availableQualities.first;
+    _detectedHeight = null;
+    _detectedWidth = null;
     notifyListeners();
-
-    // Fallback if player API is slow to respond with resolutions
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (_isDisposed || _availableQualities.length > 1) return;
-      _updateQualitiesFromBridge(['1080', '720', '480', '380', '240']);
-    });
 
     if (!_isSupportedMobilePlatform) {
       return;
@@ -105,7 +110,19 @@ class DailymotionPlayerController extends ChangeNotifier {
       final targetUri = _resolveTargetUri(url, autoPlay: autoPlay, startSeconds: startSeconds);
 
       if (_webViewController == null) {
-        final controller = WebViewController()
+        late final PlatformWebViewControllerCreationParams params;
+        if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+          params = WebKitWebViewControllerCreationParams(
+            allowsInlineMediaPlayback: true,
+            mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+          );
+        } else if (WebViewPlatform.instance is AndroidWebViewPlatform) {
+          params = AndroidWebViewControllerCreationParams();
+        } else {
+          params = const PlatformWebViewControllerCreationParams();
+        }
+
+        final controller = WebViewController.fromPlatformCreationParams(params)
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
           ..setUserAgent(
             'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
@@ -138,9 +155,18 @@ class DailymotionPlayerController extends ChangeNotifier {
             },
           );
 
+        final platform = controller.platform;
+        if (platform is AndroidWebViewController) {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        }
+
         await controller.loadRequest(targetUri);
         _webViewController = controller;
       } else {
+        final platform = _webViewController!.platform;
+        if (platform is AndroidWebViewController) {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        }
         await _webViewController!.loadRequest(targetUri);
       }
       notifyListeners();
@@ -284,8 +310,26 @@ class DailymotionPlayerController extends ChangeNotifier {
                 }
               } catch(e) {}
             }
-            setInterval(pollDailymotionQualities, 1500);
-            pollDailymotionQualities();
+            // 4. Track video resolution
+            function reportDailymotionResolution() {
+              if (video && video.videoHeight > 0) {
+                if (video.__nobarLastH !== video.videoHeight || video.__nobarLastW !== video.videoWidth) {
+                  video.__nobarLastH = video.videoHeight;
+                  video.__nobarLastW = video.videoWidth;
+                  if (window.NobarDailymotionPlayer) {
+                    window.NobarDailymotionPlayer.postMessage(JSON.stringify({
+                      event: 'resolution',
+                      height: video.videoHeight,
+                      width: video.videoWidth
+                    }));
+                  }
+                }
+              }
+            }
+            video.addEventListener('loadedmetadata', reportDailymotionResolution);
+            video.addEventListener('resize', reportDailymotionResolution);
+            setInterval(reportDailymotionResolution, 1000);
+            reportDailymotionResolution();
           }
         }
 
@@ -326,6 +370,15 @@ class DailymotionPlayerController extends ChangeNotifier {
               _duration = dur;
               notifyListeners();
               onDurationChanged?.call(_duration);
+            }
+            break;
+          case 'resolution':
+            final h = (data['height'] as num?)?.toInt();
+            final w = (data['width'] as num?)?.toInt();
+            if (h != null && h > 0 && h != _detectedHeight) {
+              _detectedHeight = h;
+              _detectedWidth = w;
+              notifyListeners();
             }
             break;
           case 'qualities':
@@ -379,10 +432,18 @@ class DailymotionPlayerController extends ChangeNotifier {
     final Set<String> seen = {'auto'};
 
     for (final item in list) {
-      final str = item.toString().trim().toLowerCase();
-      if (str.isEmpty || seen.contains(str) || str == 'auto') continue;
-      seen.add(str);
-      qualities.add(VideoQuality.dailymotion(str));
+      if (item is Map) {
+        final id = item['id']?.toString() ?? item['quality']?.toString() ?? '';
+        final str = id.trim().toLowerCase();
+        if (str.isEmpty || seen.contains(str) || str == 'auto') continue;
+        seen.add(str);
+        qualities.add(VideoQuality.dailymotion(str));
+      } else {
+        final str = item.toString().trim().toLowerCase();
+        if (str.isEmpty || seen.contains(str) || str == 'auto') continue;
+        seen.add(str);
+        qualities.add(VideoQuality.dailymotion(str));
+      }
     }
 
     // Sort descending by height
@@ -397,6 +458,9 @@ class DailymotionPlayerController extends ChangeNotifier {
     onQualitiesChanged?.call(_availableQualities);
   }
 
+  @visibleForTesting
+  void handleBridgeMessageForTesting(String rawJson) => _handlePlayerBridgeMessage(rawJson);
+
   /// Sets video quality for Dailymotion player
   Future<void> setQuality(String qualityId) async {
     _selectedQuality = _availableQualities.firstWhere(
@@ -409,17 +473,41 @@ class DailymotionPlayerController extends ChangeNotifier {
     if (_webViewController != null) {
       try {
         await _webViewController!.runJavaScript('''
-          (function() {
+          (function(targetId) {
             try {
-              if (window.player && typeof window.player.setQuality === 'function') {
-                window.player.setQuality('$qualityId');
-              } else if (window.player && typeof window.player.setPlaybackQuality === 'function') {
-                window.player.setPlaybackQuality('$qualityId');
-              } else {
-                window.postMessage(JSON.stringify({ command: 'setQuality', value: '$qualityId' }), '*');
+              // 1. Try Dailymotion Player API
+              if (window.player) {
+                if (typeof window.player.setQuality === 'function') {
+                  window.player.setQuality(targetId);
+                  return;
+                }
+                if (typeof window.player.setPlaybackQuality === 'function') {
+                  window.player.setPlaybackQuality(targetId);
+                  return;
+                }
+              }
+
+              // 2. Try window.postMessage for embedded player
+              window.postMessage(JSON.stringify({ command: 'setQuality', value: targetId }), '*');
+
+              // 3. Check quality buttons in player DOM
+              var selectors = [
+                '.dmp_QualityItem',
+                '[class*="quality-item"]',
+                '[class*="quality_item"]',
+                '[data-quality]'
+              ];
+              var items = document.querySelectorAll(selectors.join(','));
+              for (var i = 0; i < items.length; i++) {
+                var el = items[i];
+                var val = (el.getAttribute('data-quality') || el.textContent || '').toLowerCase().trim();
+                if (val === targetId || val.indexOf(targetId) !== -1) {
+                  el.click();
+                  return;
+                }
               }
             } catch(e) {}
-          })();
+          })('$qualityId');
         ''');
       } catch (_) {}
     }
@@ -429,10 +517,39 @@ class DailymotionPlayerController extends ChangeNotifier {
     _isPlaying = true;
     notifyListeners();
     if (_webViewController != null) {
+      final platform = _webViewController!.platform;
+      if (platform is AndroidWebViewController) {
+        try {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        } catch (_) {}
+      }
       try {
-        await _webViewController!.runJavaScript(
-          "var v = document.querySelector('video'); if (v) v.play();",
-        );
+        await _webViewController!.runJavaScript('''
+          (function() {
+            var videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+              videos.forEach(function(v) {
+                var p = v.play();
+                if (p !== undefined) {
+                  p.catch(function(e) {
+                    console.log('[Nobarin Dailymotion] play error:', e);
+                    try {
+                      if (window.player && typeof window.player.play === 'function') {
+                        window.player.play();
+                      }
+                    } catch (_) {}
+                  });
+                }
+              });
+            } else {
+              try {
+                if (window.player && typeof window.player.play === 'function') {
+                  window.player.play();
+                }
+              } catch (_) {}
+            }
+          })();
+        ''');
       } catch (_) {}
     }
   }
@@ -442,9 +559,19 @@ class DailymotionPlayerController extends ChangeNotifier {
     notifyListeners();
     if (_webViewController != null) {
       try {
-        await _webViewController!.runJavaScript(
-          "var v = document.querySelector('video'); if (v) v.pause();",
-        );
+        await _webViewController!.runJavaScript('''
+          (function() {
+            var videos = document.querySelectorAll('video');
+            videos.forEach(function(v) {
+              v.pause();
+            });
+            try {
+              if (window.player && typeof window.player.pause === 'function') {
+                window.player.pause();
+              }
+            } catch (_) {}
+          })();
+        ''');
       } catch (_) {}
     }
   }

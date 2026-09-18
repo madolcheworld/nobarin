@@ -109,11 +109,16 @@ class UnifiedPlayerController extends ChangeNotifier {
     return false;
   }
 
+  /// Checks whether a given URL or path points to a local device file
+  static bool isLocalFilePath(String url) {
+    final trimmed = url.trim();
+    return trimmed.startsWith('/') ||
+        trimmed.startsWith('file://') ||
+        RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed);
+  }
+
   /// Whether current media is playing directly from a local device file
-  bool get isLocalFile =>
-      _mediaUrl.startsWith('/') ||
-      _mediaUrl.startsWith('file://') ||
-      RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(_mediaUrl);
+  bool get isLocalFile => isLocalFilePath(_mediaUrl);
 
   /// Whether current media is an active P2P direct stream or loopback stream
   bool get isP2PStream =>
@@ -139,6 +144,9 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
 
     if (_mediaType == 'dailymotion') {
+      if (_dailymotionController?.detectedHeight != null) {
+        return 'Auto (${_dailymotionController!.detectedHeight}p)';
+      }
       return _dailymotionController?.selectedQuality?.shortLabel ?? 'Auto';
     }
 
@@ -743,10 +751,13 @@ class UnifiedPlayerController extends ChangeNotifier {
       _availableQualities = _bstationController?.availableQualities.isNotEmpty == true
           ? _bstationController!.availableQualities
           : [
-              const VideoQuality.auto(),
-              VideoQuality.bstation(id: '720', label: '720p (HD)', height: 720),
-              VideoQuality.bstation(id: '480', label: '480p (Standar)', height: 480),
-              VideoQuality.bstation(id: '360', label: '360p (Hemat)', height: 360),
+              const VideoQuality.auto(
+                label: 'Auto (Otomatis Bstation)',
+                mode: QualityControlMode.webviewBridge,
+              ),
+              VideoQuality.bstation(id: '720', label: '720p HD', height: 720),
+              VideoQuality.bstation(id: '480', label: '480p Standar', height: 480),
+              VideoQuality.bstation(id: '360', label: '360p Hemat', height: 360),
             ];
       _selectedQuality =
           _bstationController?.selectedQuality ?? _availableQualities.first;
@@ -786,11 +797,14 @@ class UnifiedPlayerController extends ChangeNotifier {
       _availableQualities = _dailymotionController?.availableQualities.isNotEmpty == true
           ? _dailymotionController!.availableQualities
           : [
-              const VideoQuality.auto(),
+              const VideoQuality.auto(
+                label: 'Auto (Otomatis Dailymotion)',
+                mode: QualityControlMode.webviewBridge,
+              ),
               VideoQuality.dailymotion('1080'),
               VideoQuality.dailymotion('720'),
               VideoQuality.dailymotion('480'),
-              VideoQuality.dailymotion('380'),
+              VideoQuality.dailymotion('360'),
               VideoQuality.dailymotion('240'),
             ];
       _selectedQuality =

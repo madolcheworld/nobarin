@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../models/video_quality.dart';
 
 /// Controller for Bstation / Bilibili player via WebViewController & HTML5 video bridge
@@ -16,7 +18,7 @@ class BstationPlayerController extends ChangeNotifier {
   bool _isDisposed = false;
 
   // Video Quality state for Bstation
-  final List<VideoQuality> _availableQualities = [
+  List<VideoQuality> _availableQualities = [
     const VideoQuality.auto(
       label: 'Auto (Otomatis Bstation)',
       mode: QualityControlMode.webviewBridge,
@@ -28,6 +30,10 @@ class BstationPlayerController extends ChangeNotifier {
   VideoQuality? _selectedQuality;
   int? _detectedHeight;
   int? _detectedWidth;
+
+  BstationPlayerController() {
+    _selectedQuality = _availableQualities.first;
+  }
 
   void Function(double position)? onPositionChanged;
   void Function(double duration)? onDurationChanged;
@@ -77,7 +83,19 @@ class BstationPlayerController extends ChangeNotifier {
       final targetUri = _resolveTargetUri(url, autoPlay: autoPlay);
 
       if (_webViewController == null) {
-        final controller = WebViewController()
+        late final PlatformWebViewControllerCreationParams params;
+        if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+          params = WebKitWebViewControllerCreationParams(
+            allowsInlineMediaPlayback: true,
+            mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+          );
+        } else if (WebViewPlatform.instance is AndroidWebViewPlatform) {
+          params = AndroidWebViewControllerCreationParams();
+        } else {
+          params = const PlatformWebViewControllerCreationParams();
+        }
+
+        final controller = WebViewController.fromPlatformCreationParams(params)
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
           ..setUserAgent(
             'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
@@ -110,9 +128,18 @@ class BstationPlayerController extends ChangeNotifier {
             },
           );
 
+        final platform = controller.platform;
+        if (platform is AndroidWebViewController) {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        }
+
         await controller.loadRequest(targetUri);
         _webViewController = controller;
       } else {
+        final platform = _webViewController!.platform;
+        if (platform is AndroidWebViewController) {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        }
         await _webViewController!.loadRequest(targetUri);
       }
       notifyListeners();
@@ -269,12 +296,49 @@ class BstationPlayerController extends ChangeNotifier {
             }
             video.addEventListener('loadedmetadata', reportBstationResolution);
             video.addEventListener('resize', reportBstationResolution);
-            setInterval(reportBstationResolution, 1000);
-            reportBstationResolution();
+            // 4. Track available qualities from page
+            function reportBstationQualities() {
+              try {
+                var detected = [];
+                // Method A: Bilibili __playinfo__ global
+                if (window.__playinfo__ && window.__playinfo__.data && Array.isArray(window.__playinfo__.data.accept_quality)) {
+                  var qMap = { 120: '4K', 116: '1080p 60fps', 80: '1080p HD', 64: '720p HD', 32: '480p Standar', 16: '360p Hemat' };
+                  var hMap = { 120: 2160, 116: 1080, 80: 1080, 64: 720, 32: 480, 16: 360 };
+                  var acc = window.__playinfo__.data.accept_quality;
+                  for (var j = 0; j < acc.length; j++) {
+                    var code = acc[j];
+                    if (hMap[code]) {
+                      detected.push({ id: String(hMap[code]), height: hMap[code], label: qMap[code] || (hMap[code] + 'p') });
+                    }
+                  }
+                }
+                // Method B: Quality menu items in DOM
+                if (detected.length === 0) {
+                  var qItems = document.querySelectorAll('.bpx-player-ctrl-quality-menu-item, .bstar-web-player__quality-item, [class*="quality-item"]');
+                  qItems.forEach(function(item) {
+                    var text = (item.textContent || '').trim();
+                    var val = (item.getAttribute('data-quality') || item.getAttribute('data-value') || '').trim();
+                    var match = text.match(/(\\d{3,4})[pP]?/);
+                    var h = match ? parseInt(match[1], 10) : parseInt(val, 10);
+                    if (h && !isNaN(h) && h > 0) {
+                      detected.push({ id: String(h), height: h, label: text || (h + 'p') });
+                    }
+                  });
+                }
+                if (detected.length > 0 && window.NobarBstationPlayer) {
+                  window.NobarBstationPlayer.postMessage(JSON.stringify({
+                    event: 'qualities',
+                    qualities: detected
+                  }));
+                }
+              } catch (e) {}
+            }
+            setInterval(reportBstationQualities, 3000);
+            reportBstationQualities();
           }
         }
 
-        // 4. Continuously eliminate app-download modals, dialogs, and popups
+        // 5. Continuously eliminate app-download modals, dialogs, and popups
         function cleanBstationClutter() {
           try {
             var unwanted = document.querySelectorAll(
@@ -341,6 +405,23 @@ class BstationPlayerController extends ChangeNotifier {
               notifyListeners();
             }
             break;
+          case 'qualities':
+            final rawList = data['qualities'];
+            if (rawList is List && rawList.isNotEmpty) {
+              _updateQualitiesFromBridge(rawList);
+            }
+            break;
+          case 'qualitychange':
+            final curQ = data['quality']?.toString();
+            if (curQ != null && curQ.isNotEmpty) {
+              _selectedQuality = _availableQualities.firstWhere(
+                (q) => q.id == curQ,
+                orElse: () => VideoQuality.bstation(id: curQ, label: '${curQ}p'),
+              );
+              notifyListeners();
+              onQualitySelectedChanged?.call(_selectedQuality!);
+            }
+            break;
           case 'play':
             if (!_isPlaying) {
               _isPlaying = true;
@@ -355,6 +436,9 @@ class BstationPlayerController extends ChangeNotifier {
               onPlayingChanged?.call(false);
             }
             break;
+          case 'play_error':
+            debugPrint('[BstationPlayer] Play error from JS: ${data['name']} - ${data['message']}');
+            break;
           case 'ended':
             _isPlaying = false;
             notifyListeners();
@@ -364,6 +448,53 @@ class BstationPlayerController extends ChangeNotifier {
       }
     } catch (_) {}
   }
+
+  void _updateQualitiesFromBridge(List<dynamic> rawList) {
+    final detected = <VideoQuality>[
+      const VideoQuality.auto(
+        label: 'Auto (Otomatis Bstation)',
+        mode: QualityControlMode.webviewBridge,
+      ),
+    ];
+    for (final item in rawList) {
+      if (item is Map) {
+        final id = item['id']?.toString();
+        final label = item['label']?.toString() ?? '${id}p';
+        final height = (item['height'] as num?)?.toInt();
+        if (id != null && id.isNotEmpty && id != 'auto') {
+          if (!detected.any((q) => q.id == id)) {
+            detected.add(VideoQuality.bstation(
+              id: id,
+              label: label,
+              height: height,
+            ));
+          }
+        }
+      } else if (item is String || item is num) {
+        final id = item.toString();
+        if (id != 'auto' && !detected.any((q) => q.id == id)) {
+          final h = int.tryParse(id);
+          detected.add(VideoQuality.bstation(
+            id: id,
+            label: h != null ? '${h}p' : id,
+            height: h,
+          ));
+        }
+      }
+    }
+    // Sort descending by height (excluding auto)
+    detected.sort((a, b) {
+      if (a.isAuto) return -1;
+      if (b.isAuto) return 1;
+      return (b.height ?? 0).compareTo(a.height ?? 0);
+    });
+    _availableQualities = detected;
+    notifyListeners();
+    onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
+  }
+
+  @visibleForTesting
+  void handleBridgeMessageForTesting(String rawJson) => _handlePlayerBridgeMessage(rawJson);
 
   /// Sets video quality for Bstation player
   Future<void> setQuality(String qualityId) async {
@@ -379,29 +510,80 @@ class BstationPlayerController extends ChangeNotifier {
         await _webViewController!.runJavaScript('''
           (function(targetId) {
             try {
-              // 1. Check quality buttons in Bstation web player
+              var codeMap = {
+                '1080': 80,
+                '720': 64,
+                '480': 32,
+                '360': 16,
+                'auto': -1
+              };
+              var qCode = codeMap[targetId] || parseInt(targetId, 10) || 0;
+
+              // 1. Try to open quality menu if closed (for Bstation / Bilibili web)
+              var menuTriggers = [
+                '.bstar-web-player__quality-btn',
+                '.bpx-player-ctrl-quality',
+                '.player-mobile-control-quality',
+                '[class*="quality-btn"]',
+                '[class*="ctrl-quality"]'
+              ];
+              for (var m = 0; m < menuTriggers.length; m++) {
+                var trigger = document.querySelector(menuTriggers[m]);
+                if (trigger) {
+                  trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                }
+              }
+
+              // 2. Check quality buttons in Bstation web player
               var selectors = [
+                '.bpx-player-ctrl-quality-menu-item',
                 '.bstar-web-player__quality-item',
                 '.player-mobile-control-quality-item',
+                '[class*="quality-menu-item"]',
                 '[class*="quality-item"]',
                 '[class*="quality_item"]',
                 '.quality-wrap li',
-                '[data-quality]'
+                '[data-quality]',
+                '[data-value]'
               ];
               var items = document.querySelectorAll(selectors.join(','));
               for (var i = 0; i < items.length; i++) {
                 var el = items[i];
-                var text = (el.textContent || '').toLowerCase();
-                var val = el.getAttribute('data-quality') || '';
-                if (val === targetId || text.indexOf(targetId) !== -1) {
+                var text = (el.textContent || '').toLowerCase().trim();
+                var val = (el.getAttribute('data-quality') || el.getAttribute('data-value') || '').trim();
+
+                var isMatch = false;
+                if (targetId === 'auto') {
+                  if (val === 'auto' || val === '-1' || text.indexOf('auto') !== -1 || text.indexOf('otomatis') !== -1 || text.indexOf('自动') !== -1) {
+                    isMatch = true;
+                  }
+                } else {
+                  if (val === targetId || (qCode > 0 && val === String(qCode)) || text.indexOf(targetId) !== -1) {
+                    isMatch = true;
+                  }
+                }
+
+                if (isMatch) {
                   el.click();
                   return;
                 }
               }
 
-              // 2. Try bilibili player instance if available
-              if (window.player && typeof window.player.switchQuality === 'function') {
-                window.player.switchQuality(parseInt(targetId, 10));
+              // 3. Try bilibili / bstation player instance if available
+              if (window.player) {
+                if (qCode > 0) {
+                  if (typeof window.player.requestQuality === 'function') {
+                    window.player.requestQuality(qCode);
+                    return;
+                  }
+                  if (typeof window.player.switchQuality === 'function') {
+                    window.player.switchQuality(qCode);
+                    return;
+                  }
+                }
+                if (typeof window.player.switchQuality === 'function') {
+                  window.player.switchQuality(parseInt(targetId, 10));
+                }
               }
             } catch (e) {}
           })('$qualityId');
@@ -414,10 +596,40 @@ class BstationPlayerController extends ChangeNotifier {
     _isPlaying = true;
     notifyListeners();
     if (_webViewController != null) {
+      final platform = _webViewController!.platform;
+      if (platform is AndroidWebViewController) {
+        try {
+          await platform.setMediaPlaybackRequiresUserGesture(false);
+        } catch (_) {}
+      }
       try {
-        await _webViewController!.runJavaScript(
-          "var v = document.querySelector('video'); if (v) v.play();",
-        );
+        await _webViewController!.runJavaScript('''
+          (function() {
+            var videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+              videos.forEach(function(v) {
+                var p = v.play();
+                if (p !== undefined) {
+                  p.catch(function(e) {
+                    console.log('[Nobarin Bstation] play error: ' + (e.name || '') + ' - ' + (e.message || ''));
+                    if (window.NobarBstationPlayer) {
+                      window.NobarBstationPlayer.postMessage(JSON.stringify({
+                        event: 'play_error',
+                        name: e.name || 'Error',
+                        message: e.message || String(e)
+                      }));
+                    }
+                    var playBtn = document.querySelector('.player-mobile-play, .bstar-web-player__play-btn, [class*="play-btn"], [class*="play-icon"]');
+                    if (playBtn) playBtn.click();
+                  });
+                }
+              });
+            } else {
+              var playBtn = document.querySelector('.player-mobile-play, .bstar-web-player__play-btn, [class*="play-btn"], [class*="play-icon"]');
+              if (playBtn) playBtn.click();
+            }
+          })();
+        ''');
       } catch (_) {}
     }
   }
@@ -427,9 +639,14 @@ class BstationPlayerController extends ChangeNotifier {
     notifyListeners();
     if (_webViewController != null) {
       try {
-        await _webViewController!.runJavaScript(
-          "var v = document.querySelector('video'); if (v) v.pause();",
-        );
+        await _webViewController!.runJavaScript('''
+          (function() {
+            var videos = document.querySelectorAll('video');
+            videos.forEach(function(v) {
+              v.pause();
+            });
+          })();
+        ''');
       } catch (_) {}
     }
   }
