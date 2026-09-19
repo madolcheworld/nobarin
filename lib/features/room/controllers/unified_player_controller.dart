@@ -268,6 +268,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   void _initMediaKit() {
     try {
       _mkPlayer = Player();
+      _mkPlayer!.setVolume(_volume * 100);
       _mkVideoController = VideoController(_mkPlayer!);
 
       _subscriptions.add(_mkPlayer!.stream.position.listen((pos) {
@@ -563,6 +564,10 @@ class UnifiedPlayerController extends ChangeNotifier {
           value.playerState != PlayerState.unknown &&
           value.playerState != PlayerState.cued) {
         _isPlaying = playing;
+        if (playing && !_isMuted) {
+          _ytController?.unMute();
+          _ytController?.setVolume((_volume * 100).round());
+        }
         notifyListeners();
         onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
       }
@@ -731,6 +736,10 @@ class UnifiedPlayerController extends ChangeNotifier {
             startSeconds: startSeconds > 0 ? startSeconds : null,
           );
           _isPlaying = true;
+          if (!_isMuted) {
+            await _ytController!.unMute();
+            await _ytController!.setVolume((_volume * 100).round());
+          }
         } else {
           await _ytController!.cueVideoById(
             videoId: videoId,
@@ -784,6 +793,9 @@ class UnifiedPlayerController extends ChangeNotifier {
           startSeconds: startSeconds,
         );
         _isPlaying = autoPlay;
+        if (!_isMuted) {
+          await _bstationController!.setVolume(_volume);
+        }
       } catch (e) {
         debugPrint('[UnifiedPlayerController] Bstation load error: $e');
         _errorMessage = 'Gagal memuat Bstation video: $e';
@@ -832,6 +844,9 @@ class UnifiedPlayerController extends ChangeNotifier {
           startSeconds: startSeconds,
         );
         _isPlaying = autoPlay;
+        if (!_isMuted) {
+          await _dailymotionController!.setVolume(_volume);
+        }
       } catch (e) {
         debugPrint('[UnifiedPlayerController] Dailymotion load error: $e');
         _errorMessage = 'Gagal memuat Dailymotion video: $e';
@@ -872,6 +887,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
     } else if (_mkPlayer != null) {
       try {
+        await _mkPlayer!.setVolume(_isMuted ? 0 : _volume * 100);
         await _mkPlayer!.open(Media(url), play: autoPlay);
         if (startSeconds > 0) {
           await _mkPlayer!.seek(

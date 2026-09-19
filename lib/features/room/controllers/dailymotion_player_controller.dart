@@ -243,6 +243,8 @@ class DailymotionPlayerController extends ChangeNotifier {
             video.__nobarAttached = true;
 
             ${startSeconds > 0 ? "video.currentTime = $startSeconds;" : ""}
+            video.volume = $_volume;
+            video.muted = ${_isMuted ? "true" : "false"};
             ${autoPlay ? "video.play().catch(function(){});" : ""}
 
             video.addEventListener('timeupdate', function() {

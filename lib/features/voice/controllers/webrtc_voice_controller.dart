@@ -138,11 +138,44 @@ class WebRtcVoiceController extends ChangeNotifier {
   }
 
   static Future<void> _defaultAudioRouteHandler(bool enable) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (kIsWeb) return;
     try {
-      await Helper.setSpeakerphoneOn(enable);
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        // Configure Android audio for Hi-Fi multimedia & watch-party:
+        // 1. manageAudioFocus: false ensures WebRTC NEVER steals audio focus or ducks the video media player.
+        // 2. AndroidAudioMode.normal keeps full 48kHz stereo media fidelity and disables telephony hardware AEC
+        //    which causes video audio to sound "kresek-kresek" (crackly/distorted) and "kecil" (ducked/muffled).
+        // 3. AndroidAudioStreamType.music mixes WebRTC voice chat seamlessly into STREAM_MUSIC alongside video audio.
+        await Helper.setAndroidAudioConfiguration(
+          AndroidAudioConfiguration(
+            manageAudioFocus: false,
+            androidAudioMode: AndroidAudioMode.normal,
+            androidAudioFocusMode: AndroidAudioFocusMode.gainTransientMayDuck,
+            androidAudioStreamType: AndroidAudioStreamType.music,
+            androidAudioAttributesUsageType:
+                AndroidAudioAttributesUsageType.media,
+            androidAudioAttributesContentType:
+                AndroidAudioAttributesContentType.movie,
+            forceHandleAudioRouting: false,
+          ),
+        );
+        await Helper.setSpeakerphoneOn(enable);
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await Helper.setAppleAudioConfiguration(
+          AppleAudioConfiguration(
+            appleAudioCategory: AppleAudioCategory.playAndRecord,
+            appleAudioCategoryOptions: {
+              AppleAudioCategoryOption.mixWithOthers,
+              AppleAudioCategoryOption.defaultToSpeaker,
+              AppleAudioCategoryOption.allowBluetooth,
+              AppleAudioCategoryOption.allowBluetoothA2DP,
+            },
+            appleAudioMode: AppleAudioMode.moviePlayback,
+          ),
+        );
+      }
     } catch (e) {
-      debugPrint('[WebRtcVoiceController] Helper.setSpeakerphoneOn note: $e');
+      debugPrint('[WebRtcVoiceController] Audio route configuration note: $e');
     }
   }
 
