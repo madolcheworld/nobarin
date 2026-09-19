@@ -93,7 +93,8 @@ class RoomController extends ChangeNotifier {
     if (_state.room.hostName != null &&
         _state.room.hostName!.isNotEmpty &&
         _state.room.hostName != 'Host' &&
-        _state.room.hostName == _currentUser.username) {
+        _state.room.hostName!.trim().toLowerCase() ==
+            _currentUser.username.trim().toLowerCase()) {
       return true;
     }
 
@@ -108,7 +109,8 @@ class RoomController extends ChangeNotifier {
       }
       if (_detectedHostName != null &&
           _detectedHostName != 'Host' &&
-          _detectedHostName != _currentUser.username) {
+          _detectedHostName!.trim().toLowerCase() !=
+              _currentUser.username.trim().toLowerCase()) {
         return false;
       }
       if (_currentUser.username == 'Host') {

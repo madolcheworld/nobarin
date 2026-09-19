@@ -267,6 +267,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         supabase: supabase,
         sharedChannel: _signalingChannel,
         iceConfiguration: ApiConstants.rtcIceConfiguration,
+        duckingConfig: const AudioDuckingConfig.production(),
       );
 
       _voiceController!.connect();
@@ -1028,11 +1029,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             }
 
             // Mobile Portrait Layout: Top video, Middle controls (including Mic), Bottom Unified Social Hub
-            return Stack(
+            return Column(
               children: [
-                Column(
+                // Top Video or Screen Share with scoped Floating Reaction Overlay
+                Stack(
                   children: [
-                    // Top Video or Screen Share
                     if (_screenShareController?.isScreenSharingActive == true)
                       ScreenShareView(
                         key: _screenShareKey,
@@ -1051,36 +1052,36 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         title: currentRoom.title,
                         showTopBar: false,
                       ),
-
-                    // Controls Bar (Media + VoIP Voice Mic controls)
-                    RoomControlsBar(
-                      syncController: _syncController!,
-                      player: _player,
-                      roomController: _roomController!,
-                      queueController: _queueController,
-                      screenShareController: _screenShareController,
-                      voiceController: _voiceController,
-                      onOpenMediaPicker: _openMediaPicker,
-                      onOpenQueue: _openQueueSheet,
-                    ),
-
-                    // Unified Social Hub (fills rest of screen right down to bottom)
-                    Expanded(
-                      child: _buildSocialHub(
-                        currentRoom: currentRoom,
-                        participants: participants,
-                        speakingIds: speakingIds,
-                        mutedIds: mutedIds,
+                    if (_chatController != null)
+                      Positioned.fill(
+                        child: FloatingReactionOverlay(
+                          chatController: _chatController!,
+                        ),
                       ),
-                    ),
                   ],
                 ),
-                if (_chatController != null)
-                  Positioned.fill(
-                    child: FloatingReactionOverlay(
-                      chatController: _chatController!,
-                    ),
+
+                // Controls Bar (Media + VoIP Voice Mic controls)
+                RoomControlsBar(
+                  syncController: _syncController!,
+                  player: _player,
+                  roomController: _roomController!,
+                  queueController: _queueController,
+                  screenShareController: _screenShareController,
+                  voiceController: _voiceController,
+                  onOpenMediaPicker: _openMediaPicker,
+                  onOpenQueue: _openQueueSheet,
+                ),
+
+                // Unified Social Hub (fills rest of screen right down to bottom)
+                Expanded(
+                  child: _buildSocialHub(
+                    currentRoom: currentRoom,
+                    participants: participants,
+                    speakingIds: speakingIds,
+                    mutedIds: mutedIds,
                   ),
+                ),
               ],
             );
           },

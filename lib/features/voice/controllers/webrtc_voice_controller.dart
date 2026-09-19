@@ -6,6 +6,8 @@ import '../../../../core/network/webrtc_signaling_helper.dart';
 import '../../room/controllers/unified_player_controller.dart';
 import '../models/audio_ducking_config.dart';
 
+export '../models/audio_ducking_config.dart';
+
 enum VoiceStatus {
   disconnected,
   connecting,
@@ -98,11 +100,8 @@ class WebRtcVoiceController extends ChangeNotifier {
       'noiseSuppression': true,
       'autoGainControl': true,
       'googEchoCancellation': true,
-      'googEchoCancellation2': true,
       'googAutoGainControl': true,
-      'googAutoGainControl2': true,
       'googNoiseSuppression': true,
-      'googNoiseSuppression2': true,
       'googHighpassFilter': true,
       'googTypingNoiseDetection': true,
       'channelCount': 1,
@@ -179,8 +178,8 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
   }
 
-  /// Optimizes WebRTC SDP for Opus audio: sets FEC (packet loss recovery), DTX (silence suppression),
-  /// 64kbps bitrate, and enforces mono for optimal AEC performance.
+  /// Optimizes WebRTC SDP for Opus audio: sets 20ms ptime (halves packet loss / prevents jitter buffer underruns),
+  /// FEC (packet loss recovery), 64kbps bitrate, and enforces mono for optimal AEC performance.
   static String optimizeAudioSdp(String sdp) {
     // Find opus payload type from a=rtpmap:<pt> opus/48000
     final rtpmapRegex =
@@ -191,7 +190,7 @@ class WebRtcVoiceController extends ChangeNotifier {
 
     final fmtpRegex = RegExp('a=fmtp:$pt (.*)');
     const optimalParams =
-        'minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
+        'ptime=20;minptime=20;useinbandfec=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
 
     if (fmtpRegex.hasMatch(sdp)) {
       return sdp.replaceAllMapped(fmtpRegex, (m) {
@@ -208,9 +207,10 @@ class WebRtcVoiceController extends ChangeNotifier {
             paramMap[parts[0].trim()] = parts[1].trim();
           }
         }
-        paramMap['minptime'] = '10';
+        paramMap['ptime'] = '20';
+        paramMap['minptime'] = '20';
         paramMap['useinbandfec'] = '1';
-        paramMap['usedtx'] = '1';
+        paramMap['usedtx'] = '0';
         paramMap['stereo'] = '0';
         paramMap['sprop-stereo'] = '0';
         paramMap['maxaveragebitrate'] = '64000';
@@ -826,7 +826,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   }
 
   /// Sets or triggers local speaking status (VAD or manual push-to-talk)
-  void setLocalSpeaking(bool speaking) {
+  void setLocalSpeaking(bool speaking, {bool immediate = false}) {
     if (_isMicMuted && speaking) return;
     if (_isLocalSpeaking == speaking) return;
 
@@ -838,7 +838,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
 
     if (_duckingConfig.duckWhenSpeakingLocally) {
-      _handleAudioDucking();
+      _handleAudioDucking(immediate: immediate || !_duckingConfig.smoothTransition);
     }
 
     _sendSignalingMessage('VOICE_STATE', {
@@ -884,7 +884,7 @@ class WebRtcVoiceController extends ChangeNotifier {
                     report.values['audioLevel'] ?? report.values['energyLevel'];
                 if (val != null) {
                   final lvl = double.tryParse(val.toString()) ?? 0.0;
-                  if (lvl > 0.02) {
+                  if (lvl > 0.05) {
                     localAudioDetected = true;
                     break;
                   }
@@ -920,7 +920,7 @@ class WebRtcVoiceController extends ChangeNotifier {
                 if (val != null) {
                   hasAudioLevelReport = true;
                   final lvl = double.tryParse(val.toString()) ?? 0.0;
-                  if (lvl > 0.02) {
+                  if (lvl > 0.05) {
                     remoteSpeakingDetected = true;
                     break;
                   }
@@ -933,12 +933,12 @@ class WebRtcVoiceController extends ChangeNotifier {
             final wasSpeaking = _activeSpeakerIds.contains(peerId);
             if (remoteSpeakingDetected && !wasSpeaking) {
               _activeSpeakerIds.add(peerId);
-              _handleAudioDucking();
+              _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
               notifyListeners();
             } else if (!remoteSpeakingDetected && wasSpeaking) {
               // Remote peer stopped speaking: clear speaker state and restore ducking
               _activeSpeakerIds.remove(peerId);
-              _handleAudioDucking();
+              _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
               notifyListeners();
             }
           }
@@ -994,7 +994,8 @@ class WebRtcVoiceController extends ChangeNotifier {
 
       if (!_isDucking) {
         _isDucking = true;
-        _savedVideoVolume = playerController!.volume;
+        final vol = playerController!.volume;
+        _savedVideoVolume = vol > 0.05 ? vol : 1.0;
         notifyListeners();
       }
 
@@ -1128,7 +1129,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       _isDucking = false;
       await playerController!.setVolume(_savedVideoVolume);
     } else if (_duckingConfig.enabled) {
-      _handleAudioDucking();
+      _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
     }
     notifyListeners();
   }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../controllers/webrtc_voice_controller.dart';
-import '../models/audio_ducking_config.dart';
 
 /// Modal bottom sheet to customize Smart Audio Ducking settings
 class AudioDuckingSettingsSheet extends StatelessWidget {

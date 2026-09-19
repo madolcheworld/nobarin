@@ -47,8 +47,8 @@ class AudioDuckingConfig {
   });
 
   const AudioDuckingConfig.production({
-    this.enabled = true,
-    this.duckingFactor = 0.4,
+    this.enabled = false,
+    this.duckingFactor = 0.6,
     this.duckWhenSpeakingLocally = false,
     this.smoothTransition = true,
     this.attackDuration = const Duration(milliseconds: 150),
@@ -99,7 +99,7 @@ class AudioDuckingConfig {
           !prefs.containsKey(keySmooth)) {
         return const AudioDuckingConfig();
       }
-      final enabled = prefs.getBool(keyEnabled) ?? true;
+      final enabled = prefs.getBool(keyEnabled) ?? false;
       final factor = prefs.getDouble(keyFactor) ?? 0.4;
       final duckSelf = prefs.getBool(keyDuckSelf) ?? false;
       final smooth = prefs.getBool(keySmooth) ?? true;

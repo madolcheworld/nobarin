@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/app_haptics.dart';
 import '../controllers/chat_controller.dart';
 
 class FloatingReactionOverlay extends StatefulWidget {
@@ -22,13 +21,25 @@ class _FloatingReactionOverlayState extends State<FloatingReactionOverlay> {
   @override
   void initState() {
     super.initState();
+    widget.chatController.addListener(_onControllerChanged);
     _subscription = widget.chatController.reactionsStream.listen(_onReaction);
+  }
+
+  void _onControllerChanged() {
+    if (!mounted) return;
+    if (!widget.chatController.showFloatingReactions && _items.isNotEmpty) {
+      setState(() {
+        _items.clear();
+      });
+    }
   }
 
   @override
   void didUpdateWidget(FloatingReactionOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatController != widget.chatController) {
+      oldWidget.chatController.removeListener(_onControllerChanged);
+      widget.chatController.addListener(_onControllerChanged);
       _subscription?.cancel();
       _subscription = widget.chatController.reactionsStream.listen(_onReaction);
     }
@@ -43,14 +54,11 @@ class _FloatingReactionOverlayState extends State<FloatingReactionOverlay> {
 
   void _onReaction(FloatingReaction reaction) {
     if (!mounted) return;
+    if (!widget.chatController.showFloatingReactions) return;
 
-    // Haptic escalation based on combo
-    if (reaction.comboCount >= 8) {
-      AppHaptics.heavy();
-    } else if (reaction.comboCount >= 4) {
-      AppHaptics.medium();
-    } else {
-      AppHaptics.selection();
+    // Cap maximum concurrent items on screen (max 8) to prevent video obstruction and fps drop
+    if (_items.length >= 8) {
+      _items.removeAt(0);
     }
 
     final item = FloatingReactionItemData(
@@ -70,12 +78,17 @@ class _FloatingReactionOverlayState extends State<FloatingReactionOverlay> {
 
   @override
   void dispose() {
+    widget.chatController.removeListener(_onControllerChanged);
     _subscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.chatController.showFloatingReactions) {
+      return const SizedBox.shrink();
+    }
+
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -167,8 +180,12 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
     final width = widget.containerWidth;
     final height = widget.containerHeight;
 
-    // Base position bounded within screen margins
-    final double baseX = (item.startX * (width - 64)).clamp(16.0, width - 64.0);
+    // Base position bounded cleanly to the right-side track (avoiding subtitles & center video)
+    final double rightTrackMin =
+        (width * 0.72).clamp(16.0, math.max(16.0, width - 64.0));
+    final double rightTrackMax = math.max(rightTrackMin, width - 52.0);
+    final double baseX =
+        (item.startX * width).clamp(rightTrackMin, rightTrackMax);
 
     return AnimatedBuilder(
       animation: _controller,
@@ -177,34 +194,36 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
 
         // Vertical motion: rises smoothly with easeOutCubic
         final double curveY = Curves.easeOutCubic.transform(t);
-        final double yOffset = (height * 0.72) * curveY;
+        final double yOffset = (height * 0.70) * curveY;
 
-        // Horizontal sinusoidal sway
+        // Gentle horizontal sinusoidal sway (restricted to +/- 12px to stay in the right track)
         final double sway =
-            math.sin((t * math.pi * item.swaySpeed) + item.randomSeed) * 24.0;
-        final double currentX = baseX + sway;
+            math.sin((t * math.pi * item.swaySpeed) + item.randomSeed) * 12.0;
+        final double currentX = (baseX + sway).clamp(16.0, width - 48.0);
 
         // Gentle rotation tilt (wobble)
         final double rotation =
-            math.sin((t * math.pi * 2.5) + item.randomSeed) * 0.22;
+            math.sin((t * math.pi * 2.2) + item.randomSeed) * 0.18;
 
         // Scale: elastic pop at spawn, expands on combo, slight expansion at fade
         double scale;
         if (t < 0.18) {
           final pop = t / 0.18;
           scale = Curves.elasticOut.transform(pop) *
-              (1.0 + math.min(item.comboCount * 0.05, 0.45));
+              (1.0 + math.min(item.comboCount * 0.04, 0.35));
         } else if (t > 0.8) {
           final endP = (t - 0.8) / 0.2;
-          scale = (1.0 + math.min(item.comboCount * 0.05, 0.45)) *
-              (1.0 + endP * 0.25);
+          scale = (1.0 + math.min(item.comboCount * 0.04, 0.35)) *
+              (1.0 + endP * 0.20);
         } else {
-          scale = 1.0 + math.min(item.comboCount * 0.05, 0.45);
+          scale = 1.0 + math.min(item.comboCount * 0.04, 0.35);
         }
 
-        // Opacity: solid until 72%, then fades out to 0
-        final double opacity =
-            t < 0.72 ? 1.0 : (1.0 - ((t - 0.72) / 0.28)).clamp(0.0, 1.0);
+        // Opacity: Subtle (max 0.75) so video/subtitles behind are visible, fades out smoothly after 60%
+        const double maxOpacity = 0.75;
+        final double opacity = t < 0.60
+            ? maxOpacity
+            : (maxOpacity * (1.0 - ((t - 0.60) / 0.40))).clamp(0.0, maxOpacity);
 
         return Positioned(
           left: currentX,
@@ -226,11 +245,11 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
                     Text(
                       item.emoji,
                       style: TextStyle(
-                        fontSize: item.comboCount >= 8 ? 40 : 34,
+                        fontSize: item.comboCount >= 8 ? 36 : 30,
                         shadows: [
                           Shadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
                         ],

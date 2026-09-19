@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -42,14 +43,25 @@ class UnifiedPlayerView extends StatefulWidget {
 }
 
 class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
-  bool _showControls = true;
-  double? _draggingPosition;
+  final ValueNotifier<bool> _showControlsNotifier = ValueNotifier<bool>(true);
+  bool get _showControls => _showControlsNotifier.value;
+  set _showControls(bool val) => _showControlsNotifier.value = val;
+
+  final ValueNotifier<double?> _draggingPositionNotifier = ValueNotifier<double?>(null);
+  double? get _draggingPosition => _draggingPositionNotifier.value;
+  set _draggingPosition(double? val) => _draggingPositionNotifier.value = val;
+
+  final ValueNotifier<bool> _leftDoubleTapNotifier = ValueNotifier<bool>(false);
+  bool get _leftDoubleTapActive => _leftDoubleTapNotifier.value;
+  set _leftDoubleTapActive(bool val) => _leftDoubleTapNotifier.value = val;
+
+  final ValueNotifier<bool> _rightDoubleTapNotifier = ValueNotifier<bool>(false);
+  bool get _rightDoubleTapActive => _rightDoubleTapNotifier.value;
+  set _rightDoubleTapActive(bool val) => _rightDoubleTapNotifier.value = val;
+
   Timer? _hideControlsTimer;
   bool _lastIsPlaying = false;
-  bool _leftDoubleTapActive = false;
-  bool _rightDoubleTapActive = false;
   Timer? _doubleTapTimer;
-
 
   @override
   void initState() {
@@ -87,6 +99,10 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   void dispose() {
     _hideControlsTimer?.cancel();
     _doubleTapTimer?.cancel();
+    _showControlsNotifier.dispose();
+    _draggingPositionNotifier.dispose();
+    _leftDoubleTapNotifier.dispose();
+    _rightDoubleTapNotifier.dispose();
     widget.player.removeListener(_onPlayerChanged);
     widget.syncController.removeListener(_onSyncChanged);
     super.dispose();
@@ -140,7 +156,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   }
 
   void _startHideTimerIfNeeded({
-    Duration duration = const Duration(milliseconds: 1800),
+    Duration duration = const Duration(milliseconds: 3000),
     bool reset = false,
     bool assumePlaying = false,
   }) {
@@ -164,6 +180,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     setState(() {
       _showControls = !_showControls;
     });
+    debugPrint('[UnifiedPlayerView] _toggleControls: now $_showControls, isPlaying: ${widget.player.isPlaying}');
     if (_showControls) {
       if (widget.player.isPlaying) {
         _startHideTimerIfNeeded(reset: true);
@@ -173,7 +190,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     }
   }
 
-  Widget _buildSyncStatusBadge() {
+  Widget _buildSyncStatusBadge({bool isCompact = false}) {
     final status = widget.syncController.syncStatusLabel;
     final driftMs = (widget.syncController.currentDriftSeconds * 1000).round();
     final Color dotColor;
@@ -182,19 +199,19 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     switch (status) {
       case 'synced':
         dotColor = const Color(0xFF00E676);
-        label = 'Sinkron (${driftMs}ms)';
+        label = isCompact ? '±${driftMs}ms' : 'Sinkron (${driftMs}ms)';
         break;
       case 'adjusting':
         dotColor = const Color(0xFFFFD600);
-        label = 'Slewing (${driftMs}ms)';
+        label = isCompact ? 'Slew' : 'Slewing (${driftMs}ms)';
         break;
       case 'seeking':
         dotColor = const Color(0xFF2979FF);
-        label = 'Syncing...';
+        label = 'Syncing';
         break;
       default:
         dotColor = const Color(0xFF9E9E9E);
-        label = 'Menghubungkan';
+        label = isCompact ? '...' : 'Menghubungkan';
     }
 
     return Container(
@@ -247,6 +264,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         final bool hasMedia = widget.player.mediaUrl.isNotEmpty;
         final bool canControl = widget.syncController.canControl;
         final String? errorMsg = widget.player.errorMessage;
+        final bool isFs = widget.player.isFullscreen;
 
         Widget playerWidget;
         if (!hasMedia) {
@@ -256,6 +274,12 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           playerWidget = YoutubePlayer(
             controller: widget.player.ytController!,
             aspectRatio: 16 / 9,
+            enableFullScreenOnVerticalDrag: false,
+            autoFullScreen: false,
+            controlsBuilder: (context, isFullscreen) => PointerInterceptor(
+              intercepting: true,
+              child: _buildControlsOverlay(context, isFullscreen: isFullscreen || isFs),
+            ),
           );
         } else if (widget.player.mediaType == 'bstation' &&
             widget.player.bstationController != null) {
@@ -280,8 +304,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           playerWidget = _buildEmptyPlaceholder();
         }
 
-        final bool isFs = widget.player.isFullscreen;
-
         final Widget videoContainer = Container(
           color: Colors.black,
           child: Stack(
@@ -289,88 +311,72 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               // Video Content
               Center(child: playerWidget),
 
-              // Non-controller lock indicator badge
-              if (hasMedia && !canControl && errorMsg == null && !widget.isPipMode)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.75),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.accentYellow.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.lock_outline_rounded,
-                          size: 14,
-                          color: AppColors.accentYellow,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          'Host Control Mode',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.accentYellow,
-                          ),
-                        ),
-                      ],
-                    ),
+              // Controls Overlay for media (for non-YouTube players; YouTube renders via controlsBuilder)
+              if (hasMedia &&
+                  widget.player.mediaType != 'youtube' &&
+                  errorMsg == null &&
+                  !widget.isPipMode)
+                Positioned.fill(
+                  child: PointerInterceptor(
+                    intercepting: true,
+                    child: _buildControlsOverlay(context, isFullscreen: isFs),
                   ),
                 ),
 
-              // Drift / Speed adjustment indicator
+              // Web Autoplay Muted Indicator / Unmute Prompt Badge
               if (hasMedia &&
-                  widget.player.playbackSpeed != 1.0 &&
+                  kIsWeb &&
+                  widget.player.isMuted &&
+                  widget.player.isPlaying &&
                   errorMsg == null &&
                   !widget.isPipMode)
                 Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.sync_rounded,
-                          size: 13,
-                          color: Colors.white,
+                  bottom: _showControls ? 64 : 16,
+                  left: 16,
+                  child: PointerInterceptor(
+                    child: GestureDetector(
+                      onTap: () {
+                        AppHaptics.selection();
+                        widget.player.unmute();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Sync (${widget.player.playbackSpeed}x)',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryNeon.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.volume_off_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Suara dibisukan • Ketuk untuk bunyikan',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-
-              // Controls Overlay for media
-              if (hasMedia && errorMsg == null && !widget.isPipMode)
-                Positioned.fill(
-                  child: _buildControlsOverlay(context, isFullscreen: isFs),
                 ),
 
               // Error message overlay if playback failed
@@ -399,34 +405,51 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     BuildContext context, {
     required bool isFullscreen,
   }) {
-    final bool isFs = isFullscreen || widget.player.isFullscreen;
-    final bool canControl = widget.syncController.canControl;
-    final double pos = _draggingPosition ?? widget.player.position;
-    final double duration = widget.player.duration > 0
-        ? widget.player.duration
-        : (pos > 0 ? pos * 1.5 : 100);
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        _showControlsNotifier,
+        _draggingPositionNotifier,
+        _leftDoubleTapNotifier,
+        _rightDoubleTapNotifier,
+        widget.player,
+        widget.syncController,
+      ]),
+      builder: (context, _) {
+        final bool isFs = isFullscreen || widget.player.isFullscreen;
+        final bool canControl = widget.syncController.canControl;
+        final double pos = _draggingPosition ?? widget.player.position;
+        final double duration = widget.player.duration > 0
+            ? widget.player.duration
+            : (pos > 0 ? pos * 1.5 : 100);
 
-    return Stack(
-      fit: StackFit.expand,
+        return Stack(
+          fit: StackFit.expand,
       children: [
         // 0. Base tap and double-tap targets (Seek -10s on left, Seek +10s on right)
         Positioned.fill(
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _toggleControls,
+                  onTap: () {
+                    debugPrint('[UnifiedPlayerView] left half tapped');
+                    _toggleControls();
+                  },
                   onDoubleTap: _onDoubleTapLeft,
-                  child: const SizedBox.expand(),
+                  child: Container(color: Colors.transparent),
                 ),
               ),
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _toggleControls,
+                  onTap: () {
+                    debugPrint('[UnifiedPlayerView] right half tapped');
+                    _toggleControls();
+                  },
                   onDoubleTap: _onDoubleTapRight,
-                  child: const SizedBox.expand(),
+                  child: Container(color: Colors.transparent),
                 ),
               ),
             ],
@@ -495,6 +518,85 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                     ),
                     SizedBox(width: 4),
                     Icon(Icons.fast_forward_rounded, color: Colors.white, size: 22),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+        // 0c. Non-controller lock indicator badge
+        if (!canControl && !widget.isPipMode)
+          Positioned(
+            top: 12,
+            left: 12,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.accentYellow.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 14,
+                      color: AppColors.accentYellow,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Host Control Mode',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.accentYellow,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+        // 0d. Drift / Speed adjustment indicator
+        if (widget.player.playbackSpeed != 1.0 && !widget.isPipMode)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryNeon.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.sync_rounded,
+                      size: 13,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Sync (${widget.player.playbackSpeed}x)',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -607,12 +709,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                   ),
                                   onPressed: () {
                                     if (widget.player.isPlaying) {
+                                      _hideControlsTimer?.cancel();
+                                      setState(() => _showControls = true);
                                       widget.syncController.requestPause();
                                     } else {
                                       widget.syncController.requestPlay();
                                       _startHideTimerIfNeeded(
                                         duration: const Duration(
-                                          milliseconds: 1000,
+                                          milliseconds: 3000,
                                         ),
                                         reset: true,
                                         assumePlaying: true,
@@ -896,6 +1000,61 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                             // 1. Time Label & Quick Actions Row
                             Row(
                               children: [
+                                // Bottom bar Play / Pause button
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      widget.player.isPlaying
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      size: 22,
+                                      color: canControl
+                                          ? Colors.white
+                                          : Colors.white38,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                    tooltip: canControl
+                                        ? (widget.player.isPlaying
+                                            ? 'Pause'
+                                            : 'Play')
+                                        : 'Mode Kontrol Host (Hanya Host)',
+                                    onPressed: () {
+                                      if (!canControl) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Hanya Host yang dapat memutar atau mem-pause video.',
+                                            ),
+                                            duration: Duration(seconds: 2),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (widget.player.isPlaying) {
+                                        _hideControlsTimer?.cancel();
+                                        setState(() => _showControls = true);
+                                        widget.syncController.requestPause();
+                                      } else {
+                                        widget.syncController.requestPlay();
+                                        _startHideTimerIfNeeded(
+                                          duration: const Duration(
+                                            milliseconds: 3000,
+                                          ),
+                                          reset: true,
+                                          assumePlaying: true,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
                                 if (duration <= 0)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -928,23 +1087,28 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ),
                                   )
                                 else
-                                  Text(
-                                    '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 4,
-                                        ),
-                                      ],
+                                  Flexible(
+                                    child: Text(
+                                      '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                const SizedBox(width: 6),
                                 const Spacer(),
                                 if (widget.player.isLoaded) ...[
-                                  _buildSyncStatusBadge(),
+                                  _buildSyncStatusBadge(isCompact: !isFs),
                                   const SizedBox(width: 4),
                                 ],
                                 Material(
@@ -1136,7 +1300,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         ),
       ],
     );
-  }
+  },
+);
+}
 
   Widget _buildErrorOverlay(
     BuildContext context,

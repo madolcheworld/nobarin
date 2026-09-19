@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/utils/app_haptics.dart';
 import '../../auth/domain/user_profile.dart';
 import '../models/chat_message.dart';
 
@@ -11,6 +12,7 @@ class FloatingReaction {
   final double startX; // Normalized 0.0 to 1.0
   final int comboCount;
   final String? senderName;
+  final bool isLocal;
 
   FloatingReaction({
     required this.id,
@@ -18,6 +20,7 @@ class FloatingReaction {
     required this.startX,
     this.comboCount = 1,
     this.senderName,
+    this.isLocal = false,
   });
 }
 
@@ -41,6 +44,21 @@ class ChatController extends ChangeNotifier {
       StreamController<FloatingReaction>.broadcast();
   Stream<FloatingReaction> get reactionsStream =>
       _reactionsStreamController.stream;
+
+  bool _showFloatingReactions = true;
+  bool get showFloatingReactions => _showFloatingReactions;
+
+  void toggleFloatingReactions() {
+    _showFloatingReactions = !_showFloatingReactions;
+    notifyListeners();
+  }
+
+  void setShowFloatingReactions(bool show) {
+    if (_showFloatingReactions != show) {
+      _showFloatingReactions = show;
+      notifyListeners();
+    }
+  }
 
   final Map<String, DateTime> _recentSystemMessages = {};
 
@@ -112,6 +130,7 @@ class ChatController extends ChangeNotifier {
               rawEmoji,
               comboCount: combo,
               senderName: message.username,
+              isLocal: false,
             );
 
             // Aggregate consecutive reactions from the same user within 5 seconds
@@ -221,13 +240,17 @@ class ChatController extends ChangeNotifier {
     String emoji, {
     int comboCount = 1,
     String? senderName,
+    bool isLocal = false,
   }) {
+    if (!_showFloatingReactions) return;
     final reaction = FloatingReaction(
       id: const Uuid().v4(),
       emoji: emoji,
-      startX: 0.15 + (DateTime.now().millisecond % 70) / 100.0,
+      // Confine startX to right side track (78% - 93% width) to avoid blocking subtitles and center video
+      startX: 0.78 + (DateTime.now().millisecond % 15) / 100.0,
       comboCount: comboCount,
       senderName: senderName,
+      isLocal: isLocal,
     );
     _reactionsStreamController.add(reaction);
   }
@@ -411,10 +434,21 @@ class ChatController extends ChangeNotifier {
     _lastReactionTime = now;
 
     final combo = _localReactionCombo;
+
+    // Trigger tactile haptics only for the local user tapping the reaction
+    if (combo >= 8) {
+      AppHaptics.heavy();
+    } else if (combo >= 4) {
+      AppHaptics.medium();
+    } else {
+      AppHaptics.selection();
+    }
+
     _triggerFloatingReaction(
       emoji,
       comboCount: combo,
       senderName: currentUser.username,
+      isLocal: true,
     );
 
     // Check if we can aggregate into previous message in chat log

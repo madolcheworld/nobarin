@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
-import 'package:nobarin/features/voice/models/audio_ducking_config.dart';
 import 'package:nobarin/features/voice/presentation/audio_ducking_settings_sheet.dart';
 import 'package:nobarin/features/voice/presentation/speaking_avatar_indicator.dart';
 import 'package:nobarin/features/voice/presentation/voice_control_bar.dart';

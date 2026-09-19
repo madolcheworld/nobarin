@@ -66,7 +66,8 @@ class SyncController extends ChangeNotifier {
     if (room.hostName != null &&
         room.hostName!.isNotEmpty &&
         room.hostName != 'Host' &&
-        currentUser.username == room.hostName) {
+        currentUser.username.trim().toLowerCase() ==
+            room.hostName!.trim().toLowerCase()) {
       return true;
     }
     final bool hasExplicitHost = (room.hostId != null && room.hostId!.isNotEmpty) ||
@@ -217,6 +218,10 @@ class SyncController extends ChangeNotifier {
     _latestPayload = payload;
     _isApplyingRemoteSync = true;
 
+    debugPrint(
+      '[SyncController] Remote sync: action=${payload.action}, state=${payload.state}, pos=${payload.positionSeconds}, type=${payload.mediaType}, url=${payload.mediaUrl.isNotEmpty}',
+    );
+
     try {
       final bool isP2pStream = payload.mediaUrl.startsWith('p2p://') ||
           payload.mediaType == 'local_p2p';
@@ -326,9 +331,12 @@ class SyncController extends ChangeNotifier {
 
     final targetState = state ?? (player.isPlaying ? 'playing' : 'paused');
     final targetPos = position ?? player.position;
-    final targetType = mediaType ?? player.mediaType;
+    final targetType = mediaType ??
+        (player.mediaType.isNotEmpty ? player.mediaType : (room.currentMediaType ?? 'youtube'));
     final String defaultUrl;
-    if (room.currentMediaUrl?.startsWith('p2p://') == true) {
+    if (player.mediaUrl.isNotEmpty && !player.mediaUrl.startsWith('p2p://')) {
+      defaultUrl = player.mediaUrl;
+    } else if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
       defaultUrl = room.currentMediaUrl!;
     } else {
       defaultUrl = player.mediaUrl;

@@ -129,6 +129,34 @@ class _FullscreenReactionBarState extends State<FullscreenReactionBar>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Toggle floating reactions visibility
+                  ListenableBuilder(
+                    listenable: widget.chatController,
+                    builder: (context, _) {
+                      final isEnabled =
+                          widget.chatController.showFloatingReactions;
+                      return IconButton(
+                        icon: Icon(
+                          isEnabled
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: isEnabled
+                              ? AppColors.primaryNeon
+                              : AppColors.textMuted,
+                          size: 20,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: isEnabled
+                            ? 'Sembunyikan Reaksi Layar'
+                            : 'Tampilkan Reaksi Layar',
+                        onPressed: () {
+                          AppHaptics.light();
+                          widget.chatController.toggleFloatingReactions();
+                          _resetCollapseTimer();
+                        },
+                      );
+                    },
+                  ),
                   // Full picker launcher button
                   IconButton(
                     icon: const Icon(

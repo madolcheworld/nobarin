@@ -45,7 +45,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   double _duration = 0.0;
   double _playbackSpeed = 1.0;
   double _volume = 1.0;
-  bool _isMuted = false;
+  bool _isMuted = kIsWeb;
   bool _isDisposed = false;
   String? _errorMessage;
 
@@ -564,7 +564,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           value.playerState != PlayerState.unknown &&
           value.playerState != PlayerState.cued) {
         _isPlaying = playing;
-        if (playing && !_isMuted) {
+        if (playing && !_isMuted && !kIsWeb) {
           _ytController?.unMute();
           _ytController?.setVolume((_volume * 100).round());
         }
@@ -720,11 +720,13 @@ class UnifiedPlayerController extends ChangeNotifier {
       try {
         if (_ytController == null) {
           _ytController = YoutubePlayerController(
-            params: const YoutubePlayerParams(
-              showControls: true,
+            params: YoutubePlayerParams(
+              showControls: false,
               showFullscreenButton: false,
-              mute: false,
+              mute: kIsWeb,
               enableJavaScript: true,
+              pointerEvents: PointerEvents.none,
+              enableKeyboard: false,
             ),
           );
           _setupYoutubeListeners();
@@ -736,7 +738,7 @@ class UnifiedPlayerController extends ChangeNotifier {
             startSeconds: startSeconds > 0 ? startSeconds : null,
           );
           _isPlaying = true;
-          if (!_isMuted) {
+          if (!_isMuted && !kIsWeb) {
             await _ytController!.unMute();
             await _ytController!.setVolume((_volume * 100).round());
           }
@@ -930,6 +932,15 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[UnifiedPlayerController] play error: $e');
+      if (kIsWeb && _mediaType == 'youtube') {
+        try {
+          await _ytController?.mute();
+          _isMuted = true;
+          await _ytController?.playVideo();
+          notifyListeners();
+          return;
+        } catch (_) {}
+      }
       _isPlaying = false;
       notifyListeners();
     }
@@ -1048,6 +1059,31 @@ class UnifiedPlayerController extends ChangeNotifier {
       } catch (e) {
         debugPrint('[UnifiedPlayerController] toggleMute error: $e');
       }
+    }
+  }
+
+  /// Explicitly unmutes the player, restoring volume.
+  Future<void> unmute() async {
+    _isMuted = false;
+    if (_volume <= 0.05) _volume = 1.0;
+    notifyListeners();
+
+    try {
+      if (_mediaType == 'youtube') {
+        await _ytController?.unMute();
+        await _ytController?.setVolume((_volume * 100).round());
+      } else if (_mediaType == 'bstation') {
+        await _bstationController?.setVolume(_volume);
+      } else if (_mediaType == 'dailymotion') {
+        await _dailymotionController?.setVolume(_volume);
+      } else if (kIsWeb && _webVideoAdapter != null) {
+        await _webVideoAdapter?.setMuted(false);
+        await _webVideoAdapter?.setVolume(_volume);
+      } else {
+        await _mkPlayer?.setVolume(_volume * 100);
+      }
+    } catch (e) {
+      debugPrint('[UnifiedPlayerController] unmute error: $e');
     }
   }
 
