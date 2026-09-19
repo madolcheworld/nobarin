@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,7 @@ import '../../pip/services/pip_service.dart';
 import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
 import '../../screenshare/presentation/widgets/screen_share_view.dart';
 import '../../voice/controllers/webrtc_voice_controller.dart';
+import '../controllers/p2p_file_signaling_controller.dart';
 import '../controllers/queue_controller.dart';
 import '../controllers/room_controller.dart';
 import '../controllers/sync_controller.dart';
@@ -67,6 +69,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   WebRtcVoiceController? _voiceController;
   QueueController? _queueController;
   WebRtcScreenShareController? _screenShareController;
+  P2PFileSignalingController? _p2pSignalingController;
   RealtimeChannel? _signalingChannel;
 
   @override
@@ -310,6 +313,18 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       _screenShareController!.initialize();
       _screenShareController!.addListener(_onControllerUpdated);
 
+      _p2pSignalingController = P2PFileSignalingController(
+        roomId: room.id,
+        userId: user.id,
+        userName: user.username,
+        isHost: _roomController?.isHost == true,
+        sharedChannel: _signalingChannel,
+        supabase: supabase,
+        iceConfiguration: ApiConstants.rtcIceConfiguration,
+      );
+      _p2pSignalingController!.initialize();
+      _syncController?.p2pSignalingController = _p2pSignalingController;
+
       _signalingChannel?.subscribe((status, error) {
         debugPrint(
             '[RoomScreen] Signaling channel status: $status (error: $error)');
@@ -332,8 +347,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
         final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
 
-        // If host enters room with a local file, ensure P2P hosting is active
-        if (_roomController?.isHost == true &&
+        // If host enters room with a local file on native, ensure P2P hosting is active
+        if (!kIsWeb &&
+            _roomController?.isHost == true &&
             UnifiedPlayerController.isLocalFilePath(room.currentMediaUrl!)) {
           if (!P2PFileStreamService.instance.isHosting) {
             try {
@@ -481,6 +497,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     _queueController?.dispose();
     _screenShareController?.removeListener(_onControllerUpdated);
     _screenShareController?.dispose();
+    _p2pSignalingController?.dispose();
+    _p2pSignalingController = null;
     try {
       _signalingChannel?.unsubscribe();
       _signalingChannel = null;

@@ -299,6 +299,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           playerWidget = Video(
             controller: widget.player.mkVideoController!,
             controls: NoVideoControls,
+            fit: BoxFit.contain,
           );
         } else {
           playerWidget = _buildEmptyPlaceholder();
@@ -893,7 +894,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ],
                                   ),
                                 ),
-                              if (P2PFileStreamService.instance.activeMetadata != null &&
+                              if ((P2PFileStreamService.instance.activeMetadata != null ||
+                                      widget.player.isLocalFile ||
+                                      widget.player.mediaUrl.startsWith('blob:')) &&
                                   !P2PFileStreamService.instance.isHosting) ...[
                                 const SizedBox(width: 6),
                                 Material(
@@ -904,26 +907,33 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                       final picked = await FilePicker.pickFile(
                                         type: FileType.video,
                                       );
-                                      if (picked != null &&
-                                          picked.path != null) {
-                                        final path = picked.path!;
-                                        P2PFileStreamService.instance
-                                            .setLocalOverride(path);
-                                        await widget.player.loadMedia(
-                                          'direct_url',
-                                          path,
-                                          autoPlay: widget.player.isPlaying,
-                                          startSeconds: widget.player.position,
-                                        );
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                  'Memutar salinan file lokal (Syncplay)'),
-                                              backgroundColor:
-                                                  AppColors.primaryNeon,
-                                            ),
+                                      if (picked != null) {
+                                        final path = kIsWeb
+                                            ? (picked.xFile.path.isNotEmpty
+                                                ? picked.xFile.path
+                                                : picked.uri.toString())
+                                            : (picked.path ?? '');
+                                        if (path.isNotEmpty) {
+                                          if (!kIsWeb) {
+                                            P2PFileStreamService.instance
+                                                .setLocalOverride(path);
+                                          }
+                                          await widget.player.loadMedia(
+                                            'direct_url',
+                                            path,
+                                            autoPlay: widget.player.isPlaying,
+                                            startSeconds: widget.player.position,
                                           );
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Memutar salinan file lokal (Syncplay)'),
+                                                backgroundColor:
+                                                    AppColors.primaryNeon,
+                                              ),
+                                            );
+                                          }
                                         }
                                       }
                                     },
@@ -1364,12 +1374,74 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
-                  if (canControl) ...[
+                  if (widget.player.isLocalFile ||
+                      widget.player.mediaUrl.startsWith('blob:')) ...[
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryNeon,
                         foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                      ),
+                      onPressed: () async {
+                        final picked = await FilePicker.pickFile(
+                          type: FileType.video,
+                        );
+                        if (picked != null) {
+                          final path = kIsWeb
+                              ? (picked.xFile.path.isNotEmpty
+                                  ? picked.xFile.path
+                                  : picked.uri.toString())
+                              : (picked.path ?? '');
+                          if (path.isNotEmpty) {
+                            if (!kIsWeb) {
+                              P2PFileStreamService.instance
+                                  .setLocalOverride(path);
+                            }
+                            await widget.player.loadMedia(
+                              'direct_url',
+                              path,
+                              autoPlay: widget.player.isPlaying,
+                              startSeconds: widget.player.position,
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Memutar salinan file lokal (Syncplay)'),
+                                  backgroundColor: AppColors.primaryNeon,
+                                ),
+                              );
+                            }
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.folder_open_rounded, size: 14),
+                      label: const Text(
+                        'Pilih File Lokal Saya',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                  if (canControl) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: (widget.player.isLocalFile ||
+                                widget.player.mediaUrl.startsWith('blob:'))
+                            ? AppColors.surfaceElevated
+                            : AppColors.primaryNeon,
+                        foregroundColor: (widget.player.isLocalFile ||
+                                widget.player.mediaUrl.startsWith('blob:'))
+                            ? Colors.white
+                            : Colors.black,
+                        side: (widget.player.isLocalFile ||
+                                widget.player.mediaUrl.startsWith('blob:'))
+                            ? const BorderSide(color: AppColors.border)
+                            : null,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -186,12 +187,14 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       );
       if (picked == null) return;
 
-      final path = picked.path;
-      if (path == null || path.isEmpty) {
+      final path = kIsWeb
+          ? (picked.xFile.path.isNotEmpty ? picked.xFile.path : picked.uri.toString())
+          : (picked.path ?? '');
+      if (path.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('File tidak memiliki path yang valid di perangkat ini.'),
+              content: Text('File tidak memiliki path atau URL yang valid di perangkat ini.'),
               backgroundColor: AppColors.accentRed,
             ),
           );
@@ -200,7 +203,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       }
 
       final fileName = picked.name;
-      final fileLength = await picked.length();
+      int fileLength = 0;
+      try {
+        fileLength = picked.lengthSync() ?? await picked.length();
+      } catch (_) {}
       final sizeMb = (fileLength / (1024 * 1024)).toStringAsFixed(1);
 
       setState(() {
@@ -250,16 +256,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     setState(() => _isLoading = true);
 
-    // If local video file is selected, initiate P2P hosting so LAN server is immediately available
-    if (_selectedMediaType == 'direct_url' &&
+    String? initialMediaUrl = _selectedMediaUrl;
+    // If local video file is selected, initiate P2P hosting so LAN server is immediately available on native
+    if (!kIsWeb &&
+        _selectedMediaType == 'direct_url' &&
         _selectedMediaUrl != null &&
         UnifiedPlayerController.isLocalFilePath(_selectedMediaUrl!)) {
       try {
-        await P2PFileStreamService.instance.hostFile(
+        final metadata = await P2PFileStreamService.instance.hostFile(
           filePath: _selectedMediaUrl!,
           hostUserId: user.id,
           hostUserName: user.username,
         );
+        if (metadata.lanUrl != null && metadata.lanUrl!.isNotEmpty) {
+          initialMediaUrl = metadata.lanUrl;
+        }
       } catch (e) {
         debugPrint('[CreateRoomDialog] P2P host notice: $e');
       }
@@ -275,7 +286,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           isPublic: _isPublic,
           controlMode: _controlMode,
           initialMediaType: _selectedMediaType ?? 'youtube',
-          initialMediaUrl: _selectedMediaUrl,
+          initialMediaUrl: initialMediaUrl,
         );
 
     if (!mounted) return;
@@ -380,12 +391,15 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                        Flexible(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ),
                         if (badgeText != null) ...[

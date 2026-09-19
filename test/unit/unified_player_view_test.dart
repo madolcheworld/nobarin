@@ -238,8 +238,8 @@ void main() {
       animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
       expect(animatedOpacity.opacity, equals(1.0));
 
-      // Advance past 1800ms total (1000ms remaining + animation duration)
-      await tester.pump(const Duration(milliseconds: 1000));
+      // Advance past 3000ms total (2000ms remaining + animation duration)
+      await tester.pump(const Duration(milliseconds: 2000));
       await tester.pump(const Duration(milliseconds: 300)); // Finish opacity animation
 
       animatedOpacity = tester.widget<AnimatedOpacity>(animatedOpacityFinder);
@@ -328,8 +328,8 @@ void main() {
           tester.widget<AnimatedOpacity>(animatedOpacityFinder);
       expect(animatedOpacity.opacity, equals(1.0));
 
-      // Advance 1000ms + 300ms animation
-      await tester.pump(const Duration(milliseconds: 1000));
+      // Advance 3000ms + 300ms animation
+      await tester.pump(const Duration(milliseconds: 3000));
       await tester.pump(const Duration(milliseconds: 300));
 
       // Should now be hidden

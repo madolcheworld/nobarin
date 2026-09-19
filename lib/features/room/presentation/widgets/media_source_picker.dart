@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/p2p_file_stream_service.dart';
@@ -202,12 +203,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
       );
       if (picked == null) return;
 
-      final path = picked.path;
-      if (path == null || path.isEmpty) {
+      final path = kIsWeb
+          ? (picked.xFile.path.isNotEmpty ? picked.xFile.path : picked.uri.toString())
+          : (picked.path ?? '');
+      if (path.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('File tidak memiliki path yang valid di perangkat ini.'),
+              content: Text('File tidak memiliki path atau URL yang valid di perangkat ini.'),
               backgroundColor: AppColors.accentRed,
             ),
           );
@@ -216,7 +219,10 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
       }
 
       final fileName = picked.name;
-      final fileLength = await picked.length();
+      int fileLength = 0;
+      try {
+        fileLength = picked.lengthSync() ?? await picked.length();
+      } catch (_) {}
       final sizeMb = (fileLength / (1024 * 1024)).toStringAsFixed(1);
 
       if (widget.isAddingToQueueInitial) {
@@ -253,12 +259,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
         return;
       }
 
-      // Host file for P2P direct streaming
-      await P2PFileStreamService.instance.hostFile(
-        filePath: path,
-        hostUserId: widget.syncController.currentUser.id,
-        hostUserName: widget.syncController.currentUser.username,
-      );
+      // Host file for P2P direct streaming on native platforms (LAN + WebRTC)
+      if (!kIsWeb) {
+        await P2PFileStreamService.instance.hostFile(
+          filePath: path,
+          hostUserId: widget.syncController.currentUser.id,
+          hostUserName: widget.syncController.currentUser.username,
+        );
+      }
 
       widget.syncController.requestChangeMedia('direct_url', path);
       widget.chatController?.sendSystemMessage(
@@ -271,11 +279,16 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.stream_rounded, color: Colors.black),
+                Icon(
+                  kIsWeb ? Icons.play_circle_fill_rounded : Icons.stream_rounded,
+                  color: Colors.black,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Streaming P2P: $fileName ($sizeMb MB)',
+                    kIsWeb
+                        ? 'Memutar File Lokal: $fileName ($sizeMb MB)'
+                        : 'Streaming P2P: $fileName ($sizeMb MB)',
                     style: const TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.bold,

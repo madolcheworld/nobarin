@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../auth/domain/user_profile.dart';
+import '../../../core/network/p2p_file_stream_service.dart';
 import '../models/room_model.dart';
 import '../models/sync_payload.dart';
+import 'p2p_file_signaling_controller.dart';
 import 'sync_engine.dart';
 import 'unified_player_controller.dart';
 
@@ -17,6 +19,7 @@ class SyncController extends ChangeNotifier {
   final bool Function()? canControlProvider;
   final void Function(String event, Map<String, dynamic> payload)?
       onBroadcastSentForTesting;
+  P2PFileSignalingController? p2pSignalingController;
 
   RealtimeChannel? _realtimeChannel;
   Timer? _heartbeatTimer;
@@ -27,9 +30,13 @@ class SyncController extends ChangeNotifier {
   int _seqIdCounter = 0;
   int _lastProcessedSeqId = 0;
 
-  // Track latest known sync payload
   SyncPayload? _latestPayload;
   SyncPayload? get latestPayload => _latestPayload;
+
+  String? _activeP2pFileSignature;
+  bool _isConnectingP2p = false;
+
+  bool get isHost => isHostProvider?.call() ?? (room.hostId == currentUser.id);
 
   SyncController({
     required this.room,
@@ -40,6 +47,7 @@ class SyncController extends ChangeNotifier {
     this.isHostProvider,
     this.canControlProvider,
     this.onBroadcastSentForTesting,
+    this.p2pSignalingController,
   })  : syncEngine = engine ?? SyncEngine() {
     _initChannel();
     _setupPlayerListeners();
@@ -223,24 +231,57 @@ class SyncController extends ChangeNotifier {
     );
 
     try {
-      final bool isP2pStream = payload.mediaUrl.startsWith('p2p://') ||
-          payload.mediaType == 'local_p2p';
-      final bool isAlreadyPlayingP2p = isP2pStream &&
-          (player.mediaUrl.startsWith('http://127.0.0.1') ||
-              player.mediaUrl.startsWith('http://localhost') ||
-              player.mediaUrl.startsWith('p2p://'));
+      String? p2pSig;
+      if (payload.p2pMetadata != null) {
+        try {
+          final m = P2PFileMetadata.fromJson(payload.p2pMetadata!);
+          p2pSig = '${m.hostUserId}_${m.fileName}_${m.fileSize}';
+        } catch (_) {}
+      }
+
+      final bool isAlreadyPlayingP2p = p2pSig != null &&
+          p2pSig == _activeP2pFileSignature &&
+          player.mediaUrl.isNotEmpty;
 
       // 1. Media Type or URL Change
-      if (payload.mediaUrl.isNotEmpty &&
+      final bool mediaNeedsUpdate = payload.mediaUrl.isNotEmpty &&
           !isAlreadyPlayingP2p &&
+          !_isConnectingP2p &&
           (payload.mediaUrl != player.mediaUrl ||
-              payload.mediaType != player.mediaType)) {
+              payload.mediaType != player.mediaType ||
+              p2pSig != null);
+
+      if (mediaNeedsUpdate) {
+        String urlToLoad = payload.mediaUrl;
+
+        // If P2P metadata is provided and this device is a viewer:
+        if (payload.p2pMetadata != null && !isHost) {
+          _isConnectingP2p = true;
+          try {
+            final metadata = P2PFileMetadata.fromJson(payload.p2pMetadata!);
+            if (p2pSignalingController != null) {
+              final streamUrl = await p2pSignalingController!.connectToHost(
+                hostUserId: metadata.hostUserId,
+                metadata: metadata,
+              );
+              if (streamUrl != null && streamUrl.isNotEmpty) {
+                urlToLoad = streamUrl;
+              }
+            }
+          } catch (e) {
+            debugPrint('[SyncController] P2P connect error: $e');
+          } finally {
+            _isConnectingP2p = false;
+          }
+        }
+
         await player.loadMedia(
           payload.mediaType,
-          payload.mediaUrl,
+          urlToLoad,
           autoPlay: payload.isPlaying,
           startSeconds: payload.positionSeconds,
         );
+        _activeP2pFileSignature = p2pSig;
         syncEngine.resetFilter();
       }
 
@@ -333,7 +374,7 @@ class SyncController extends ChangeNotifier {
     final targetPos = position ?? player.position;
     final targetType = mediaType ??
         (player.mediaType.isNotEmpty ? player.mediaType : (room.currentMediaType ?? 'youtube'));
-    final String defaultUrl;
+    String defaultUrl;
     if (player.mediaUrl.isNotEmpty && !player.mediaUrl.startsWith('p2p://')) {
       defaultUrl = player.mediaUrl;
     } else if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
@@ -341,9 +382,22 @@ class SyncController extends ChangeNotifier {
     } else {
       defaultUrl = player.mediaUrl;
     }
-    final targetUrl = mediaUrl ?? defaultUrl;
+    String targetUrl = mediaUrl ?? defaultUrl;
+
+    // If targetUrl is a local file path and this device is hosting it on LAN,
+    // broadcast the reachable LAN streaming URL to other peers instead of local path.
+    if (!kIsWeb &&
+        UnifiedPlayerController.isLocalFilePath(targetUrl) &&
+        P2PFileStreamService.instance.isHosting &&
+        P2PFileStreamService.instance.activeMetadata?.lanUrl != null) {
+      targetUrl = P2PFileStreamService.instance.activeMetadata!.lanUrl!;
+    }
 
     _seqIdCounter++;
+    final Map<String, dynamic>? p2pMeta = P2PFileStreamService.instance.isHosting
+        ? P2PFileStreamService.instance.activeMetadata?.toJson()
+        : null;
+
     final payload = SyncPayload(
       mediaType: targetType,
       mediaUrl: targetUrl,
@@ -356,6 +410,7 @@ class SyncController extends ChangeNotifier {
       action: action ?? (state ?? (position != null ? 'seek' : 'heartbeat')),
       actionEpoch: syncEngine.clockSync.synchronizedTimestampMs,
       maxDurationSeconds: player.duration > 0 ? player.duration : null,
+      p2pMetadata: p2pMeta,
     );
 
     _latestPayload = payload;
@@ -397,9 +452,18 @@ class SyncController extends ChangeNotifier {
     if (!canControl) return;
     syncEngine.resetFilter();
     await player.loadMedia(type, url, autoPlay: true);
+
+    String broadcastUrl = url;
+    if (!kIsWeb &&
+        UnifiedPlayerController.isLocalFilePath(url) &&
+        P2PFileStreamService.instance.isHosting &&
+        P2PFileStreamService.instance.activeMetadata?.lanUrl != null) {
+      broadcastUrl = P2PFileStreamService.instance.activeMetadata!.lanUrl!;
+    }
+
     await broadcastSync(
       mediaType: type,
-      mediaUrl: url,
+      mediaUrl: broadcastUrl,
       state: 'playing',
       position: 0.0,
       action: 'media_change',

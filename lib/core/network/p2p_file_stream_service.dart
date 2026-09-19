@@ -471,6 +471,9 @@ class P2PFileStreamService extends ChangeNotifier {
   ) async {
     final response = request.response;
     response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Range, Accept-Ranges, Content-Type');
+    response.headers.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
     response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
     response.headers.set(HttpHeaders.contentTypeHeader, metadata.mimeType);
 
@@ -725,7 +728,7 @@ class P2PFileStreamService extends ChangeNotifier {
       final client = http.Client();
       try {
         final response = await client.head(uri).timeout(
-              const Duration(milliseconds: 600),
+              const Duration(milliseconds: 1500),
             );
         return response.statusCode == 200 || response.statusCode == 206;
       } finally {

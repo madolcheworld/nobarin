@@ -3,6 +3,7 @@ import 'package:nobarin/features/auth/domain/user_profile.dart';
 import 'package:nobarin/features/chat/controllers/chat_controller.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('ChatController Unit Tests', () {
     late ChatController chatController;
     const testUser = UserProfile(

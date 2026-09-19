@@ -56,6 +56,7 @@ class WebRtcVoiceController extends ChangeNotifier {
   RealtimeChannel? _voiceChannel;
   MediaStream? _localStream;
   Timer? _vadTimer;
+  bool _isVadChecking = false;
 
   // Active peer connections: remotePeerId -> RTCPeerConnection
   final Map<String, RTCPeerConnection> _peerConnections = {};
@@ -742,7 +743,7 @@ class WebRtcVoiceController extends ChangeNotifier {
       try {
         final stream = await _userMediaFunction(highQualityAudioConstraints);
         _localStream = stream;
-        for (final entry in _peerConnections.entries) {
+        for (final entry in _peerConnections.entries.toList()) {
           final peerId = entry.key;
           final pc = entry.value;
           await _attachLocalAudioTracksTo(pc);
@@ -868,87 +869,94 @@ class WebRtcVoiceController extends ChangeNotifier {
   void _startVadTimer() {
     _vadTimer?.cancel();
     _vadTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
-      if (_isDisposed || _status != VoiceStatus.connected) return;
+      if (_isDisposed || _status != VoiceStatus.connected || _isVadChecking) return;
+      _isVadChecking = true;
 
-      // 1. Check local audio level if unmuted
-      if (!_isMicMuted && _peerConnections.isNotEmpty) {
-        bool localAudioDetected = false;
-        for (final pc in _peerConnections.values) {
-          try {
-            final stats = await pc.getStats();
-            for (final report in stats) {
-              if (report.type == 'media-source' ||
-                  report.type == 'track' ||
-                  report.type == 'outbound-rtp') {
-                final val =
-                    report.values['audioLevel'] ?? report.values['energyLevel'];
-                if (val != null) {
-                  final lvl = double.tryParse(val.toString()) ?? 0.0;
-                  if (lvl > 0.05) {
-                    localAudioDetected = true;
-                    break;
+      try {
+        // 1. Check local audio level if unmuted
+        if (!_isMicMuted && _peerConnections.isNotEmpty) {
+          bool localAudioDetected = false;
+          final localConnections = _peerConnections.values.toList();
+          for (final pc in localConnections) {
+            try {
+              final stats = await pc.getStats();
+              for (final report in stats) {
+                if (report.type == 'media-source' ||
+                    report.type == 'track' ||
+                    report.type == 'outbound-rtp') {
+                  final val =
+                      report.values['audioLevel'] ?? report.values['energyLevel'];
+                  if (val != null) {
+                    final lvl = double.tryParse(val.toString()) ?? 0.0;
+                    if (lvl > 0.05) {
+                      localAudioDetected = true;
+                      break;
+                    }
                   }
                 }
               }
-            }
-          } catch (_) {}
-          if (localAudioDetected) break;
-        }
+            } catch (_) {}
+            if (localAudioDetected) break;
+          }
 
-        if (localAudioDetected != _isLocalSpeaking) {
-          setLocalSpeaking(localAudioDetected);
-        }
-      } else if (_isMicMuted || _peerConnections.isEmpty) {
-        if (_isLocalSpeaking) {
-          setLocalSpeaking(false);
-        }
-      }
-
-      // 2. Check inbound audio stats for remote peers
-      if (!_isDeafened) {
-        for (final entry in _peerConnections.entries) {
-          final peerId = entry.key;
-          final pc = entry.value;
-          bool hasAudioLevelReport = false;
-          bool remoteSpeakingDetected = false;
-
-          try {
-            final stats = await pc.getStats();
-            for (final report in stats) {
-              if (report.type == 'inbound-rtp' || report.type == 'track') {
-                final val = report.values['audioLevel'];
-                if (val != null) {
-                  hasAudioLevelReport = true;
-                  final lvl = double.tryParse(val.toString()) ?? 0.0;
-                  if (lvl > 0.05) {
-                    remoteSpeakingDetected = true;
-                    break;
-                  }
-                }
-              }
-            }
-          } catch (_) {}
-
-          if (hasAudioLevelReport) {
-            final wasSpeaking = _activeSpeakerIds.contains(peerId);
-            if (remoteSpeakingDetected && !wasSpeaking) {
-              _activeSpeakerIds.add(peerId);
-              _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
-              notifyListeners();
-            } else if (!remoteSpeakingDetected && wasSpeaking) {
-              // Remote peer stopped speaking: clear speaker state and restore ducking
-              _activeSpeakerIds.remove(peerId);
-              _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
-              notifyListeners();
-            }
+          if (localAudioDetected != _isLocalSpeaking) {
+            setLocalSpeaking(localAudioDetected);
+          }
+        } else if (_isMicMuted || _peerConnections.isEmpty) {
+          if (_isLocalSpeaking) {
+            setLocalSpeaking(false);
           }
         }
-      } else {
-        if (_activeSpeakerIds.any((id) => id != userId)) {
-          _activeSpeakerIds.removeWhere((id) => id != userId);
-          _handleAudioDucking();
-          notifyListeners();
+
+        // 2. Check inbound audio stats for remote peers
+        if (!_isDeafened) {
+          final remoteEntries = _peerConnections.entries.toList();
+          for (final entry in remoteEntries) {
+            final peerId = entry.key;
+            final pc = entry.value;
+            bool hasAudioLevelReport = false;
+            bool remoteSpeakingDetected = false;
+
+            try {
+              final stats = await pc.getStats();
+              for (final report in stats) {
+                if (report.type == 'inbound-rtp' || report.type == 'track') {
+                  final val = report.values['audioLevel'];
+                  if (val != null) {
+                    hasAudioLevelReport = true;
+                    final lvl = double.tryParse(val.toString()) ?? 0.0;
+                    if (lvl > 0.05) {
+                      remoteSpeakingDetected = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch (_) {}
+
+            if (hasAudioLevelReport) {
+              final wasSpeaking = _activeSpeakerIds.contains(peerId);
+              if (remoteSpeakingDetected && !wasSpeaking) {
+                _activeSpeakerIds.add(peerId);
+                _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
+                notifyListeners();
+              } else if (!remoteSpeakingDetected && wasSpeaking) {
+                // Remote peer stopped speaking: clear speaker state and restore ducking
+                _activeSpeakerIds.remove(peerId);
+                _handleAudioDucking(immediate: !_duckingConfig.smoothTransition);
+                notifyListeners();
+              }
+            }
+          }
+        } else {
+          if (_activeSpeakerIds.any((id) => id != userId)) {
+            _activeSpeakerIds.removeWhere((id) => id != userId);
+            _handleAudioDucking();
+            notifyListeners();
+          }
         }
+      } finally {
+        _isVadChecking = false;
       }
     });
   }
@@ -1235,7 +1243,7 @@ class WebRtcVoiceController extends ChangeNotifier {
 
     _isDisposed = true;
 
-    for (final pc in _peerConnections.values) {
+    for (final pc in _peerConnections.values.toList()) {
       try {
         pc.close();
         pc.dispose();

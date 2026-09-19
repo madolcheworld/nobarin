@@ -17,6 +17,7 @@ class SyncPayload {
   final String? action; // 'play' | 'pause' | 'seek' | 'heartbeat' | 'media_change'
   final int? actionEpoch;
   final double? maxDurationSeconds;
+  final Map<String, dynamic>? p2pMetadata;
 
   const SyncPayload({
     required this.mediaType,
@@ -30,6 +31,7 @@ class SyncPayload {
     this.action,
     this.actionEpoch,
     this.maxDurationSeconds,
+    this.p2pMetadata,
   });
 
   bool get isPlaying => state == 'playing';
@@ -55,6 +57,7 @@ class SyncPayload {
       action: json['action'] as String?,
       actionEpoch: (json['action_epoch'] as num?)?.toInt(),
       maxDurationSeconds: (json['max_duration_seconds'] as num?)?.toDouble(),
+      p2pMetadata: json['p2p_metadata'] as Map<String, dynamic>?,
     );
   }
 
@@ -71,6 +74,7 @@ class SyncPayload {
       if (action != null) 'action': action,
       if (actionEpoch != null) 'action_epoch': actionEpoch,
       if (maxDurationSeconds != null) 'max_duration_seconds': maxDurationSeconds,
+      if (p2pMetadata != null) 'p2p_metadata': p2pMetadata,
     };
   }
 
@@ -163,6 +167,7 @@ class SyncPayload {
     String? action,
     int? actionEpoch,
     double? maxDurationSeconds,
+    Map<String, dynamic>? p2pMetadata,
   }) {
     return SyncPayload(
       mediaType: mediaType ?? this.mediaType,
@@ -176,6 +181,7 @@ class SyncPayload {
       action: action ?? this.action,
       actionEpoch: actionEpoch ?? this.actionEpoch,
       maxDurationSeconds: maxDurationSeconds ?? this.maxDurationSeconds,
+      p2pMetadata: p2pMetadata ?? this.p2pMetadata,
     );
   }
 }

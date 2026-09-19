@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/network/supabase_client.dart';
 import 'core/utils/ntp_clock_sync.dart';
+import 'features/room/controllers/unified_player_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,7 @@ void main() async {
   // Initialize MediaKit for hardware-accelerated video playback on native platforms
   if (!kIsWeb) {
     MediaKit.ensureInitialized();
+    await UnifiedPlayerController.initializePlatformSettings();
   }
 
   // Initialize Supabase Backend

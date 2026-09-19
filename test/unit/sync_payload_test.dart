@@ -69,5 +69,35 @@ void main() {
       expect(updated.seqId, 5);
       expect(updated.action, 'seek');
     });
+
+    test('p2pMetadata serialization and deserialization', () {
+      final p2pMap = {
+        'file_name': 'sample_movie.mp4',
+        'file_size': 10485760,
+        'mime_type': 'video/mp4',
+        'lan_url': 'http://192.168.1.66:36113/video',
+        'host_user_id': 'host-user-99',
+        'host_user_name': 'Riyang',
+      };
+
+      final payload = SyncPayload(
+        mediaType: 'direct_url',
+        mediaUrl: 'p2p://host-user-99/sample_movie.mp4',
+        state: 'playing',
+        positionSeconds: 0.0,
+        timestampMs: 1725514800000,
+        controllerId: 'host-user-99',
+        p2pMetadata: p2pMap,
+      );
+
+      final json = payload.toJson();
+      expect(json['p2p_metadata'], p2pMap);
+
+      final fromJson = SyncPayload.fromJson(json);
+      expect(fromJson.p2pMetadata, isNotNull);
+      expect(fromJson.p2pMetadata!['file_name'], 'sample_movie.mp4');
+      expect(fromJson.p2pMetadata!['lan_url'], 'http://192.168.1.66:36113/video');
+      expect(fromJson.p2pMetadata!['host_user_id'], 'host-user-99');
+    });
   });
 }

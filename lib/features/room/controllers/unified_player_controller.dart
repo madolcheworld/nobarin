@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
@@ -71,6 +73,25 @@ class UnifiedPlayerController extends ChangeNotifier {
   VideoController? _mkVideoController;
   final List<StreamSubscription> _subscriptions = [];
 
+  static bool? _isAndroidEmulator;
+
+  /// Initializes platform-specific video controller settings (e.g. Android emulator detection).
+  static Future<void> initializePlatformSettings() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      _isAndroidEmulator = false;
+      return;
+    }
+    try {
+      final res = await const MethodChannel('com.alexmercerind/media_kit_video')
+          .invokeMethod<bool>('Utils.IsEmulator');
+      _isAndroidEmulator = res ?? false;
+      debugPrint('[UnifiedPlayerController] Is Android Emulator: $_isAndroidEmulator');
+    } catch (e) {
+      debugPrint('[UnifiedPlayerController] Check emulator status failed: $e');
+      _isAndroidEmulator = false;
+    }
+  }
+
   // Callbacks for SyncController
   void Function(double positionSeconds)? onPositionChanged;
   void Function(String state)? onPlaybackStateChanged;
@@ -114,6 +135,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     final trimmed = url.trim();
     return trimmed.startsWith('/') ||
         trimmed.startsWith('file://') ||
+        trimmed.startsWith('blob:') ||
         RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed);
   }
 
@@ -269,7 +291,17 @@ class UnifiedPlayerController extends ChangeNotifier {
     try {
       _mkPlayer = Player();
       _mkPlayer!.setVolume(_volume * 100);
-      _mkVideoController = VideoController(_mkPlayer!);
+
+      // On Android Emulator, default vo=gpu fails with EGL_BAD_ATTRIBUTE (0x3004) causing black screen.
+      // mediacodec_embed renders directly to the Surface without EGL context creation failures.
+      final bool isEmu = (!kIsWeb && Platform.isAndroid) && (_isAndroidEmulator == true);
+      _mkVideoController = VideoController(
+        _mkPlayer!,
+        configuration: VideoControllerConfiguration(
+          vo: isEmu ? 'mediacodec_embed' : null,
+          hwdec: isEmu ? 'mediacodec' : null,
+        ),
+      );
 
       _subscriptions.add(_mkPlayer!.stream.position.listen((pos) {
         if (_isDisposed || _mediaType != 'direct_url') return;
@@ -530,6 +562,14 @@ class UnifiedPlayerController extends ChangeNotifier {
         mediaType: 'direct_url',
         mediaUrl: trimmed,
         title: filename.isNotEmpty ? filename : 'P2P Video Stream',
+      );
+    }
+
+    if (trimmed.startsWith('blob:')) {
+      return DetectedMedia(
+        mediaType: 'direct_url',
+        mediaUrl: trimmed,
+        title: 'File Video Lokal',
       );
     }
 
@@ -887,6 +927,9 @@ class UnifiedPlayerController extends ChangeNotifier {
       } else {
         _isPlaying = autoPlay;
       }
+    } else if (url.startsWith('blob:') && !kIsWeb) {
+      _errorMessage = 'Host sedang memutar video lokal dari Web. Gunakan tombol "Punya File?" di atas untuk memutar salinan file video Anda (Syncplay).';
+      _isPlaying = false;
     } else if (_mkPlayer != null) {
       try {
         await _mkPlayer!.setVolume(_isMuted ? 0 : _volume * 100);
@@ -899,7 +942,12 @@ class UnifiedPlayerController extends ChangeNotifier {
         _isPlaying = autoPlay;
       } catch (e) {
         debugPrint('[UnifiedPlayerController] MediaKit open error: $e');
-        _errorMessage = 'Gagal memutar video: $e';
+        if (isLocalFilePath(url)) {
+          _errorMessage =
+              'File video ini berada di penyimpanan perangkat Host. Anda dapat menggunakan tombol "Pilih File Lokal Saya" (Syncplay) jika memiliki salinan filenya, atau minta Host mengaktifkan "Bagi Layar".';
+        } else {
+          _errorMessage = 'Gagal memutar video: $e';
+        }
         _isPlaying = false;
         notifyListeners();
       }
