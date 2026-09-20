@@ -365,6 +365,12 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
             var style = document.createElement('style');
             style.id = 'nobar-bstation-clutter-style';
             style.textContent = `
+              html, body {
+                overflow-y: auto !important;
+                position: static !important;
+                touch-action: pan-y !important;
+                -webkit-overflow-scrolling: touch !important;
+              }
               .dialog, .dialog__wrap, .dialog__container, .video-toapp-dialog,
               .dialog--mobile, .video-toapp-content, .bstar-dialog,
               .bstar-dialog-mask, .bstar-dialog__wrapper, .bstar-modal,
@@ -397,6 +403,23 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
                 el.remove();
               }
             });
+
+            // Restore scroll capability if blocked by Bilibili dialog scripts
+            if (document.body) {
+              if (document.body.style.overflow === 'hidden') {
+                document.body.style.overflow = 'auto';
+              }
+              if (document.body.style.position === 'fixed') {
+                document.body.style.position = 'static';
+              }
+              document.body.classList.remove('dialog-open', 'modal-open', 'overflow-hidden', 'bstar-modal-open');
+            }
+            if (document.documentElement) {
+              if (document.documentElement.style.overflow === 'hidden') {
+                document.documentElement.style.overflow = 'auto';
+              }
+              document.documentElement.classList.remove('dialog-open', 'modal-open', 'overflow-hidden', 'bstar-modal-open');
+            }
           } catch(e) {}
         }
         cleanBstationClutter();
@@ -684,9 +707,14 @@ class _BstationBrowserSheetState extends State<BstationBrowserSheet> {
                     : _buildUnsupportedPlatformFallback(),
               ),
 
-              // Docked Detection Bar (Bottom Action Bar)
-              if (_detectedVideoUrl != null)
-                _buildDetectionBanner(context),
+              // Docked Detection Bar (Bottom Action Bar with smooth size animation)
+              AnimatedSize(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                child: _detectedVideoUrl != null
+                    ? _buildDetectionBanner(context)
+                    : const SizedBox.shrink(),
+              ),
             ],
           ),
         ),

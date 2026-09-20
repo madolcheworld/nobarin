@@ -424,7 +424,7 @@ class P2PFileSignalingController extends ChangeNotifier {
       } catch (_) {}
     }
     _peerConnections.clear();
-    _candidateBuffer.clearAll();
+    _candidateBuffer.clear();
 
     super.dispose();
   }

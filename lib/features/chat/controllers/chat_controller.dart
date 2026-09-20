@@ -53,13 +53,6 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setShowFloatingReactions(bool show) {
-    if (_showFloatingReactions != show) {
-      _showFloatingReactions = show;
-      notifyListeners();
-    }
-  }
-
   final Map<String, DateTime> _recentSystemMessages = {};
 
   final Map<String, String> _typingUsers = {};

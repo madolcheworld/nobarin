@@ -24,6 +24,3 @@ class NobarinApp extends ConsumerWidget {
     );
   }
 }
-
-/// Backward compatibility alias
-typedef WatchPartyApp = NobarinApp;

@@ -39,6 +39,7 @@ class MediaSourcePicker extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      enableDrag: false,
       builder: (ctx) => MediaSourcePicker(
         syncController: syncController,
         chatController: chatController,
@@ -323,9 +324,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
     final currentUrl = _urlController.text.trim();
     final bool canProceed = currentUrl.isNotEmpty;
 
+    final maxHeight = MediaQuery.of(context).size.height * 0.88;
+
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: BoxConstraints(
+          maxWidth: 520,
+          maxHeight: maxHeight,
+        ),
         child: Container(
           decoration: const BoxDecoration(
             color: AppColors.surface,
@@ -336,6 +342,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
           ),
           padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

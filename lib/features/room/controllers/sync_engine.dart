@@ -114,6 +114,7 @@ class SyncEngine {
     int? currentTimestampMs,
     double? maxDurationSeconds,
     bool isYouTube = false,
+    double currentSpeed = 1.0,
   }) {
     if (payload.state != 'playing') {
       return 1.0;
@@ -139,7 +140,10 @@ class SyncEngine {
     }
 
     // Direct Video (MediaKit / HTML5 Video) continuous proportional slewing
-    if (absDrift < 0.08) {
+    // Hysteresis deadband: if already slewing, keep slewing until drift < 0.04s (40ms).
+    // If at normal speed, only engage slewing when drift >= 0.08s (80ms).
+    final minThreshold = (currentSpeed != 1.0) ? 0.04 : 0.08;
+    if (absDrift < minThreshold) {
       return 1.0;
     } else if (absDrift < 0.35) {
       return signedDrift > 0 ? 1.025 : 0.975;

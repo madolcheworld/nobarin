@@ -27,16 +27,6 @@ class ApiConstants {
     defaultValue: '',
   );
 
-  // Google OAuth / Drive Multi-platform Configuration
-  static const String googleWebClientId = String.fromEnvironment(
-    'GOOGLE_WEB_CLIENT_ID',
-    defaultValue: '',
-  );
-  static const String googleIosClientId = String.fromEnvironment(
-    'GOOGLE_IOS_CLIENT_ID',
-    defaultValue: '',
-  );
-
   static Map<String, dynamic> get rtcIceConfiguration {
     final List<Map<String, dynamic>> iceServers = [
       {

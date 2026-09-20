@@ -332,13 +332,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
       _player.onPlaybackEnded = () {
         if (!mounted) return;
-        final canControl = (_roomController?.isHost == true) ||
-            (_syncController?.canControl == true);
-        if (canControl &&
+        final isHost = _roomController?.isHost == true;
+        if (isHost &&
             _queueController != null &&
             _queueController!.isNotEmpty) {
           debugPrint(
-              '[RoomScreen] Playback ended, auto-playing next item from queue');
+              '[RoomScreen] Playback ended, host auto-playing next item from queue');
           _queueController!.playNext();
         }
       };
@@ -500,7 +499,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     _p2pSignalingController?.dispose();
     _p2pSignalingController = null;
     try {
-      _signalingChannel?.unsubscribe();
+      if (_signalingChannel != null) {
+        final supabase = SupabaseService().clientOrNull;
+        supabase?.removeChannel(_signalingChannel!);
+      }
       _signalingChannel = null;
     } catch (_) {}
     super.dispose();
@@ -863,15 +865,26 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
           body: Stack(
             fit: StackFit.expand,
             children: [
-              UnifiedPlayerView(
-                key: _playerKey,
-                player: _player,
-                syncController: _syncController!,
-                onOpenMediaPicker: _openMediaPicker,
-                onExit: _handleExitRoom,
-                title: currentRoom.title,
-                showTopBar: true,
-              ),
+              if (_screenShareController?.isScreenSharingActive == true)
+                ScreenShareView(
+                  key: _screenShareKey,
+                  controller: _screenShareController!,
+                  isHost: _roomController?.isHost ?? false,
+                  onExit: () async {
+                    await _player.exitFullscreen();
+                  },
+                  roomTitle: currentRoom.title,
+                )
+              else
+                UnifiedPlayerView(
+                  key: _playerKey,
+                  player: _player,
+                  syncController: _syncController!,
+                  onOpenMediaPicker: _openMediaPicker,
+                  onExit: _handleExitRoom,
+                  title: currentRoom.title,
+                  showTopBar: true,
+                ),
               if (_chatController != null) ...[
                 Positioned.fill(
                   child: FloatingReactionOverlay(

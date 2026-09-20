@@ -80,65 +80,6 @@ class FrostedGlassBox extends StatelessWidget {
     );
   }
 
-  /// Factory preset for floating docks and player bars
-  factory FrostedGlassBox.dock({
-    Key? key,
-    required Widget child,
-    EdgeInsetsGeometry? padding =
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    EdgeInsetsGeometry? margin,
-    BorderRadiusGeometry borderRadius = const BorderRadius.all(Radius.circular(20)),
-    double blur = 18.0,
-  }) {
-    return FrostedGlassBox(
-      key: key,
-      padding: padding,
-      margin: margin,
-      borderRadius: borderRadius,
-      blur: blur,
-      backgroundColor: AppColors.glassFillHeavy,
-      borderGradient: AppColors.glassBorderGradient,
-      borderWidth: 1.1,
-      boxShadow: AppColors.glassDockShadow,
-      child: child,
-    );
-  }
-
-  /// Factory preset for chips and filter pills
-  factory FrostedGlassBox.pill({
-    Key? key,
-    required Widget child,
-    bool isSelected = false,
-    Color? activeColor,
-    EdgeInsetsGeometry? padding =
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-    VoidCallback? onTap,
-  }) {
-    final accent = activeColor ?? AppColors.primaryNeon;
-    return FrostedGlassBox(
-      key: key,
-      padding: padding,
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
-      blur: 10.0,
-      backgroundColor: isSelected
-          ? accent.withValues(alpha: 0.22)
-          : AppColors.glassFillLight,
-      borderColor: isSelected ? accent : AppColors.glassBorder,
-      borderWidth: isSelected ? 1.3 : 0.9,
-      boxShadow: isSelected
-          ? [
-              BoxShadow(
-                color: accent.withValues(alpha: 0.28),
-                blurRadius: 12,
-                spreadRadius: -1,
-              ),
-            ]
-          : null,
-      onTap: onTap,
-      child: child,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     Widget content = Container(

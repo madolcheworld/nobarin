@@ -28,7 +28,7 @@ class SyncController extends ChangeNotifier {
 
   // Packet sequence number & ordering guard
   int _seqIdCounter = 0;
-  int _lastProcessedSeqId = 0;
+  final Map<String, int> _lastProcessedSeqIdPerController = {};
 
   SyncPayload? _latestPayload;
   SyncPayload? get latestPayload => _latestPayload;
@@ -131,7 +131,7 @@ class SyncController extends ChangeNotifier {
         event: 'REQUEST_SYNC',
         callback: (Map<String, dynamic> payloadMap) {
           if (_isDisposed) return;
-          if (canControl) {
+          if (isHost) {
             broadcastSync(action: 'snapshot');
           }
         },
@@ -212,15 +212,17 @@ class SyncController extends ChangeNotifier {
       return;
     }
 
-    // Monotonic sequence numbering: discard out-of-order stale packets
-    if (payload.seqId > 0 && payload.seqId < _lastProcessedSeqId) {
+    // Monotonic sequence numbering: discard out-of-order stale packets per controller
+    final controllerId = payload.controllerId;
+    final lastSeq = _lastProcessedSeqIdPerController[controllerId] ?? 0;
+    if (payload.seqId > 0 && payload.seqId < lastSeq) {
       debugPrint(
-        '[SyncController] Discarded out-of-order packet (seqId ${payload.seqId} < $_lastProcessedSeqId)',
+        '[SyncController] Discarded out-of-order packet from $controllerId (seqId ${payload.seqId} < $lastSeq)',
       );
       return;
     }
     if (payload.seqId > 0) {
-      _lastProcessedSeqId = payload.seqId;
+      _lastProcessedSeqIdPerController[controllerId] = payload.seqId;
     }
 
     _latestPayload = payload;
@@ -305,7 +307,11 @@ class SyncController extends ChangeNotifier {
 
       // 3. Explicit Remote Seek Handling
       if (payload.action == 'seek') {
-        await player.seekTo(payload.positionSeconds);
+        final durationLimit = player.duration > 0 ? player.duration : null;
+        final targetPos = payload.isPlaying
+            ? syncEngine.calculateTargetPosition(payload, null, durationLimit)
+            : payload.positionSeconds;
+        await player.seekTo(targetPos);
         syncEngine.recordSeek();
         if (payload.isPlaying && !player.isPlaying) {
           await player.play();
@@ -331,7 +337,7 @@ class SyncController extends ChangeNotifier {
 
       final bool inSeekCooldown = syncEngine.isSeekInCooldown();
 
-      if (action == DriftAction.hardSeek && !inSeekCooldown) {
+      if (action == DriftAction.hardSeek && !inSeekCooldown && !player.isBuffering) {
         // Major desync (>= 1800ms): hard seek to target position with cooldown guard
         final target = syncEngine.calculateTargetPosition(payload, null, durationLimit);
         await player.seekTo(target);
@@ -346,6 +352,7 @@ class SyncController extends ChangeNotifier {
           currentLocalPositionSeconds: player.position,
           maxDurationSeconds: durationLimit,
           isYouTube: player.mediaType == 'youtube',
+          currentSpeed: player.playbackSpeed,
         );
 
         if ((player.playbackSpeed - targetSpeed).abs() > 0.005) {
@@ -477,7 +484,7 @@ class SyncController extends ChangeNotifier {
 
   @visibleForTesting
   void handleRequestSyncForTesting() {
-    if (canControl) {
+    if (isHost) {
       broadcastSync(action: 'snapshot');
     }
   }
@@ -491,6 +498,7 @@ class SyncController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _heartbeatTimer?.cancel();
+    _lastProcessedSeqIdPerController.clear();
     if (_realtimeChannel != null && supabase != null) {
       supabase!.removeChannel(_realtimeChannel!);
     }

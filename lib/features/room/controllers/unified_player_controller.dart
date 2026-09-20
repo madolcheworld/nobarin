@@ -42,6 +42,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   String _mediaType = 'direct_url';
   String _mediaUrl = '';
   bool _isPlaying = false;
+  bool _isBuffering = false;
   bool _isFullscreen = false;
   double _position = 0.0;
   double _duration = 0.0;
@@ -102,6 +103,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool get isLoaded => _mediaUrl.isNotEmpty;
   bool get hasMedia => _mediaUrl.isNotEmpty;
   bool get isPlaying => _isPlaying;
+  bool get isBuffering => _isBuffering;
   bool get isFullscreen => _isFullscreen;
   double get position => _position;
   double get duration => _duration;
@@ -325,6 +327,14 @@ class UnifiedPlayerController extends ChangeNotifier {
           _isPlaying = playing;
           notifyListeners();
           onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+        }
+      }));
+
+      _subscriptions.add(_mkPlayer!.stream.buffering.listen((buffering) {
+        if (_isDisposed || _mediaType != 'direct_url') return;
+        if (_isBuffering != buffering) {
+          _isBuffering = buffering;
+          notifyListeners();
         }
       }));
 
@@ -596,11 +606,16 @@ class UnifiedPlayerController extends ChangeNotifier {
         _duration = dur;
       }
       final bool playing = value.playerState == PlayerState.playing;
+      final bool buffering = value.playerState == PlayerState.buffering;
+      if (_isBuffering != buffering) {
+        _isBuffering = buffering;
+        notifyListeners();
+      }
       if (value.playerState == PlayerState.ended) {
         onPlaybackEnded?.call();
       }
       if (_isPlaying != playing &&
-          value.playerState != PlayerState.buffering &&
+          !buffering &&
           value.playerState != PlayerState.unknown &&
           value.playerState != PlayerState.cued) {
         _isPlaying = playing;
@@ -723,6 +738,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     double startSeconds = 0.0,
   }) async {
     _errorMessage = null;
+    _isBuffering = false;
     _mediaType = type;
     _mediaUrl = url;
     _position = startSeconds;
@@ -753,7 +769,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.pause();
+        await _mkPlayer?.stop();
       }
 
       final videoId = YoutubePlayerController.convertUrlToId(url) ?? url;
@@ -823,7 +839,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.pause();
+        await _mkPlayer?.stop();
       }
 
       try {
@@ -874,7 +890,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.pause();
+        await _mkPlayer?.stop();
       }
 
       try {

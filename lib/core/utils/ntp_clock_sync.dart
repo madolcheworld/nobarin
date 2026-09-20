@@ -88,7 +88,13 @@ class NtpClockSync {
         final int rtt = max(1, t1 - t0);
 
         if (response != null) {
-          final serverDateTime = DateTime.tryParse(response.toString());
+          var timeStr = response.toString().trim();
+          if (!timeStr.endsWith('Z') &&
+              !timeStr.contains('+') &&
+              !RegExp(r'-\d{2}:\d{2}$').hasMatch(timeStr)) {
+            timeStr = '${timeStr}Z';
+          }
+          final serverDateTime = DateTime.tryParse(timeStr);
           if (serverDateTime != null) {
             final int serverTimeMs = serverDateTime.millisecondsSinceEpoch;
             final int estimatedServerTimeNow = serverTimeMs + (rtt ~/ 2);

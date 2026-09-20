@@ -1351,6 +1351,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                     // Step content
                     Flexible(
                       child: SingleChildScrollView(
+                        key: ValueKey<int>(_currentStep),
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: EdgeInsets.fromLTRB(
                           20,
                           16,

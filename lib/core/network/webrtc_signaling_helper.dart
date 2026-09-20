@@ -181,9 +181,6 @@ class IceCandidateBuffer {
     }
   }
 
-  /// Alias for [flush].
-  Future<void> drain(String peerId, RTCPeerConnection pc) => flush(peerId, pc);
-
   /// Clears candidates for a specific [peerId] or all peers if [peerId] is null.
   void clear([String? peerId]) {
     if (peerId != null) {
@@ -192,7 +189,4 @@ class IceCandidateBuffer {
       _pendingCandidates.clear();
     }
   }
-
-  /// Alias for [clear] clearing all peers.
-  void clearAll() => clear();
 }

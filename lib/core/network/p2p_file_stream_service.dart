@@ -533,7 +533,7 @@ class P2PFileStreamService extends ChangeNotifier {
       }
     };
 
-    const chunkSize = 64 * 1024;
+    const chunkSize = 32 * 1024;
     final chunkStream = streamRangePipelined(
       start: start,
       end: end,
@@ -564,7 +564,7 @@ class P2PFileStreamService extends ChangeNotifier {
     required int start,
     required int end,
     required P2PCancellationToken token,
-    int chunkSize = 64 * 1024,
+    int chunkSize = 32 * 1024,
     int windowSize = 6,
   }) async* {
     final totalBytes = end - start + 1;

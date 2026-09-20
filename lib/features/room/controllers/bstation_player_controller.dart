@@ -76,6 +76,7 @@ class BstationPlayerController extends ChangeNotifier {
     notifyListeners();
 
     if (!_isSupportedMobilePlatform) {
+      onError?.call('Bstation player hanya didukung pada platform Android & iOS. Silakan gunakan sumber YouTube atau Direct Video.');
       return;
     }
 

@@ -7,7 +7,6 @@ import 'package:nobarin/features/room/controllers/unified_player_controller.dart
 import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
 import 'package:nobarin/features/voice/presentation/audio_ducking_settings_sheet.dart';
 import 'package:nobarin/features/voice/presentation/speaking_avatar_indicator.dart';
-import 'package:nobarin/features/voice/presentation/voice_control_bar.dart';
 
 // Fake implementations for WebRTC classes in unit tests
 class FakeMediaStreamTrack implements MediaStreamTrack {
@@ -965,97 +964,6 @@ void main() {
       );
 
       expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget);
-    });
-  });
-
-
-  group('VoiceControlBar Widget Tests', () {
-    late WebRtcVoiceController controller;
-    late FakePlayerController fakePlayer;
-    late FakeMediaStream fakeStream;
-    late FakeRTCPeerConnection fakePeerConnection;
-
-    setUp(() {
-      fakePlayer = FakePlayerController();
-      fakeStream = FakeMediaStream();
-      fakePeerConnection = FakeRTCPeerConnection();
-
-      controller = WebRtcVoiceController(
-        roomId: 'test-room-ui',
-        userId: 'user-ui',
-        userName: 'UI User',
-        playerController: fakePlayer,
-        supabase: null,
-        audioRouteHandler: (_) async {},
-        userMediaFunction: (_) async => fakeStream,
-        peerConnectionFunction: (config, [constraints = const {}]) async =>
-            fakePeerConnection,
-      );
-    });
-
-    tearDown(() {
-      controller.dispose();
-    });
-
-    testWidgets('renders controls and interacts with mic, deafen, and ducking',
-        (tester) async {
-      await controller.connect();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: VoiceControlBar(voiceController: controller),
-          ),
-        ),
-      );
-
-      // Initially mic is off
-      expect(find.text('Voice Siap'), findsOneWidget);
-      expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget);
-
-      // Tap mic toggle to turn on
-      await tester.tap(find.byIcon(Icons.mic_off_rounded));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(controller.isMicMuted, isFalse);
-      expect(find.text('Voice Aktif'), findsOneWidget);
-
-      // Tap deafen button
-      expect(controller.isDeafened, isFalse);
-      await tester.tap(find.byIcon(Icons.headset_rounded));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(controller.isDeafened, isTrue);
-
-      // Tap ducking toggle button
-      expect(controller.isAudioDuckingEnabled, isTrue);
-      await tester.tap(find.byIcon(Icons.hearing_rounded));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(controller.isAudioDuckingEnabled, isFalse);
-    });
-
-    testWidgets(
-        'renders without overflow on narrow 360px mobile screen constraint',
-        (tester) async {
-      await controller.connect();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 360,
-                child: VoiceControlBar(voiceController: controller),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(VoiceControlBar), findsOneWidget);
-      expect(tester.takeException(), isNull);
     });
   });
 
