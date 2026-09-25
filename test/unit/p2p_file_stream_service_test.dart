@@ -105,12 +105,12 @@ void main() {
       expect(localDetected, isNotNull);
       expect(localDetected!.isDirectUrl, isTrue);
       expect(localDetected.mediaUrl, equals(sampleFile.path));
-      expect(localDetected.title, equals('anime_episode_01.mp4'));
+      expect(localDetected.title, equals('anime episode 01'));
 
       // Windows local path
       final winDetected = UnifiedPlayerController.detectMediaFromUrl(r'C:\Videos\Movie.mkv');
       expect(winDetected, isNotNull);
-      expect(winDetected!.title, equals('Movie.mkv'));
+      expect(winDetected!.title, equals('Movie'));
 
       // P2P scheme
       final p2pDetected = UnifiedPlayerController.detectMediaFromUrl('p2p://room_101/video.mp4');

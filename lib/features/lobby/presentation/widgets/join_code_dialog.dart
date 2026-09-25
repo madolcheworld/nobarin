@@ -252,11 +252,11 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                               vertical: 16,
                             ),
                             hintText: 'MISAL: WP1001',
-                            hintStyle: TextStyle(
+                            hintStyle: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 2,
-                              color: AppColors.textMuted.withValues(alpha: 0.6),
+                              color: AppColors.textMuted,
                             ),
                             border: InputBorder.none,
                             focusedBorder: InputBorder.none,

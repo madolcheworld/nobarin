@@ -19,6 +19,7 @@ import '../../lobby/presentation/lobby_controller.dart';
 import '../../pip/presentation/pip_button.dart';
 import '../../pip/services/pip_service.dart';
 import '../../screenshare/controllers/webrtc_screenshare_controller.dart';
+import '../../screenshare/presentation/widgets/screen_share_pip_indicator.dart';
 import '../../screenshare/presentation/widgets/screen_share_view.dart';
 import '../../voice/controllers/webrtc_voice_controller.dart';
 import '../controllers/p2p_file_signaling_controller.dart';
@@ -50,7 +51,7 @@ class RoomScreen extends ConsumerStatefulWidget {
 }
 
 class _RoomScreenState extends ConsumerState<RoomScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   RoomModel? _room;
   bool _isLoading = true;
   String? _errorMessage;
@@ -75,6 +76,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 3, vsync: this);
     _player = UnifiedPlayerController();
     _player.addListener(_onPlayerStateChanged);
@@ -91,10 +93,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   void _onPipActionReceived() {
     final action = PipService.instance.pipActionNotifier.value;
+    if (action == null) return;
     if (action == 'play') {
       _player.play();
     } else if (action == 'pause') {
       _player.pause();
+    } else if (action == 'stop_screenshare') {
+      _screenShareController?.stopScreenShare();
     }
   }
 
@@ -344,33 +349,44 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
       // Initial media load
       if (room.currentMediaUrl != null && room.currentMediaUrl!.isNotEmpty) {
-        final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
+        if (room.currentMediaType == 'screenshare' || room.currentMediaUrl == 'screenshare') {
+          _player.loadMedia('screenshare', 'screenshare');
+          if (_roomController?.isHost == true) {
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (mounted && _screenShareController != null && !_screenShareController!.isSharing) {
+                await _screenShareController!.startScreenShare();
+              }
+            });
+          }
+        } else {
+          final bool shouldAutoPlay = (_roomController?.isHost == true) || room.isPlaying;
 
-        // If host enters room with a local file on native, ensure P2P hosting is active
-        if (!kIsWeb &&
-            _roomController?.isHost == true &&
-            UnifiedPlayerController.isLocalFilePath(room.currentMediaUrl!)) {
-          if (!P2PFileStreamService.instance.isHosting) {
-            try {
-              await P2PFileStreamService.instance.hostFile(
-                filePath: room.currentMediaUrl!,
-                hostUserId: user.id,
-                hostUserName: user.username,
-              );
-            } catch (e) {
-              debugPrint('[RoomScreen] Failed to host local file: $e');
+          // If host enters room with a local file on native, ensure P2P hosting is active
+          if (!kIsWeb &&
+              _roomController?.isHost == true &&
+              UnifiedPlayerController.isLocalFilePath(room.currentMediaUrl!)) {
+            if (!P2PFileStreamService.instance.isHosting) {
+              try {
+                await P2PFileStreamService.instance.hostFile(
+                  filePath: room.currentMediaUrl!,
+                  hostUserId: user.id,
+                  hostUserName: user.username,
+                );
+              } catch (e) {
+                debugPrint('[RoomScreen] Failed to host local file: $e');
+              }
             }
           }
-        }
 
-        _player.loadMedia(
-          room.currentMediaType ?? 'direct_url',
-          room.currentMediaUrl!,
-          autoPlay: shouldAutoPlay,
-          startSeconds: room.currentPosition,
-        );
-        if (shouldAutoPlay && _roomController?.isHost == true && !room.isPlaying) {
-          _syncController?.broadcastSync(state: 'playing', position: room.currentPosition);
+          _player.loadMedia(
+            room.currentMediaType ?? 'direct_url',
+            room.currentMediaUrl!,
+            autoPlay: shouldAutoPlay,
+            startSeconds: room.currentPosition,
+          );
+          if (shouldAutoPlay && _roomController?.isHost == true && !room.isPlaying) {
+            _syncController?.broadcastSync(state: 'playing', position: room.currentPosition);
+          }
         }
       }
       if (mounted) {
@@ -446,6 +462,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       }
 
 
+      final isSharing = _screenShareController?.isSharing == true;
+      PipService.instance.updateScreenShareState(isSharing);
+
       debugPrint(
           '[RoomScreen] _onControllerUpdated: participants=${_roomController?.state.participants.length}');
       setState(() {});
@@ -453,7 +472,26 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      // Rule 9 YouTube ToS compliance: Never play YouTube in background or when screen is locked/off
+      // unless user is actively in PiP mode with visible PiP window.
+      if (!PipService.instance.isInPipMode &&
+          _player.mediaType == 'youtube' &&
+          _player.isPlaying) {
+        debugPrint(
+          '[RoomScreen] App backgrounded: pausing YouTube playback for ToS compliance',
+        );
+        _player.pause();
+        _syncController?.requestPause();
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _player.removeListener(_onPlayerStateChanged);
     _player.exitFullscreen();
     _roomController?.removeListener(_onControllerUpdated);
@@ -489,6 +527,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     PipService.instance.isInPipModeNotifier.removeListener(_onPipModeChanged);
     PipService.instance.pipActionNotifier.removeListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(false);
+    PipService.instance.updateScreenShareState(false);
     _tabController.dispose();
     _roomController?.dispose();
     _chatController?.dispose();
@@ -515,6 +554,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       syncController: _syncController!,
       chatController: _chatController,
       queueController: _queueController,
+      screenShareController: _screenShareController,
     );
   }
 
@@ -827,26 +867,31 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         body: Center(
           child: AspectRatio(
             aspectRatio: 16 / 9,
-            child: _screenShareController?.isScreenSharingActive == true
-                ? ScreenShareView(
-                    key: _screenShareKey,
-                    controller: _screenShareController!,
-                    isHost: _roomController?.isHost ?? false,
-                    onExit: () {},
+            child: _screenShareController?.isSharing == true
+                ? ScreenSharePipIndicator(
                     roomTitle: currentRoom.title,
+                    onStop: () => _screenShareController?.stopScreenShare(),
                   )
-                : (_syncController != null
-                    ? UnifiedPlayerView(
-                        key: _playerKey,
-                        player: _player,
-                        syncController: _syncController!,
-                        onOpenMediaPicker: () {},
+                : (_screenShareController?.isScreenSharingActive == true
+                    ? ScreenShareView(
+                        key: _screenShareKey,
+                        controller: _screenShareController!,
+                        isHost: _roomController?.isHost ?? false,
                         onExit: () {},
-                        title: currentRoom.title,
-                        showTopBar: false,
-                        isPipMode: true,
+                        roomTitle: currentRoom.title,
                       )
-                    : const SizedBox.shrink()),
+                    : (_syncController != null
+                        ? UnifiedPlayerView(
+                            key: _playerKey,
+                            player: _player,
+                            syncController: _syncController!,
+                            onOpenMediaPicker: () {},
+                            onExit: () {},
+                            title: currentRoom.title,
+                            showTopBar: false,
+                            isPipMode: true,
+                          )
+                        : const SizedBox.shrink())),
           ),
         ),
       );
@@ -939,10 +984,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryNeon.withValues(alpha: 0.12),
+                    color: AppColors.primaryNeon.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.3),
+                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
                       width: 0.8,
                     ),
                   ),
@@ -954,7 +999,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primaryNeon,
+                          color: AppColors.primaryNeonLight,
                           letterSpacing: 0.8,
                         ),
                       ),
@@ -962,7 +1007,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                       const Icon(
                         Icons.copy_rounded,
                         size: 11,
-                        color: AppColors.primaryNeon,
+                        color: AppColors.primaryNeonLight,
                       ),
                     ],
                   ),
@@ -971,6 +1016,74 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             ],
           ),
           actions: [
+            if (_chatController != null)
+              ListenableBuilder(
+                listenable: _chatController!,
+                builder: (context, _) {
+                  final isEnabled = _chatController!.showFloatingReactions;
+                  return IconButton(
+                    icon: Icon(
+                      isEnabled
+                          ? Icons.visibility_rounded
+                          : Icons.visibility_off_rounded,
+                      size: 20,
+                      color: isEnabled
+                          ? AppColors.primaryNeon
+                          : AppColors.textMuted,
+                    ),
+                    tooltip: isEnabled
+                        ? 'Sembunyikan Reaksi Melayang'
+                        : 'Tampilkan Reaksi Melayang',
+                    onPressed: () {
+                      AppHaptics.light();
+                      _chatController!.toggleFloatingReactions();
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(milliseconds: 1500),
+                          backgroundColor: AppColors.surfaceElevated,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: isEnabled
+                                  ? AppColors.textMuted
+                                  : AppColors.primaryNeon,
+                              width: 0.8,
+                            ),
+                          ),
+                          content: Row(
+                            children: [
+                              Icon(
+                                !isEnabled
+                                    ? Icons.visibility_rounded
+                                    : Icons.visibility_off_rounded,
+                                size: 16,
+                                color: !isEnabled
+                                    ? AppColors.primaryNeon
+                                    : AppColors.textMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  !isEnabled
+                                      ? 'Reaksi melayang di video ditampilkan'
+                                      : 'Reaksi melayang di video disembunyikan',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.share_rounded, size: 20),
               tooltip: 'Bagikan Room',
@@ -986,7 +1099,40 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             ),
           ],
         ),
-        body: LayoutBuilder(
+        body: Column(
+          children: [
+            if (_roomController != null &&
+                !_roomController!.state.isRealtimeConnected)
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                color: AppColors.accentRed.withValues(alpha: 0.9),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Koneksi Realtime terputus. Mencoba menghubungkan kembali...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: LayoutBuilder(
           builder: (context, constraints) {
             final isDesktop = constraints.maxWidth >= 850;
 
@@ -1118,7 +1264,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
           },
         ),
       ),
-    );
+    ],
+  ),
+),
+);
   }
 
   Widget _buildSocialHub({
@@ -1147,15 +1296,17 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             labelPadding: const EdgeInsets.symmetric(horizontal: 6),
             indicatorColor: AppColors.primaryNeon,
             indicatorWeight: 2.5,
-            labelColor: AppColors.primaryNeon,
+            labelColor: AppColors.primaryNeonLight,
             unselectedLabelColor: AppColors.textSecondary,
             labelStyle: const TextStyle(
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.bold,
+              letterSpacing: 0.15,
             ),
             unselectedLabelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.15,
             ),
             dividerColor: Colors.transparent,
             onTap: (_) => AppHaptics.selection(),
@@ -1166,7 +1317,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   children: [
                     Icon(Icons.chat_bubble_outline_rounded, size: 14),
                     SizedBox(width: 5),
-                    Text('Obrolan'),
+                    Flexible(
+                      child: Text('Obrolan', overflow: TextOverflow.ellipsis),
+                    ),
                   ],
                 ),
               ),
@@ -1176,9 +1329,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   children: [
                     const Icon(Icons.people_alt_rounded, size: 14),
                     const SizedBox(width: 5),
-                    Text('Peserta (${participants.length})'),
+                    Flexible(
+                      child: Text(
+                        'Peserta (${participants.length})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     if (activeSpeakerCount > 0) ...[
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 4),
                       Container(
                         width: 6,
                         height: 6,
@@ -1197,7 +1355,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   children: [
                     const Icon(Icons.queue_music_rounded, size: 14),
                     const SizedBox(width: 5),
-                    Text('Antrean ($queueCount)'),
+                    Flexible(
+                      child: Text(
+                        'Antrean ($queueCount)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ),

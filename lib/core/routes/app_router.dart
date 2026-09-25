@@ -6,6 +6,7 @@ import '../../features/auth/presentation/welcome_screen.dart';
 import '../../features/lobby/presentation/lobby_screen.dart';
 import '../../features/room/models/room_model.dart';
 import '../../features/room/presentation/room_screen.dart';
+import '../constants/app_colors.dart';
 
 class _GoRouterRefreshNotifier extends ChangeNotifier {
   _GoRouterRefreshNotifier(Ref ref) {
@@ -51,7 +52,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     errorBuilder: (context, state) {
       return Scaffold(
-        backgroundColor: const Color(0xFF090B14),
+        backgroundColor: AppColors.background,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -60,14 +61,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               children: [
                 const Icon(
                   Icons.explore_off_rounded,
-                  color: Color(0xFFFF5252),
+                  color: AppColors.accentRed,
                   size: 54,
                 ),
                 const SizedBox(height: 16),
                 const Text(
                   'Halaman Tidak Ditemukan',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
@@ -77,7 +78,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   'Rute "${state.uri}" tidak tersedia atau telah dipindahkan.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFF9E9E9E),
+                    color: AppColors.textSecondary,
                     fontSize: 14,
                   ),
                 ),
@@ -87,8 +88,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   icon: const Icon(Icons.home_rounded),
                   label: const Text('Kembali ke Lobby'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00FFC2),
-                    foregroundColor: Colors.black,
+                    backgroundColor: AppColors.primaryNeon,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 12,

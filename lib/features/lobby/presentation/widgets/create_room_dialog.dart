@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/p2p_file_stream_service.dart';
 import '../../../auth/presentation/auth_controller.dart';
@@ -90,6 +89,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _selectedMediaType = 'dailymotion';
         _selectedVideoId = detected?.mediaId;
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Dailymotion';
+      } else if (widget.initialMediaType == 'screenshare' || widget.initialMediaUrl == 'screenshare') {
+        _selectedMediaType = 'screenshare';
+        _selectedVideoId = null;
+        _selectedVideoTitle = widget.initialTitle ?? 'Mirror Layar (Screen Share)';
       } else if (detected?.isDirectUrl == true && UnifiedPlayerController.isLocalFilePath(widget.initialMediaUrl!)) {
         _selectedMediaType = 'direct_url';
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'File Video Lokal';
@@ -114,7 +117,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       context,
       mode: YouTubeBrowserMode.createRoom,
       onVideoSelected: (type, url, title) {
-        final vId = YoutubePlayerController.convertUrlToId(url);
+        final vId = UnifiedPlayerController.extractYoutubeId(url);
         setState(() {
           _selectedMediaType = 'youtube';
           _selectedMediaUrl = url;
@@ -189,7 +192,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
       final path = kIsWeb
           ? (picked.xFile.path.isNotEmpty ? picked.xFile.path : picked.uri.toString())
-          : (picked.path ?? '');
+          : (picked.path ?? (picked.xFile.path.isNotEmpty ? picked.xFile.path : ''));
       if (path.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -233,6 +236,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         );
       }
     }
+  }
+
+  void _selectScreenShareSource() {
+    setState(() {
+      _selectedMediaType = 'screenshare';
+      _selectedMediaUrl = 'screenshare';
+      _selectedVideoTitle = 'Mirror Layar (Screen Share)';
+      _selectedVideoId = null;
+      _currentStep = 1;
+      if (_titleController.text == 'Nonton Bareng' ||
+          _titleController.text.isEmpty ||
+          _titleController.text.startsWith('Nobar:')) {
+        _titleController.text = 'Nobar: Mirror Layar';
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -524,15 +542,33 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           subtitle: 'Stream video dari memori HP/PC tanpa upload',
           icon: Icons.folder_special_rounded,
           iconColor: Colors.white,
-          iconBackgroundColor: Colors.purpleAccent,
-          borderColor: Colors.purpleAccent.withValues(alpha: 0.45),
+          iconBackgroundColor: AppColors.p2pPurple,
+          borderColor: AppColors.p2pPurple.withValues(alpha: 0.5),
           gradientColors: [
-            Colors.purpleAccent.withValues(alpha: 0.16),
+            AppColors.p2pPurple.withValues(alpha: 0.18),
             AppColors.surfaceElevated,
           ],
-          accentColor: Colors.purpleAccent,
+          accentColor: AppColors.p2pPurple,
           badgeText: 'P2P',
           onTap: _pickLocalVideoFile,
+        ),
+        const SizedBox(height: 12),
+
+        // 5. Mirror Device / Screen Sharing Option Card
+        _buildSourceOptionCard(
+          title: 'Mirror Layar / Bagikan Layar',
+          subtitle: 'Siarkan layar HP Anda via WebRTC langsung ke room',
+          icon: Icons.mobile_screen_share_rounded,
+          iconColor: Colors.white,
+          iconBackgroundColor: AppColors.secondaryNeon,
+          borderColor: AppColors.secondaryNeon.withValues(alpha: 0.5),
+          gradientColors: [
+            AppColors.secondaryNeon.withValues(alpha: 0.18),
+            AppColors.surfaceElevated,
+          ],
+          accentColor: AppColors.secondaryNeon,
+          badgeText: 'Real-time',
+          onTap: _selectScreenShareSource,
         ),
 
         // If a video was already selected and user clicked "Ganti Video" / back to step 1
@@ -542,21 +578,25 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 14),
           OutlinedButton.icon(
             onPressed: () => setState(() => _currentStep = 1),
-            icon: const Icon(Icons.check_circle_outline_rounded,
-                size: 18, color: AppColors.primaryNeon),
+            icon: const Icon(Icons.check_circle_rounded,
+                size: 19, color: AppColors.accentGreen),
             label: Text(
               'Tetap gunakan: ${_selectedVideoTitle ?? "Video Terpilih"}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primaryNeon,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.primaryNeon, width: 1.2),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              backgroundColor: AppColors.primaryNeon.withValues(alpha: 0.16),
+              side: BorderSide(
+                color: AppColors.primaryNeonLight.withValues(alpha: 0.65),
+                width: 1.4,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -567,17 +607,89 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  Widget _buildChangeVideoButton() {
+    return InkWell(
+      onTap: () => setState(() => _currentStep = 0),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.primaryNeon.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.primaryNeonLight.withValues(alpha: 0.55),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.swap_horiz_rounded,
+              size: 16,
+              color: AppColors.primaryNeonLight,
+            ),
+            SizedBox(width: 5),
+            Text(
+              'Ganti Video',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryNeonLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: AppColors.accentGreen.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: AppColors.accentGreen.withValues(alpha: 0.5),
+        ),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_rounded,
+              size: 11, color: AppColors.accentGreen),
+          SizedBox(width: 3),
+          Text(
+            'Terpilih',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.accentGreen,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildYouTubePreviewCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.youtubeRed.withValues(alpha: 0.5),
-          width: 1.2,
+          color: AppColors.youtubeRed.withValues(alpha: 0.65),
+          width: 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -586,24 +698,24 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             children: [
               // Video Thumbnail
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
                 child: _selectedVideoId != null
                     ? Image.network(
                         'https://img.youtube.com/vi/$_selectedVideoId/hqdefault.jpg',
-                        width: 84,
-                        height: 54,
+                        width: 88,
+                        height: 56,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
-                          width: 84,
-                          height: 54,
+                          width: 88,
+                          height: 56,
                           color: Colors.black26,
                           child: const Icon(Icons.smart_display_rounded,
                               color: AppColors.youtubeRed),
                         ),
                       )
                     : Container(
-                        width: 84,
-                        height: 54,
+                        width: 88,
+                        height: 56,
                         color: Colors.black26,
                         child: const Icon(Icons.smart_display_rounded,
                             color: AppColors.youtubeRed),
@@ -616,39 +728,48 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.youtubeRed.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.smart_display_rounded,
-                              size: 11, color: AppColors.youtubeRed),
-                          SizedBox(width: 4),
-                          Text(
-                            'YouTube',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.youtubeRed,
-                            ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.youtubeRed.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
                           ),
-                        ],
-                      ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.smart_display_rounded,
+                                  size: 12, color: AppColors.youtubeRed),
+                              SizedBox(width: 4),
+                              Text(
+                                'YouTube',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.youtubeRed,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       _selectedVideoTitle ?? 'Video YouTube',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
+                        height: 1.25,
                       ),
                     ),
                   ],
@@ -656,21 +777,13 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _currentStep = 0),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryNeon,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
+              _buildChangeVideoButton(),
             ],
           ),
         ],
@@ -681,14 +794,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   Widget _buildBstationPreviewCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.bstationBlue.withValues(alpha: 0.5),
-          width: 1.2,
+          color: AppColors.bstationBlue.withValues(alpha: 0.65),
+          width: 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -697,15 +817,15 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             children: [
               // Video Thumbnail / Icon
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
                 child: Container(
-                  width: 84,
-                  height: 54,
-                  color: AppColors.bstationBlue.withValues(alpha: 0.15),
+                  width: 88,
+                  height: 56,
+                  color: AppColors.bstationBlue.withValues(alpha: 0.18),
                   child: const Icon(
                     Icons.tv_rounded,
                     color: AppColors.bstationBlue,
-                    size: 26,
+                    size: 28,
                   ),
                 ),
               ),
@@ -716,39 +836,49 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.bstationBlue.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.tv_rounded,
-                              size: 11, color: AppColors.bstationBlue),
-                          SizedBox(width: 4),
-                          Text(
-                            'Bstation',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.bstationBlue,
-                            ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.bstationBlue.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
                           ),
-                        ],
-                      ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tv_rounded,
+                                  size: 12, color: AppColors.bstationBlue),
+                              SizedBox(width: 4),
+                              Text(
+                                'Bstation',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.bstationBlue,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       _selectedVideoTitle ?? 'Video Bstation',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
+                        height: 1.25,
                       ),
                     ),
                   ],
@@ -756,21 +886,13 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _currentStep = 0),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryNeon,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
+              _buildChangeVideoButton(),
             ],
           ),
         ],
@@ -785,14 +907,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.dailymotionBlue.withValues(alpha: 0.5),
-          width: 1.2,
+          color: AppColors.dailymotionBlue.withValues(alpha: 0.65),
+          width: 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -801,32 +930,34 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             children: [
               // Video Thumbnail
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
                 child: thumbUrl != null
                     ? Image.network(
                         thumbUrl,
-                        width: 84,
-                        height: 54,
+                        width: 88,
+                        height: 56,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
-                          width: 84,
-                          height: 54,
-                          color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
+                          width: 88,
+                          height: 56,
+                          color:
+                              AppColors.dailymotionBlue.withValues(alpha: 0.18),
                           child: const Icon(
                             Icons.play_circle_filled_rounded,
                             color: AppColors.dailymotionBlue,
-                            size: 26,
+                            size: 28,
                           ),
                         ),
                       )
                     : Container(
-                        width: 84,
-                        height: 54,
-                        color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
+                        width: 88,
+                        height: 56,
+                        color:
+                            AppColors.dailymotionBlue.withValues(alpha: 0.18),
                         child: const Icon(
                           Icons.play_circle_filled_rounded,
                           color: AppColors.dailymotionBlue,
-                          size: 26,
+                          size: 28,
                         ),
                       ),
               ),
@@ -837,39 +968,49 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.dailymotionBlue.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.play_circle_filled_rounded,
-                              size: 11, color: AppColors.dailymotionBlue),
-                          SizedBox(width: 4),
-                          Text(
-                            'Dailymotion',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.dailymotionBlue,
-                            ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.dailymotionBlue
+                                .withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
                           ),
-                        ],
-                      ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.play_circle_filled_rounded,
+                                  size: 12, color: AppColors.dailymotionBlue),
+                              SizedBox(width: 4),
+                              Text(
+                                'Dailymotion',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dailymotionBlue,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       _selectedVideoTitle ?? 'Video Dailymotion',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
+                        height: 1.25,
                       ),
                     ),
                   ],
@@ -877,21 +1018,13 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _currentStep = 0),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryNeon,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
+              _buildChangeVideoButton(),
             ],
           ),
         ],
@@ -902,14 +1035,21 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   Widget _buildLocalVideoPreviewCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.purpleAccent.withValues(alpha: 0.5),
-          width: 1.2,
+          color: AppColors.p2pPurple.withValues(alpha: 0.65),
+          width: 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -918,15 +1058,15 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             children: [
               // Icon Thumbnail
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
                 child: Container(
-                  width: 84,
-                  height: 54,
-                  color: Colors.purpleAccent.withValues(alpha: 0.15),
+                  width: 88,
+                  height: 56,
+                  color: AppColors.p2pPurple.withValues(alpha: 0.18),
                   child: const Center(
                     child: Icon(
                       Icons.folder_special_rounded,
-                      color: Colors.purpleAccent,
+                      color: AppColors.p2pPurple,
                       size: 28,
                     ),
                   ),
@@ -939,54 +1079,57 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        _buildSelectedBadge(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 7, vertical: 2.5),
                           decoration: BoxDecoration(
-                            color: Colors.purpleAccent.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
+                            color: AppColors.p2pPurple.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.stream_rounded,
-                                  size: 11, color: Colors.purpleAccent),
+                                  size: 12, color: AppColors.p2pPurple),
                               SizedBox(width: 4),
                               Text(
                                 'File Lokal P2P',
                                 style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.purpleAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.p2pPurple,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        if (_selectedLocalFileSize != null) ...[
-                          const SizedBox(width: 6),
+                        if (_selectedLocalFileSize != null)
                           Text(
                             _selectedLocalFileSize!,
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       _selectedVideoTitle ?? 'File Video Lokal',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
+                        height: 1.25,
                       ),
                     ),
                   ],
@@ -994,21 +1137,147 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _currentStep = 0),
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Ganti Video', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryNeon,
-                  visualDensity: VisualDensity.compact,
+              _buildChangeVideoButton(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScreenSharePreviewCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.secondaryNeon.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Container(
+                  width: 88,
+                  height: 56,
+                  color: AppColors.secondaryNeon.withValues(alpha: 0.18),
+                  child: const Center(
+                    child: Icon(
+                      Icons.mobile_screen_share_rounded,
+                      color: AppColors.secondaryNeon,
+                      size: 28,
+                    ),
+                  ),
                 ),
               ),
+              const SizedBox(width: 12),
+
+              // Title and Source Badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.secondaryNeon.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.mobile_screen_share_rounded,
+                                  size: 12, color: AppColors.secondaryNeon),
+                              SizedBox(width: 4),
+                              Text(
+                                'Mirror Layar',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.secondaryNeon,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentGreen.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'WebRTC P2P',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.accentGreen,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _selectedVideoTitle ?? 'Mirror Layar (Screen Share)',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Layar HP Anda akan disiarkan langsung via WebRTC saat masuk room',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildChangeVideoButton(),
             ],
           ),
         ],
@@ -1026,9 +1295,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const Text(
             'Video Terpilih',
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
@@ -1036,6 +1305,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _buildBstationPreviewCard(),
           ] else if (_selectedMediaType == 'dailymotion') ...[
             _buildDailymotionPreviewCard(),
+          ] else if (_selectedMediaType == 'screenshare') ...[
+            _buildScreenSharePreviewCard(),
           ] else if (_selectedMediaType == 'direct_url' &&
               _selectedMediaUrl != null &&
               UnifiedPlayerController.isLocalFilePath(_selectedMediaUrl!)) ...[
@@ -1192,32 +1463,55 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 24),
 
           // Submit Button
-          ElevatedButton(
-            onPressed: _isLoading ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              backgroundColor: AppColors.primaryNeon,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryNeon.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.black,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: _isLoading
+                  ? const SizedBox.shrink()
+                  : const Icon(
+                      Icons.play_circle_fill_rounded,
+                      size: 22,
+                      color: Colors.white,
                     ),
-                  )
-                : const Text(
-                    'Buat Room Sekarang',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+              label: _isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Buat Room Sekarang',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
                     ),
-                  ),
+            ),
           ),
         ],
       ),

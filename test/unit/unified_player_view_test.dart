@@ -464,5 +464,109 @@ void main() {
       await tester.tap(find.byIcon(Icons.replay_10_rounded));
       await tester.pumpAndSettle();
     });
+
+    testWidgets(
+        'renders empty placeholder with screenshare UI and no controls overlay when mediaType is screenshare',
+        (tester) async {
+      await playerController.loadMedia('screenshare', 'screenshare');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mirror Layar Belum Aktif'), findsOneWidget);
+      expect(find.byIcon(Icons.mobile_screen_share_rounded), findsOneWidget);
+      // Ensure playback controls overlay is NOT shown
+      expect(find.byIcon(Icons.replay_10_rounded), findsNothing);
+      expect(find.byIcon(Icons.forward_10_rounded), findsNothing);
+    });
+
+    testWidgets('hides all controls overlay when isPipMode is true',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              isPipMode: true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Controls overlay (replay, forward, play/pause, time labels, slider) must NOT be present
+      expect(find.byIcon(Icons.replay_10_rounded), findsNothing);
+      expect(find.byIcon(Icons.forward_10_rounded), findsNothing);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      expect(find.byIcon(Icons.pause_rounded), findsNothing);
+      expect(find.byIcon(Icons.fullscreen_rounded), findsNothing);
+    });
+
+    testWidgets(
+        'forward and rewind buttons do not seek to 0 when duration is unloaded or zero',
+        (tester) async {
+      await playerController.loadMedia(
+        'direct_url',
+        'https://example.com/test.mp4',
+        autoPlay: false,
+      );
+
+      // Duration is 0.0 before metadata loads
+      await playerController.seekTo(25.0);
+      expect(playerController.duration, 0.0);
+      expect(playerController.position, 25.0);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UnifiedPlayerView(
+              player: playerController,
+              syncController: syncController,
+              onOpenMediaPicker: () {},
+              title: 'Seek Safe Test',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap Forward 10s button
+      final forwardFinder = find.byIcon(Icons.forward_10_rounded);
+      expect(forwardFinder, findsOneWidget);
+      await tester.tap(forwardFinder);
+      await tester.pumpAndSettle();
+
+      // Target should be 25 + 10 = 35.0, NOT clamped to 0.0!
+      expect(playerController.position, 35.0);
+
+      // Tap Rewind 10s button
+      final rewindFinder = find.byIcon(Icons.replay_10_rounded);
+      expect(rewindFinder, findsOneWidget);
+      await tester.tap(rewindFinder);
+      await tester.pumpAndSettle();
+
+      expect(playerController.position, 25.0);
+    });
   });
 }

@@ -96,5 +96,45 @@ void main() {
       expect(find.text('42'), findsOneWidget);
       expect(find.text('Bebas'), findsOneWidget);
     });
+
+    testWidgets('RoomCard renders Mirror Layar badge when currentMediaType is screenshare',
+        (tester) async {
+      final screenShareRoom = RoomModel(
+        id: 'room-3',
+        code: 'WP9999',
+        title: 'Nobar Screen Share',
+        currentMediaUrl: 'screenshare',
+        currentMediaType: 'screenshare',
+        thumbnailUrl: null,
+        currentState: 'playing',
+        currentPosition: 0,
+        hostName: 'HostMirrored',
+        participantCount: 5,
+        controlMode: 'host_only',
+        livekitRoomName: 'room-3',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 360,
+              height: 140,
+              child: RoomCard(
+                room: screenShareRoom,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Nobar Screen Share'), findsOneWidget);
+      expect(find.text('HostMirrored'), findsOneWidget);
+      expect(find.text('Mirror Layar'), findsOneWidget);
+      expect(find.byIcon(Icons.mobile_screen_share_rounded), findsWidgets);
+    });
   });
 }

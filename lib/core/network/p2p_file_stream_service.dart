@@ -192,7 +192,16 @@ class P2PFileStreamService extends ChangeNotifier {
       throw UnsupportedError('P2P file streaming from internal storage is not supported on web.');
     }
 
-    final file = File(filePath);
+    String effectivePath = filePath;
+    if (effectivePath.startsWith('file://')) {
+      try {
+        effectivePath = Uri.parse(effectivePath).toFilePath();
+      } catch (_) {
+        effectivePath = effectivePath.replaceFirst(RegExp(r'^file:\/\/'), '');
+      }
+    }
+
+    final file = File(effectivePath);
     if (!await file.exists()) {
       throw FileSystemException('File does not exist', filePath);
     }

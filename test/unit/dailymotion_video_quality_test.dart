@@ -260,6 +260,29 @@ void main() {
       expect(player.availableQualities.any((q) => q.id == '720'), isTrue);
       expect(player.availableQualities.any((q) => q.id == '360'), isTrue);
       expect(player.availableQualities.any((q) => q.id == '240'), isFalse);
+      expect(player.maxDetectedHeight, equals(1080));
+      expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
+    });
+
+    test('4. Stream resolution 4K auto-expands Dailymotion available quality tiers up to 2160p', () async {
+      await player.loadMedia(
+        'dailymotion',
+        'https://www.dailymotion.com/video/x84sh87',
+        autoPlay: false,
+      );
+
+      // Simulate 4K stream detected from <video> before explicit qualities arrive
+      player.dailymotionController?.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'resolution',
+        'height': 2160,
+        'width': 3840,
+      }));
+
+      expect(player.dailymotionController?.detectedHeight, equals(2160));
+      expect(player.availableQualities.any((q) => q.id == '2160'), isTrue);
+      expect(player.availableQualities.any((q) => q.id == '1440'), isTrue);
+      expect(player.maxDetectedHeight, equals(2160));
+      expect(player.maxResolutionLabel, equals('4K (2160p)'));
     });
   });
 

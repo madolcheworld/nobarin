@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../network/app_http_client.dart';
 import '../../features/room/controllers/dailymotion_player_controller.dart';
+import '../../features/room/controllers/unified_player_controller.dart';
 
 /// Centralized utility for extracting, cleaning, and resolving human-readable video titles
 /// from various video platforms (Bstation, YouTube, Dailymotion, Direct URLs)
@@ -96,7 +96,7 @@ class VideoTitleResolver {
       if (mediaType == 'youtube' ||
           trimmed.contains('youtube.com') ||
           trimmed.contains('youtu.be')) {
-        final videoId = YoutubePlayerController.convertUrlToId(trimmed);
+        final videoId = UnifiedPlayerController.extractYoutubeId(trimmed);
         if (videoId != null && videoId.isNotEmpty) {
           final resolved = await _resolveYouTubeTitle(videoId, effectiveClient);
           if (resolved != null && resolved.isNotEmpty) {
@@ -104,6 +104,7 @@ class VideoTitleResolver {
             return resolved;
           }
         }
+        return null;
       }
 
       // 2. Dailymotion Detection
@@ -118,6 +119,7 @@ class VideoTitleResolver {
             return resolved;
           }
         }
+        return null;
       }
 
       // 3. Bstation / Bilibili Detection
@@ -130,6 +132,7 @@ class VideoTitleResolver {
           _titleCache[trimmed] = resolved;
           return resolved;
         }
+        return null;
       }
 
       // 4. Direct URL / Media File Detection
@@ -205,7 +208,8 @@ class VideoTitleResolver {
   /// Resolves Bstation anime/video title from page HTML metadata tags.
   static Future<String?> _resolveBstationTitle(String url, http.Client client) async {
     try {
-      final uri = Uri.parse(url);
+      final canonicalUrl = url.startsWith('http') ? url : 'https://$url';
+      final uri = Uri.parse(canonicalUrl);
       final res = await client.get(
         uri,
         headers: {

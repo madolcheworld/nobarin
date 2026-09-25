@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -7,6 +8,7 @@ import '../models/video_quality.dart';
 
 /// Controller for Bstation / Bilibili player via WebViewController & HTML5 video bridge
 class BstationPlayerController extends ChangeNotifier {
+  final GlobalKey webViewKey = GlobalKey(debugLabel: 'BstationWebView');
   WebViewController? _webViewController;
   String _url = '';
   double _position = 0.0;
@@ -16,6 +18,11 @@ class BstationPlayerController extends ChangeNotifier {
   double _volume = 1.0;
   double _playbackSpeed = 1.0;
   bool _isDisposed = false;
+  bool _isFullscreenTransition = false;
+
+  void setFullscreenTransition(bool active) {
+    _isFullscreenTransition = active;
+  }
 
   // Video Quality state for Bstation
   List<VideoQuality> _availableQualities = [
@@ -30,6 +37,7 @@ class BstationPlayerController extends ChangeNotifier {
   VideoQuality? _selectedQuality;
   int? _detectedHeight;
   int? _detectedWidth;
+  bool _hasExplicitQualitiesFromBridge = false;
 
   BstationPlayerController() {
     _selectedQuality = _availableQualities.first;
@@ -73,10 +81,13 @@ class BstationPlayerController extends ChangeNotifier {
     _selectedQuality = _availableQualities.first;
     _detectedHeight = null;
     _detectedWidth = null;
+    _hasExplicitQualitiesFromBridge = false;
     notifyListeners();
 
     if (!_isSupportedMobilePlatform) {
-      onError?.call('Bstation player hanya didukung pada platform Android & iOS. Silakan gunakan sumber YouTube atau Direct Video.');
+      if (!kIsWeb) {
+        onError?.call('Bstation player hanya didukung pada platform Android & iOS. Silakan gunakan sumber YouTube atau Direct Video.');
+      }
       return;
     }
 
@@ -303,28 +314,98 @@ class BstationPlayerController extends ChangeNotifier {
             function reportBstationQualities() {
               try {
                 var detected = [];
-                // Method A: Bilibili __playinfo__ global
-                if (window.__playinfo__ && window.__playinfo__.data && Array.isArray(window.__playinfo__.data.accept_quality)) {
-                  var qMap = { 120: '4K', 116: '1080p 60fps', 80: '1080p HD', 64: '720p HD', 32: '480p Standar', 16: '360p Hemat' };
-                  var hMap = { 120: 2160, 116: 1080, 80: 1080, 64: 720, 32: 480, 16: 360 };
-                  var acc = window.__playinfo__.data.accept_quality;
-                  for (var j = 0; j < acc.length; j++) {
-                    var code = acc[j];
-                    if (hMap[code]) {
-                      detected.push({ id: String(hMap[code]), height: hMap[code], label: qMap[code] || (hMap[code] + 'p') });
+                var qMap = { 125: 'HDR', 120: '4K Ultra HD', 116: '1080p 60fps', 112: '1080p+ Tinggi', 80: '1080p HD', 74: '720p 60fps', 64: '720p HD', 32: '480p Standar', 16: '360p Hemat', 6: '240p Hemat' };
+                var hMap = { 125: 2160, 120: 2160, 116: 1080, 112: 1080, 80: 1080, 74: 720, 64: 720, 32: 480, 16: 360, 6: 240 };
+
+                function addQualityItem(idStr, heightNum, labelStr) {
+                  if (!idStr || !heightNum || isNaN(heightNum) || heightNum <= 0) return;
+                  for (var idx = 0; idx < detected.length; idx++) {
+                    if (detected[idx].id === String(idStr)) return;
+                  }
+                  detected.push({ id: String(idStr), height: heightNum, label: labelStr || (heightNum + 'p') });
+                }
+
+                // Method A: Bilibili __playinfo__ global (support_formats, accept_quality, dash.video)
+                if (window.__playinfo__ && window.__playinfo__.data) {
+                  var pData = window.__playinfo__.data;
+                  if (Array.isArray(pData.support_formats)) {
+                    for (var i = 0; i < pData.support_formats.length; i++) {
+                      var sf = pData.support_formats[i];
+                      var qCode = sf.quality;
+                      var hVal = sf.height || hMap[qCode];
+                      var desc = sf.new_description || sf.display_desc || qMap[qCode];
+                      if (!hVal && desc) {
+                        var m = String(desc).match(/(\\d{3,4})[pP]?/);
+                        if (m) hVal = parseInt(m[1], 10);
+                      }
+                      if (hVal) {
+                        addQualityItem(String(hVal), hVal, desc || (hVal + 'p'));
+                      }
+                    }
+                  }
+                  if (detected.length === 0 && Array.isArray(pData.accept_quality)) {
+                    var acc = pData.accept_quality;
+                    for (var j = 0; j < acc.length; j++) {
+                      var code = acc[j];
+                      if (hMap[code]) {
+                        addQualityItem(String(hMap[code]), hMap[code], qMap[code] || (hMap[code] + 'p'));
+                      }
+                    }
+                  }
+                  if (detected.length === 0 && pData.dash && Array.isArray(pData.dash.video)) {
+                    for (var k = 0; k < pData.dash.video.length; k++) {
+                      var dv = pData.dash.video[k];
+                      var dvH = dv.height || hMap[dv.id];
+                      if (dvH) {
+                        addQualityItem(String(dvH), dvH, qMap[dv.id] || (dvH + 'p'));
+                      }
                     }
                   }
                 }
-                // Method B: Quality menu items in DOM
+
+                // Method B: Bstation / Bilibili global player instance
+                if (detected.length === 0 && window.player && typeof window.player.getSupportedQualityList === 'function') {
+                  var qList = window.player.getSupportedQualityList();
+                  if (Array.isArray(qList)) {
+                    for (var qIdx = 0; qIdx < qList.length; qIdx++) {
+                      var qVal = qList[qIdx];
+                      var qH = hMap[qVal] || (qVal >= 144 && qVal <= 4320 ? qVal : null);
+                      if (qH) {
+                        addQualityItem(String(qH), qH, qMap[qVal] || (qH + 'p'));
+                      }
+                    }
+                  }
+                }
+
+                // Method C: Bstation __initialState__ (bilibili.tv)
+                if (detected.length === 0 && window.__initialState__) {
+                  var initStr = '';
+                  try { initStr = JSON.stringify(window.__initialState__); } catch (_) {}
+                  if (initStr) {
+                    var resMatches = initStr.match(/"(2160|1440|1080|720|480|360|240)[pP]?"/g);
+                    if (resMatches) {
+                      for (var rm = 0; rm < resMatches.length; rm++) {
+                        var numMatch = resMatches[rm].match(/(\\d{3,4})/);
+                        if (numMatch) {
+                          var parsedH = parseInt(numMatch[1], 10);
+                          addQualityItem(String(parsedH), parsedH, parsedH + 'p');
+                        }
+                      }
+                    }
+                  }
+                }
+
+                // Method D: Quality menu items in DOM
                 if (detected.length === 0) {
-                  var qItems = document.querySelectorAll('.bpx-player-ctrl-quality-menu-item, .bstar-web-player__quality-item, [class*="quality-item"]');
+                  var qItems = document.querySelectorAll('.bpx-player-ctrl-quality-menu-item, .bstar-web-player__quality-item, [class*="quality-item"], [class*="quality-menu"] li');
                   qItems.forEach(function(item) {
                     var text = (item.textContent || '').trim();
                     var val = (item.getAttribute('data-quality') || item.getAttribute('data-value') || '').trim();
+                    var is4K = /4[kK]/.test(text);
                     var match = text.match(/(\\d{3,4})[pP]?/);
-                    var h = match ? parseInt(match[1], 10) : parseInt(val, 10);
-                    if (h && !isNaN(h) && h > 0) {
-                      detected.push({ id: String(h), height: h, label: text || (h + 'p') });
+                    var h = is4K ? 2160 : (match ? parseInt(match[1], 10) : (hMap[parseInt(val, 10)] || parseInt(val, 10)));
+                    if (h && !isNaN(h) && h >= 144) {
+                      addQualityItem(String(h), h, text || (h + 'p'));
                     }
                   });
                 }
@@ -402,9 +483,35 @@ class BstationPlayerController extends ChangeNotifier {
           case 'resolution':
             final h = (data['height'] as num?)?.toInt();
             final w = (data['width'] as num?)?.toInt();
-            if (h != null && h > 0 && h != _detectedHeight) {
-              _detectedHeight = h;
+            final normH = VideoQuality.normalizeResolutionHeight(width: w, height: h);
+            if (normH != null && normH > 0 && normH != _detectedHeight) {
+              _detectedHeight = normH;
               _detectedWidth = w;
+              // If bridge hasn't sent explicit quality list yet and detected resolution is higher than current max, expand tiers
+              if (!_hasExplicitQualitiesFromBridge) {
+                final maxExisting = _availableQualities
+                    .where((q) => !q.isAuto && q.height != null)
+                    .fold<int>(0, (prev, q) => q.height! > prev ? q.height! : prev);
+                if (normH > maxExisting) {
+                  final tiers = VideoQuality.buildStandardTiersUpTo(normH, minHeight: 360);
+                  _availableQualities = [
+                    const VideoQuality.auto(
+                      label: 'Auto (Otomatis Bstation)',
+                      mode: QualityControlMode.webviewBridge,
+                    ),
+                    ...tiers.map((t) => VideoQuality.bstation(
+                          id: '$t',
+                          label: t >= 2160
+                              ? '4K Ultra HD'
+                              : (t >= 1080
+                                  ? '${t}p FHD'
+                                  : (t >= 720 ? '${t}p HD' : '${t}p')),
+                          height: t,
+                        )),
+                  ];
+                  onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
+                }
+              }
               notifyListeners();
             }
             break;
@@ -433,6 +540,11 @@ class BstationPlayerController extends ChangeNotifier {
             }
             break;
           case 'pause':
+            if (_isFullscreenTransition && _isPlaying) {
+              debugPrint('[BstationPlayer] Spurious OS pause ignored during fullscreen transition. Resuming...');
+              play();
+              break;
+            }
             if (_isPlaying) {
               _isPlaying = false;
               notifyListeners();
@@ -484,6 +596,9 @@ class BstationPlayerController extends ChangeNotifier {
           ));
         }
       }
+    }
+    if (detected.length > 1) {
+      _hasExplicitQualitiesFromBridge = true;
     }
     // Sort descending by height (excluding auto)
     detected.sort((a, b) {

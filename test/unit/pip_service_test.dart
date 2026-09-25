@@ -159,10 +159,32 @@ void main() {
       expect(log.last.arguments, {'isPlaying': false});
     });
 
-    test('native callback onPipAction updates pipActionNotifier', () async {
-      String? receivedAction;
+    test('updateScreenShareState invokes channel with isSharing boolean', () async {
+      await pipService.updateScreenShareState(true);
+      expect(log, hasLength(1));
+      expect(log.first.method, 'updateScreenShareState');
+      expect(log.first.arguments, {'isSharingLocally': true});
+
+      await pipService.updateScreenShareState(false);
+      expect(log, hasLength(2));
+      expect(log.last.method, 'updateScreenShareState');
+      expect(log.last.arguments, {'isSharingLocally': false});
+    });
+
+    test('setPipAspectRatio invokes channel with numerator and denominator', () async {
+      await pipService.setPipAspectRatio(9, 16);
+      expect(log, hasLength(1));
+      expect(log.first.method, 'setPipAspectRatio');
+      expect(log.first.arguments, {'numerator': 9, 'denominator': 16});
+    });
+
+    test('native callback onPipAction notifies listeners and supports consecutive identical actions', () async {
+      final List<String> receivedActions = [];
       pipService.pipActionNotifier.addListener(() {
-        receivedAction = pipService.pipActionNotifier.value;
+        final action = pipService.pipActionNotifier.value;
+        if (action != null) {
+          receivedActions.add(action);
+        }
       });
 
       // Simulate native callback sending 'play'
@@ -177,23 +199,31 @@ void main() {
         (ByteData? data) {},
       );
 
-      expect(receivedAction, 'play');
-      expect(pipService.pipActionNotifier.value, 'play');
+      expect(receivedActions, ['play']);
 
-      // Simulate native callback sending 'pause'
-      final pauseByteData = const StandardMethodCodec().encodeMethodCall(
-        const MethodCall('onPipAction', 'pause'),
+      // Simulate native callback sending 'play' again (consecutive identical action)
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channelName,
+        playByteData,
+        (ByteData? data) {},
+      );
+
+      expect(receivedActions, ['play', 'play']);
+
+      // Simulate native callback sending 'stop_screenshare'
+      final stopByteData = const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('onPipAction', 'stop_screenshare'),
       );
 
       await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .handlePlatformMessage(
         channelName,
-        pauseByteData,
+        stopByteData,
         (ByteData? data) {},
       );
 
-      expect(receivedAction, 'pause');
-      expect(pipService.pipActionNotifier.value, 'pause');
+      expect(receivedActions, ['play', 'play', 'stop_screenshare']);
     });
   });
 }

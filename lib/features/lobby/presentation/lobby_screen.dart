@@ -5,12 +5,13 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_haptics.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../pip/services/pip_service.dart';
+import '../../room/models/room_model.dart';
 import 'lobby_controller.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/join_code_dialog.dart';
 import 'widgets/room_card.dart';
 import 'widgets/user_profile_sheet.dart';
-import '../../room/models/room_model.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key});
@@ -29,6 +30,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
+    PipService.instance.setAutoEnterPip(false);
+  }
+
+  void _onPipModeChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -43,6 +50,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   @override
   void dispose() {
+    PipService.instance.isInPipModeNotifier.removeListener(_onPipModeChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
@@ -152,6 +160,56 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (PipService.instance.isInPipMode) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: AppColors.neonVioletGlow,
+                  ),
+                  child: const Icon(
+                    Icons.meeting_room_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Room Selesai',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Ketuk untuk membuka Nobarin',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final user = ref.watch(authControllerProvider).asData?.value;
     final roomsAsync = ref.watch(lobbyControllerProvider);
     final filteredRooms = ref.watch(filteredRoomsProvider);

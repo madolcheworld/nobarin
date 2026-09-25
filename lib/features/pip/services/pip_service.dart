@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -16,7 +15,7 @@ class PipService {
 
   PipService._()
       : _channel = const MethodChannel('watch_party/pip'),
-        _isAndroid = !kIsWeb && Platform.isAndroid,
+        _isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android,
         isInPipModeNotifier = ValueNotifier<bool>(false),
         pipActionNotifier = ValueNotifier<String?>(null) {
     _initMethodCallHandler();
@@ -49,6 +48,8 @@ class PipService {
         if (action != null) {
           pipActionNotifier.value = action;
           debugPrint('[PipService] onPipAction: $action');
+          // Reset to null immediately so subsequent identical actions (e.g. play -> play) trigger listeners
+          pipActionNotifier.value = null;
         }
         return null;
       default:
@@ -112,6 +113,34 @@ class PipService {
       await _channel.invokeMethod('updatePlaybackState', {'isPlaying': isPlaying});
     } catch (e) {
       debugPrint('[PipService] updatePlaybackState error: $e');
+    }
+  }
+
+  /// Synchronizes whether the user is actively sharing their screen
+  /// so that native PiP controls adapt (e.g. showing "Hentikan Layar" instead of Play/Pause).
+  Future<void> updateScreenShareState(bool isSharingLocally) async {
+    if (!_isAndroid) return;
+
+    try {
+      await _channel.invokeMethod('updateScreenShareState', {
+        'isSharingLocally': isSharingLocally,
+      });
+    } catch (e) {
+      debugPrint('[PipService] updateScreenShareState error: $e');
+    }
+  }
+
+  /// Sets the preferred aspect ratio for Picture-in-Picture mode on native Android.
+  Future<void> setPipAspectRatio(int numerator, int denominator) async {
+    if (!_isAndroid) return;
+
+    try {
+      await _channel.invokeMethod('setPipAspectRatio', {
+        'numerator': numerator,
+        'denominator': denominator,
+      });
+    } catch (e) {
+      debugPrint('[PipService] setPipAspectRatio error: $e');
     }
   }
 

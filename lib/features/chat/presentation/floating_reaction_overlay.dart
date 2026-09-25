@@ -272,17 +272,15 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isMega
-              ? const [Color(0xFFFF007A), Color(0xFFFF8A00)]
-              : isSuper
-                  ? const [Color(0xFFFF5252), Color(0xFFFFD700)]
-                  : const [AppColors.primaryNeon, AppColors.secondaryNeon],
-        ),
+        gradient: isMega
+            ? AppColors.comboMegaGradient
+            : isSuper
+                ? AppColors.comboSuperGradient
+                : AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: (isMega ? const Color(0xFFFF007A) : AppColors.primaryNeon)
+            color: (isMega ? AppColors.accentPink : AppColors.primaryNeon)
                 .withValues(alpha: 0.6),
             blurRadius: 8,
             offset: const Offset(0, 2),

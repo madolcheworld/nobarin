@@ -339,14 +339,15 @@ class RoomControlsBar extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
 
-                  // 2. Media Action Button: Ganti Video (when media is loaded and canControl)
-                  if (hasMedia && canControl) ...[
+                  // 2. Media Action Button: Ganti Video (when media is loaded or screen share is active, and canControl)
+                  if ((hasMedia || (screenShareController?.isScreenSharingActive == true)) && canControl) ...[
                     _buildMediaActionButton(),
                     const SizedBox(width: 8),
                   ],
 
-                  // 3. Screen Share Button
-                  if (screenShareController != null) ...[
+                  // 3. Screen Share Active Capsule (Only shown when a screen share session is currently active)
+                  if (screenShareController != null &&
+                      screenShareController!.isScreenSharingActive) ...[
                     _buildScreenShareButton(context, screenShareController!),
                     const SizedBox(width: 8),
                   ],
@@ -804,101 +805,6 @@ class RoomControlsBar extends StatelessWidget {
       );
     }
 
-    final bool canShare = controller.canShareScreen;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: canShare
-            ? () async {
-                AppHaptics.medium();
-                final success = await controller.startScreenShare();
-                if (!success && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: AppColors.surfaceElevated,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: AppColors.accentRed),
-                      ),
-                      content: Text(
-                        controller.errorMessage ??
-                            'Tidak dapat memulai berbagi layar.',
-                        style: const TextStyle(
-                            color: AppColors.accentRed, fontSize: 12),
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              }
-            : () {
-                AppHaptics.selection();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: AppColors.surfaceElevated,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppColors.accentYellow),
-                    ),
-                    content: const Row(
-                      children: [
-                        Icon(Icons.lock_rounded,
-                            color: AppColors.accentYellow, size: 16),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Hanya Host yang dapat membagikan layar pada mode Host Only.',
-                            style: TextStyle(
-                                color: AppColors.textPrimary, fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 9),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: canShare
-                  ? AppColors.border
-                  : AppColors.border.withValues(alpha: 0.5),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                canShare
-                    ? Icons.screen_share_rounded
-                    : Icons.lock_outline_rounded,
-                size: 14,
-                color: canShare ? AppColors.textSecondary : AppColors.textMuted,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Bagi Layar',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      canShare ? AppColors.textSecondary : AppColors.textMuted,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return const SizedBox.shrink();
   }
 }

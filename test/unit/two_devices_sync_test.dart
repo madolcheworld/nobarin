@@ -611,5 +611,49 @@ void main() {
       expect(harness.viewerPlayer.isPlaying, isTrue);
       expect(harness.viewerPlayer.position, closeTo(88.5, 0.5));
     });
+
+    // -------------------------------------------------------------------------
+    // 13. Rapid Remote Sync Packets & Session Token Echo Guard
+    // -------------------------------------------------------------------------
+    test('13. Rapid Remote Sync Packets do not prematurely clear remote sync guard', () async {
+      harness.setup(isCollaborative: true);
+
+      final now = harness.hostClockSync.synchronizedTimestampMs;
+
+      final packet1 = SyncPayload(
+        mediaType: 'direct_url',
+        mediaUrl: harness.room.currentMediaUrl!,
+        state: 'playing',
+        positionSeconds: 15.0,
+        timestampMs: now,
+        controllerId: harness.hostUser.id,
+        seqId: 1,
+        action: 'seek',
+      );
+
+      final packet2 = SyncPayload(
+        mediaType: 'direct_url',
+        mediaUrl: harness.room.currentMediaUrl!,
+        state: 'playing',
+        positionSeconds: 30.0,
+        timestampMs: now + 50,
+        controllerId: harness.hostUser.id,
+        seqId: 2,
+        action: 'seek',
+      );
+
+      // Packet 1 received
+      harness.viewerSync.handleRemoteSyncForTesting(packet1.toJson());
+
+      // Rapidly after (before 300ms delayed cleanup of packet 1), packet 2 is received
+      harness.viewerSync.handleRemoteSyncForTesting(packet2.toJson());
+
+      expect(harness.viewerPlayer.position, 30.0);
+
+      // Wait 350ms for session 1's stale timer to expire
+      await Future.delayed(const Duration(milliseconds: 350));
+
+      expect(harness.viewerPlayer.position, 30.0);
+    });
   });
 }

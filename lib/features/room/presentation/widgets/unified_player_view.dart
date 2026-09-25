@@ -62,6 +62,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   Timer? _hideControlsTimer;
   bool _lastIsPlaying = false;
   Timer? _doubleTapTimer;
+  final GlobalKey _videoContentKey = GlobalKey(debugLabel: 'UnifiedVideoContainer');
 
   @override
   void initState() {
@@ -111,7 +112,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   void _onDoubleTapLeft() {
     if (!widget.syncController.canControl) return;
     AppHaptics.selection();
-    final target = (widget.player.position - 10).clamp(0.0, widget.player.duration);
+    final dur = widget.player.duration;
+    final rawTarget = widget.player.position - 10;
+    final target = dur > 0 ? rawTarget.clamp(0.0, dur) : (rawTarget < 0.0 ? 0.0 : rawTarget);
     widget.syncController.requestSeek(target);
     setState(() {
       _leftDoubleTapActive = true;
@@ -126,7 +129,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
   void _onDoubleTapRight() {
     if (!widget.syncController.canControl) return;
     AppHaptics.selection();
-    final target = (widget.player.position + 10).clamp(0.0, widget.player.duration);
+    final dur = widget.player.duration;
+    final rawTarget = widget.player.position + 10;
+    final target = dur > 0 ? rawTarget.clamp(0.0, dur) : (rawTarget < 0.0 ? 0.0 : rawTarget);
     widget.syncController.requestSeek(target);
     setState(() {
       _rightDoubleTapActive = true;
@@ -198,19 +203,19 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
 
     switch (status) {
       case 'synced':
-        dotColor = const Color(0xFF00E676);
+        dotColor = AppColors.accentGreen;
         label = isCompact ? '±${driftMs}ms' : 'Sinkron (${driftMs}ms)';
         break;
       case 'adjusting':
-        dotColor = const Color(0xFFFFD600);
+        dotColor = AppColors.accentYellow;
         label = isCompact ? 'Slew' : 'Slewing (${driftMs}ms)';
         break;
       case 'seeking':
-        dotColor = const Color(0xFF2979FF);
+        dotColor = AppColors.secondaryNeon;
         label = 'Syncing';
         break;
       default:
-        dotColor = const Color(0xFF9E9E9E);
+        dotColor = AppColors.textMuted;
         label = isCompact ? '...' : 'Menghubungkan';
     }
 
@@ -261,25 +266,33 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     return ListenableBuilder(
       listenable: widget.player,
       builder: (context, _) {
-        final bool hasMedia = widget.player.mediaUrl.isNotEmpty;
+        final bool isScreenShare = widget.player.mediaType == 'screenshare';
+        final bool hasMedia =
+            widget.player.mediaUrl.isNotEmpty && !isScreenShare;
         final bool canControl = widget.syncController.canControl;
         final String? errorMsg = widget.player.errorMessage;
         final bool isFs = widget.player.isFullscreen;
 
         Widget playerWidget;
-        if (!hasMedia) {
+        if (!hasMedia || isScreenShare) {
           playerWidget = _buildEmptyPlaceholder();
         } else if (widget.player.mediaType == 'youtube' &&
             widget.player.ytController != null) {
           playerWidget = YoutubePlayer(
+            key: const ValueKey('nobarin_yt_player'),
             controller: widget.player.ytController!,
             aspectRatio: 16 / 9,
             enableFullScreenOnVerticalDrag: false,
             autoFullScreen: false,
-            controlsBuilder: (context, isFullscreen) => PointerInterceptor(
-              intercepting: true,
-              child: _buildControlsOverlay(context, isFullscreen: isFullscreen || isFs),
-            ),
+            controlsBuilder: (context, isFullscreen) => widget.isPipMode
+                ? const SizedBox.shrink()
+                : PointerInterceptor(
+                    intercepting: true,
+                    child: _buildControlsOverlay(
+                      context,
+                      isFullscreen: isFullscreen || isFs,
+                    ),
+                  ),
           );
         } else if (widget.player.mediaType == 'bstation' &&
             widget.player.bstationController != null) {
@@ -315,6 +328,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               // Controls Overlay for media (for non-YouTube players; YouTube renders via controlsBuilder)
               if (hasMedia &&
                   widget.player.mediaType != 'youtube' &&
+                  widget.player.mediaType != 'screenshare' &&
+                  (widget.player.mkVideoController != null ||
+                      (kIsWeb && widget.player.webVideoWidget != null) ||
+                      widget.player.bstationController != null ||
+                      widget.player.dailymotionController != null) &&
+                  !(kIsWeb &&
+                      (widget.player.mediaType == 'bstation' ||
+                          widget.player.mediaType == 'dailymotion')) &&
                   errorMsg == null &&
                   !widget.isPipMode)
                 Positioned.fill(
@@ -393,11 +414,16 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
           ),
         );
 
+        final keyedVideoContainer = KeyedSubtree(
+          key: _videoContentKey,
+          child: videoContainer,
+        );
+
         if (isFs) {
-          return videoContainer;
+          return SizedBox.expand(child: keyedVideoContainer);
         }
 
-        return AspectRatio(aspectRatio: 16 / 9, child: videoContainer);
+        return AspectRatio(aspectRatio: 16 / 9, child: keyedVideoContainer);
       },
     );
   }
@@ -658,8 +684,11 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                 ),
                                 tooltip: 'Mundur 10 detik',
                                 onPressed: () {
-                                  final target = (widget.player.position - 10)
-                                      .clamp(0.0, widget.player.duration);
+                                  final dur = widget.player.duration;
+                                  final rawTarget = widget.player.position - 10;
+                                  final target = dur > 0
+                                      ? rawTarget.clamp(0.0, dur)
+                                      : (rawTarget < 0.0 ? 0.0 : rawTarget);
                                   widget.syncController.requestSeek(target);
                                   _startHideTimerIfNeeded(
                                     duration: const Duration(milliseconds: 1800),
@@ -743,8 +772,11 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                 ),
                                 tooltip: 'Maju 10 detik',
                                 onPressed: () {
-                                  final target = (widget.player.position + 10)
-                                      .clamp(0.0, widget.player.duration);
+                                  final dur = widget.player.duration;
+                                  final rawTarget = widget.player.position + 10;
+                                  final target = dur > 0
+                                      ? rawTarget.clamp(0.0, dur)
+                                      : (rawTarget < 0.0 ? 0.0 : rawTarget);
                                   widget.syncController.requestSeek(target);
                                   _startHideTimerIfNeeded(
                                     duration: const Duration(milliseconds: 1800),
@@ -1466,6 +1498,43 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
 
   Widget _buildEmptyPlaceholder() {
     final bool canControl = widget.syncController.canControl;
+    final bool isScreenShare = widget.player.mediaType == 'screenshare';
+    final Color accentColor =
+        isScreenShare ? AppColors.secondaryNeon : AppColors.primaryNeon;
+
+    if (widget.isPipMode) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isScreenShare
+                    ? Icons.mobile_screen_share_rounded
+                    : Icons.movie_creation_outlined,
+                size: 24,
+                color: accentColor,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isScreenShare
+                    ? 'Mirror Layar Belum Aktif'
+                    : 'Belum ada media yang dimuat',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Center(
       child: Padding(
@@ -1477,29 +1546,33 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primaryNeon.withValues(alpha: 0.12),
+                color: accentColor.withValues(alpha: 0.12),
                 border: Border.all(
-                  color: AppColors.primaryNeon.withValues(alpha: 0.25),
+                  color: accentColor.withValues(alpha: 0.25),
                   width: 1.2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                    color: accentColor.withValues(alpha: 0.15),
                     blurRadius: 16,
                     spreadRadius: 2,
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.movie_creation_outlined,
+              child: Icon(
+                isScreenShare
+                    ? Icons.mobile_screen_share_rounded
+                    : Icons.movie_creation_outlined,
                 size: 32,
-                color: AppColors.primaryNeon,
+                color: accentColor,
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Belum ada media yang dimuat',
-              style: TextStyle(
+            Text(
+              isScreenShare
+                  ? 'Mirror Layar Belum Aktif'
+                  : 'Belum ada media yang dimuat',
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -1507,10 +1580,14 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               ),
             ),
             const SizedBox(height: 3),
-            const Text(
-              'Pilih video atau stream untuk mulai nonton bersama',
+            Text(
+              isScreenShare
+                  ? (canControl
+                      ? 'Buka sumber video untuk mulai mirror atau ganti media'
+                      : 'Menunggu peserta menyiarkan layar...')
+                  : 'Pilih video atau stream untuk mulai nonton bersama',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),
@@ -1520,7 +1597,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               ElevatedButton.icon(
                 onPressed: widget.onOpenMediaPicker,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryNeon,
+                  backgroundColor: accentColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -1528,15 +1605,20 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                   ),
                   visualDensity: VisualDensity.compact,
                   elevation: 4,
-                  shadowColor: AppColors.primaryNeon.withValues(alpha: 0.5),
+                  shadowColor: accentColor.withValues(alpha: 0.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-                icon: const Icon(Icons.video_library_rounded, size: 16),
-                label: const Text(
-                  'Pilih Video',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                icon: Icon(
+                  isScreenShare
+                      ? Icons.video_settings_rounded
+                      : Icons.video_library_rounded,
+                  size: 16,
+                ),
+                label: Text(
+                  isScreenShare ? 'Sumber Video' : 'Pilih Video',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               )
             else
@@ -1552,18 +1634,20 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                     color: AppColors.accentYellow.withValues(alpha: 0.3),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.hourglass_top_rounded,
                       size: 13,
                       color: AppColors.accentYellow,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 5),
                     Text(
-                      'Menunggu Host memilih video...',
-                      style: TextStyle(
+                      isScreenShare
+                          ? 'Menunggu siaran layar dimulai...'
+                          : 'Menunggu Host memilih video...',
+                      style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.accentYellow,
                         fontWeight: FontWeight.w500,

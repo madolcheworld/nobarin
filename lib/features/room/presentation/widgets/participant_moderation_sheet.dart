@@ -267,23 +267,23 @@ class ParticipantModerationSheet extends StatelessWidget {
 
           // Actions list
           if (isSelf)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
               child: Text(
                 'Ini adalah profil kamu di room ini.',
                 style: TextStyle(
-                  color: AppColors.textMuted.withValues(alpha: 0.8),
+                  color: AppColors.textSecondary,
                   fontSize: 13,
                 ),
               ),
             )
           else if (!canModerate)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
               child: Text(
                 'Hanya Host atau Co-Host yang dapat mengelola peserta.',
                 style: TextStyle(
-                  color: AppColors.textMuted.withValues(alpha: 0.8),
+                  color: AppColors.textSecondary,
                   fontSize: 13,
                 ),
               ),

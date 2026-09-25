@@ -146,14 +146,20 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
 
       // If single file (not HLS), detect video resolution from element
       if (_hlsInstance == null && _videoElement.videoHeight > 0) {
-        final h = _videoElement.videoHeight;
-        final w = _videoElement.videoWidth;
-        if (_availableQualities.length <= 1 || _availableQualities.first.height != h) {
+        final rawH = _videoElement.videoHeight;
+        final rawW = _videoElement.videoWidth;
+        final normH = VideoQuality.normalizeResolutionHeight(
+              width: rawW,
+              height: rawH,
+            ) ??
+            rawH;
+        if (_availableQualities.length <= 1 ||
+            _availableQualities.first.height != normH) {
           _availableQualities = [
             VideoQuality.fixed(
-              label: '${h}p (Kualitas Asli)',
-              height: h,
-              width: w,
+              label: '${normH}p (Kualitas Asli)',
+              height: normH,
+              width: rawW,
             ),
           ];
           _selectedQuality = _availableQualities.first;
@@ -202,17 +208,47 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
         ),
       ];
       final rawLevels = _hlsInstance!.levels.toDart;
+      final Map<int, int> heightCounts = {};
       for (int i = 0; i < rawLevels.length; i++) {
         final lvl = _HlsLevel._(rawLevels[i]);
-        final h = lvl.height;
+        final normH = VideoQuality.normalizeResolutionHeight(
+          width: lvl.width,
+          height: lvl.height,
+        );
+        if (normH != null && normH > 0) {
+          heightCounts[normH] = (heightCounts[normH] ?? 0) + 1;
+        }
+      }
+
+      for (int i = 0; i < rawLevels.length; i++) {
+        final lvl = _HlsLevel._(rawLevels[i]);
+        final normH = VideoQuality.normalizeResolutionHeight(
+          width: lvl.width,
+          height: lvl.height,
+        );
         final w = lvl.width;
         final b = lvl.bitrate;
-        final label = (h != null && h > 0) ? '${h}p' : (lvl.name ?? 'Level $i');
+        String label;
+        if (normH != null && normH > 0) {
+          if (normH >= 2160) {
+            label = '4K (${normH}p)';
+          } else if (normH >= 1440) {
+            label = '2K (${normH}p)';
+          } else {
+            label = '${normH}p';
+          }
+          if ((heightCounts[normH] ?? 0) > 1 && b != null && b > 0) {
+            final mbps = (b / 1000000).toStringAsFixed(1);
+            label += ' ($mbps Mbps)';
+          }
+        } else {
+          label = lvl.name ?? 'Level $i';
+        }
         qualities.add(
           VideoQuality(
             id: '$i',
             label: label,
-            height: h,
+            height: normH,
             width: w,
             bitrate: b,
             mode: QualityControlMode.directTrack,
@@ -222,7 +258,9 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
       qualities.sort((a, b) {
         if (a.isAuto) return -1;
         if (b.isAuto) return 1;
-        return (b.height ?? 0).compareTo(a.height ?? 0);
+        final hCmp = (b.height ?? 0).compareTo(a.height ?? 0);
+        if (hCmp != 0) return hCmp;
+        return (b.bitrate ?? 0).compareTo(a.bitrate ?? 0);
       });
       _availableQualities = qualities;
       _selectedQuality = qualities.first;

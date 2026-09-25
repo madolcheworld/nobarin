@@ -379,7 +379,7 @@ void main() {
         final detectedLocal = UnifiedPlayerController.detectMediaFromUrl(localFilePath);
         expect(detectedLocal, isNotNull);
         expect(detectedLocal!.mediaType, 'direct_url');
-        expect(detectedLocal.title, 'sample_anime.mp4');
+        expect(detectedLocal.title, 'sample anime');
 
         final detectedP2P = UnifiedPlayerController.detectMediaFromUrl(p2pStreamUrl);
         expect(detectedP2P, isNotNull);

@@ -8,7 +8,13 @@ import 'package:nobarin/features/room/controllers/unified_player_controller.dart
 import 'package:nobarin/features/room/models/room_model.dart';
 import 'package:nobarin/features/room/presentation/widgets/room_controls_bar.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:nobarin/features/screenshare/controllers/webrtc_screenshare_controller.dart';
 import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
+
+class _FakeVideoRenderer implements RTCVideoRenderer {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakeMediaStreamTrack implements MediaStreamTrack {
   @override
@@ -296,6 +302,38 @@ void main() {
       expect(find.text('Mic Aktif'), findsOneWidget);
 
       voice.dispose();
+    });
+
+    testWidgets('does not render screen share button when screen sharing is inactive',
+        (tester) async {
+      final screenShare = WebRtcScreenShareController(
+        roomId: baseRoom.id,
+        userId: testHost.id,
+        userName: testHost.username,
+        rendererFactory: () => _FakeVideoRenderer(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              screenShareController: screenShare,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Inactive screen share button has been moved to MediaSourcePicker
+      expect(find.text('Bagi Layar'), findsNothing);
+      expect(find.text('Hentikan Layar'), findsNothing);
+
+      screenShare.dispose();
     });
   });
 }

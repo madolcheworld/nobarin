@@ -494,9 +494,11 @@ class RoomController extends ChangeNotifier {
               _hostMissingTimer = Timer(_hostGracePeriod, () async {
                 _hostMissingTimer = null;
                 if (!_state.isRoomClosed) {
-                  final remaining = uniqueMap.values.where((u) =>
-                      u.id != hostId &&
-                      u.username != hostName &&
+                  final currentHostId = _state.room.hostId;
+                  final currentHostName = _state.room.hostName;
+                  final remaining = _state.participants.where((u) =>
+                      u.id != currentHostId &&
+                      u.username != currentHostName &&
                       u.id != detectedHostId &&
                       u.username != detectedHostName).toList();
                   if (remaining.isNotEmpty) {

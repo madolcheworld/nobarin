@@ -150,5 +150,65 @@ void main() {
       expect(bstation360.shortLabel, '360p');
       expect(bstation360.badgeDescription, 'Hemat Kuota');
     });
+
+    test('YouTube factory constructor maps standard IFrame quality codes', () {
+      final ytAuto = VideoQuality.youtube('auto');
+      expect(ytAuto.isAuto, isTrue);
+
+      final yt4k = VideoQuality.youtube('hd2160');
+      expect(yt4k.height, 2160);
+      expect(yt4k.shortLabel, '2160p');
+      expect(yt4k.label, '2160p (4K Ultra HD)');
+      expect(yt4k.badgeDescription, 'Ultra HD 4K');
+
+      final yt2k = VideoQuality.youtube('hd1440');
+      expect(yt2k.height, 1440);
+      expect(yt2k.shortLabel, '1440p');
+      expect(yt2k.badgeDescription, 'Quad HD 2K');
+
+      final yt1080 = VideoQuality.youtube('hd1080');
+      expect(yt1080.height, 1080);
+      expect(yt1080.shortLabel, '1080p');
+
+      final yt720 = VideoQuality.youtube('hd720');
+      expect(yt720.height, 720);
+
+      final yt480 = VideoQuality.youtube('large');
+      expect(yt480.height, 480);
+
+      final yt360 = VideoQuality.youtube('medium');
+      expect(yt360.height, 360);
+
+      final yt240 = VideoQuality.youtube('small');
+      expect(yt240.height, 240);
+
+      final yt144 = VideoQuality.youtube('tiny');
+      expect(yt144.height, 144);
+    });
+
+    test('normalizeResolutionHeight handles 16:9, vertical 9:16, and ultrawide 21:9', () {
+      // Standard 16:9
+      expect(VideoQuality.normalizeResolutionHeight(width: 1920, height: 1080), 1080);
+      expect(VideoQuality.normalizeResolutionHeight(width: 1280, height: 720), 720);
+      expect(VideoQuality.normalizeResolutionHeight(width: 3840, height: 2160), 2160);
+
+      // Vertical 9:16 (uses shorter side = 1080p / 720p)
+      expect(VideoQuality.normalizeResolutionHeight(width: 1080, height: 1920), 1080);
+      expect(VideoQuality.normalizeResolutionHeight(width: 720, height: 1280), 720);
+
+      // Ultrawide 21:9 (maps by width so 1920x800 is recognized as 1080p class)
+      expect(VideoQuality.normalizeResolutionHeight(width: 1920, height: 800), 1080);
+      expect(VideoQuality.normalizeResolutionHeight(width: 2560, height: 1080), 1440);
+      expect(VideoQuality.normalizeResolutionHeight(width: 3840, height: 1600), 2160);
+    });
+
+    test('buildStandardTiersUpTo generates descending resolution tiers up to maxHeight', () {
+      final tiers720 = VideoQuality.buildStandardTiersUpTo(720, minHeight: 240);
+      expect(tiers720, equals([720, 480, 360, 240]));
+
+      final tiers2160 = VideoQuality.buildStandardTiersUpTo(2160, minHeight: 360);
+      expect(tiers2160, equals([2160, 1440, 1080, 720, 480, 360]));
+    });
   });
 }
+

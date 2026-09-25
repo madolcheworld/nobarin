@@ -503,6 +503,29 @@ void main() {
         syncController.dispose();
         player.dispose();
       });
+
+      test('promoteToHost updates state and notifies callbacks', () async {
+        final controller = RoomController(
+          initialRoom: testRoom,
+          currentUser: hostUser,
+        );
+
+        String? changedHostId;
+        String? changedHostName;
+        controller.onHostChanged = (id, name) {
+          changedHostId = id;
+          changedHostName = name;
+        };
+
+        await controller.promoteToHost(participantUser);
+
+        expect(controller.state.room.hostId, participantUser.id);
+        expect(controller.state.room.hostName, participantUser.username);
+        expect(changedHostId, participantUser.id);
+        expect(changedHostName, participantUser.username);
+
+        controller.dispose();
+      });
     });
   });
 }

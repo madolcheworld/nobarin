@@ -20,7 +20,107 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.black,
         onSurface: AppColors.textPrimary,
+        onSurfaceVariant: AppColors.textSecondary,
         onError: Colors.white,
+      ),
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+          height: 1.25,
+        ),
+        displayMedium: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 28,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.4,
+          height: 1.25,
+        ),
+        headlineLarge: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.3,
+          height: 1.3,
+        ),
+        headlineMedium: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+          height: 1.3,
+        ),
+        headlineSmall: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          height: 1.35,
+        ),
+        titleLarge: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.1,
+          height: 1.35,
+        ),
+        titleMedium: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.1,
+          height: 1.4,
+        ),
+        titleSmall: TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.1,
+          height: 1.4,
+        ),
+        bodyLarge: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.15,
+          height: 1.45,
+        ),
+        bodyMedium: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.15,
+          height: 1.45,
+        ),
+        bodySmall: TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.2,
+          height: 1.4,
+        ),
+        labelLarge: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+          height: 1.35,
+        ),
+        labelMedium: TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          height: 1.35,
+        ),
+        labelSmall: TextStyle(
+          color: AppColors.textMuted,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.25,
+          height: 1.3,
+        ),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -31,7 +131,7 @@ class AppTheme {
           color: AppColors.textPrimary,
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          letterSpacing: -0.5,
+          letterSpacing: -0.4,
         ),
         iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
@@ -47,15 +147,44 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceElevated,
         elevation: 16,
+        titleTextStyle: const TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          height: 1.35,
+        ),
+        contentTextStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+          height: 1.45,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: AppColors.borderGlow, width: 1.2),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.surfaceElevated,
+        textStyle: const TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w500,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.border, width: 1),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.glassFill,
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        floatingLabelStyle: const TextStyle(
+          color: AppColors.primaryNeonLight,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
@@ -118,7 +247,7 @@ class AppTheme {
         backgroundColor: AppColors.surfaceElevated,
         contentTextStyle: const TextStyle(
           color: AppColors.textPrimary,
-          fontSize: 13,
+          fontSize: 13.5,
           fontWeight: FontWeight.w500,
         ),
         shape: RoundedRectangleBorder(
@@ -138,10 +267,10 @@ class AppTheme {
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: AppColors.primaryNeonLight,
-        unselectedLabelColor: AppColors.textMuted,
+        unselectedLabelColor: AppColors.textSecondary,
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(color: AppColors.primaryNeon, width: 2.5),
+          borderSide: const BorderSide(color: AppColors.primaryNeon, width: 2.5),
           borderRadius: BorderRadius.circular(2),
         ),
         labelStyle: const TextStyle(
@@ -151,14 +280,14 @@ class AppTheme {
         ),
         unselectedLabelStyle: const TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.glassFillLight,
-        selectedColor: AppColors.primaryNeon.withValues(alpha: 0.22),
+        selectedColor: AppColors.primaryNeon.withValues(alpha: 0.24),
         labelStyle: const TextStyle(
-          fontSize: 12,
+          fontSize: 12.5,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),

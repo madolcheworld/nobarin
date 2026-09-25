@@ -78,10 +78,12 @@ class NtpClockSync {
         // Try get_server_time RPC, fallback to now RPC
         dynamic response = await client
             .rpc('get_server_time')
+            .timeout(const Duration(seconds: 3))
             .catchError((_) => null);
 
         response ??= await client
             .rpc('now')
+            .timeout(const Duration(seconds: 3))
             .catchError((_) => null);
 
         final int t1 = DateTime.now().millisecondsSinceEpoch;

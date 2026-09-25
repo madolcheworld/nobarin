@@ -260,5 +260,31 @@ void main() {
 
       guestQueue.dispose();
     });
+
+    test('concurrent playNext() calls are safely guarded by re-entrancy lock', () async {
+      await queueController.addToQueue(
+        mediaType: 'direct_url',
+        mediaUrl: 'https://example.com/video1.mp4',
+        title: 'Video 1',
+      );
+      await queueController.addToQueue(
+        mediaType: 'direct_url',
+        mediaUrl: 'https://example.com/video2.mp4',
+        title: 'Video 2',
+      );
+
+      expect(queueController.count, 2);
+
+      // Trigger concurrent playNext calls simultaneously
+      await Future.wait([
+        queueController.playNext(),
+        queueController.playNext(),
+      ]);
+
+      // Exactly one item should have been popped by the guarded concurrent calls
+      expect(queueController.count, 1);
+      expect(queueController.items.first.title, 'Video 2');
+      expect(player.mediaUrl, 'https://example.com/video1.mp4');
+    });
   });
 }

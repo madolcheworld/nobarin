@@ -17,11 +17,29 @@ void main() {
       expect(detected!.mediaType, equals('direct_url'));
       expect(
           detected.mediaUrl, equals('https://example.com/videos/sample.mp4'));
-      expect(detected.title, equals('sample.mp4'));
+      expect(detected.title, equals('sample'));
       expect(detected.isDirectUrl, isTrue);
 
       expect(UnifiedPlayerController.detectMediaFromUrl(''), isNull);
       expect(UnifiedPlayerController.detectMediaFromUrl('invalid_url'), isNull);
+    });
+
+    test('extractYoutubeId handles standard, shorts, live, embed, and complex query URLs', () {
+      expect(UnifiedPlayerController.extractYoutubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ&t=10'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('https://youtu.be/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('https://www.youtube.com/live/dQw4w9WgXcQ?si=test'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('https://www.youtube.com/embed/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+      expect(UnifiedPlayerController.extractYoutubeId('invalid!url'), isNull);
+    });
+
+    test('isLocalFilePath correctly identifies local paths, file://, and content://', () {
+      expect(UnifiedPlayerController.isLocalFilePath('/storage/emulated/0/Download/video.mp4'), isTrue);
+      expect(UnifiedPlayerController.isLocalFilePath('file:///sdcard/video.mp4'), isTrue);
+      expect(UnifiedPlayerController.isLocalFilePath('content://media/external/video/media/1234'), isTrue);
+      expect(UnifiedPlayerController.isLocalFilePath('https://example.com/video.mp4'), isFalse);
     });
 
     test('loadMedia loads direct media URL and updates properties', () async {
@@ -230,6 +248,26 @@ void main() {
       // Dailymotion
       await controller.loadMedia('dailymotion', 'https://dai.ly/x7tgad0');
       expect(controller.supportsQualitySelection, isTrue);
+    });
+
+    test('entering and exiting fullscreen while playing activates transition guard and preserves playing state', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      await controller.loadMedia('direct_url', 'https://example.com/movie.mp4');
+      await controller.play();
+      expect(controller.isPlaying, isTrue);
+      expect(controller.isFullscreenTransition, isFalse);
+
+      await controller.enterFullscreen();
+      expect(controller.isFullscreen, isTrue);
+      expect(controller.isFullscreenTransition, isTrue);
+      expect(controller.isPlaying, isTrue);
+
+      // Explicit manual pause should still immediately clear transition guard and pause
+      await controller.pause();
+      expect(controller.isFullscreenTransition, isFalse);
+      expect(controller.isPlaying, isFalse);
     });
   });
 }

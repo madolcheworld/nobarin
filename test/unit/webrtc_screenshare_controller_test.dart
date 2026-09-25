@@ -131,6 +131,11 @@ class FakeRtpSender implements RTCRtpSender {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class FakeRtpReceiver implements RTCRtpReceiver {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class FakeRTCVideoRenderer implements RTCVideoRenderer {
   MediaStream? _srcObject;
   bool isInitialized = false;
@@ -325,6 +330,40 @@ void main() {
 
       // Flushed candidate into peer connection
       expect(fakePeerConnection.candidates.length, equals(1));
+    });
+
+    test('onTrack preserves existing remoteStream when empty streams list arrives', () async {
+      await controller.handleScreenOffer({
+        'sender_id': 'peer-presenter',
+        'target_id': 'user-ss-1',
+        'sharer_name': 'Presenter',
+        'sdp': {'type': 'offer', 'sdp': 'v=0..'},
+      });
+
+      expect(fakePeerConnection.onTrack, isNotNull);
+
+      final initialStream = FakeMediaStream([FakeVideoTrack()]);
+      final initialTrack = FakeVideoTrack();
+
+      // First track arrives with stream
+      fakePeerConnection.onTrack?.call(RTCTrackEvent(
+        track: initialTrack,
+        receiver: FakeRtpReceiver(),
+        streams: [initialStream],
+      ));
+
+      expect(controller.remoteStream, equals(initialStream));
+
+      // Subsequent track arrives with empty streams list (Unified-Plan behavior)
+      final secondTrack = FakeVideoTrack();
+      fakePeerConnection.onTrack?.call(RTCTrackEvent(
+        track: secondTrack,
+        receiver: FakeRtpReceiver(),
+        streams: [],
+      ));
+
+      // Must NOT overwrite existing remote stream to null!
+      expect(controller.remoteStream, equals(initialStream));
     });
   });
 }

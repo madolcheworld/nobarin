@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/video_title_resolver.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/queue_controller.dart';
 import '../../room/controllers/sync_controller.dart';
+import '../../room/controllers/unified_player_controller.dart';
 
 /// Mode operasional untuk In-App Browser YouTube
 enum YouTubeBrowserMode {
@@ -284,7 +284,7 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     if (url.isEmpty || (url == _currentUrl && extractedTitle == null)) return;
     _currentUrl = url;
 
-    final videoId = YoutubePlayerController.convertUrlToId(url);
+    final videoId = UnifiedPlayerController.extractYoutubeId(url);
     if (videoId != null && videoId.isNotEmpty) {
       final clean = VideoTitleResolver.cleanTitle(extractedTitle);
       String title = clean;
@@ -334,6 +334,18 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
   void _applyWatchNow() async {
     if (_detectedVideoId == null) return;
 
+    final syncCtrl = widget.syncController;
+    final onVideoSelectedCallback = widget.onVideoSelected;
+    if (onVideoSelectedCallback == null && syncCtrl != null && !syncCtrl.canControl) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hanya Host atau Co-Host yang dapat mengganti video di room ini.'),
+          backgroundColor: AppColors.accentRed,
+        ),
+      );
+      return;
+    }
+
     final mediaUrl = 'https://www.youtube.com/watch?v=$_detectedVideoId';
     final title = (_detectedTitle.isNotEmpty && _detectedTitle != 'Memuat judul video...')
         ? _detectedTitle
@@ -341,8 +353,6 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
 
     await _pauseWebViewMedia();
 
-    final onVideoSelectedCallback = widget.onVideoSelected;
-    final syncCtrl = widget.syncController;
     final chatCtrl = widget.chatController;
 
     _canPop = true;
@@ -407,7 +417,7 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
-    final videoId = YoutubePlayerController.convertUrlToId(url);
+    final videoId = UnifiedPlayerController.extractYoutubeId(url);
     if (videoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -436,7 +446,7 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
     final url = _fallbackUrlController.text.trim();
     if (url.isEmpty) return;
 
-    final videoId = YoutubePlayerController.convertUrlToId(url);
+    final videoId = UnifiedPlayerController.extractYoutubeId(url);
     if (videoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -587,6 +597,7 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
                     color: AppColors.textPrimary, size: 22),
                 tooltip: 'Tutup',
                 onPressed: () {
+                  setState(() => _canPop = true);
                   _pauseWebViewMedia();
                   Navigator.of(context).pop();
                 },
@@ -673,36 +684,48 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
   Widget _buildDetectionBanner(BuildContext context) {
     if (_isBannerMinimized) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceElevated,
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceHighlight,
+          border: Border(
+            top: BorderSide(
+              color: AppColors.primaryNeon.withValues(alpha: 0.75),
+              width: 1.5,
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 12,
+              offset: const Offset(0, -3),
+            ),
+          ],
         ),
         child: SafeArea(
           top: false,
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  color: AppColors.youtubeRed.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
+                  color: AppColors.youtubeRed.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(7),
                 ),
                 child: const Icon(
                   Icons.smart_display_rounded,
                   color: AppColors.youtubeRed,
-                  size: 16,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   _detectedTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -710,31 +733,32 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
               const SizedBox(width: 8),
               InkWell(
                 onTap: () => setState(() => _isBannerMinimized = false),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
+                    color: AppColors.primaryNeon.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.4),
+                      color: AppColors.primaryNeonLight.withValues(alpha: 0.6),
                     ),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Buka Panel',
+                        'Pilih Video',
                         style: TextStyle(
-                          color: AppColors.primaryNeon,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryNeonLight,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(width: 2),
+                      SizedBox(width: 3),
                       Icon(
                         Icons.keyboard_arrow_up_rounded,
-                        color: AppColors.primaryNeon,
+                        color: AppColors.primaryNeonLight,
                         size: 16,
                       ),
                     ],
@@ -762,19 +786,34 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        border: const Border(
-          top: BorderSide(color: AppColors.border, width: 1.2),
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: AppColors.primaryNeon.withValues(alpha: 0.85),
+            width: 2.0,
+          ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 10,
-            offset: const Offset(0, -3),
+            color: Colors.black.withValues(alpha: 0.75),
+            blurRadius: 18,
+            offset: const Offset(0, -6),
+          ),
+          BoxShadow(
+            color: AppColors.primaryNeon.withValues(alpha: 0.22),
+            blurRadius: 14,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: SafeArea(
         top: false,
         child: Column(
@@ -784,65 +823,115 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Video Thumbnail
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    'https://img.youtube.com/vi/$_detectedVideoId/hqdefault.jpg',
-                    width: 70,
-                    height: 44,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 70,
-                      height: 44,
-                      color: Colors.black26,
-                      child: const Icon(Icons.video_library_rounded,
-                          color: AppColors.youtubeRed),
+                // Video Thumbnail with subtle frame
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.youtubeRed.withValues(alpha: 0.6),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8.5),
+                    child: Image.network(
+                      'https://img.youtube.com/vi/$_detectedVideoId/hqdefault.jpg',
+                      width: 86,
+                      height: 52,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 86,
+                        height: 52,
+                        color: Colors.black26,
+                        child: const Icon(Icons.video_library_rounded,
+                            color: AppColors.youtubeRed, size: 24),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
 
-                // Video Title & Detection Badge
+                // Video Title & Detection Badges
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.youtubeRed.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle_rounded,
-                                color: AppColors.youtubeRed, size: 12),
-                            SizedBox(width: 4),
-                            Text(
-                              'Video Terdeteksi',
-                              style: TextStyle(
-                                color: AppColors.youtubeRed,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.accentGreen.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: AppColors.accentGreen
+                                    .withValues(alpha: 0.5),
                               ),
                             ),
-                          ],
-                        ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_rounded,
+                                    color: AppColors.accentGreen, size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'SIAP DIPILIH',
+                                  style: TextStyle(
+                                    color: AppColors.accentGreen,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.youtubeRed.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.smart_display_rounded,
+                                    color: AppColors.youtubeRed, size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'YouTube',
+                                  style: TextStyle(
+                                    color: AppColors.youtubeRed,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 5),
                       Text(
                         _detectedTitle,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
                         ),
                       ),
                     ],
@@ -878,110 +967,193 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
               ],
             ),
 
-          const SizedBox(height: 10),
+            const SizedBox(height: 12),
 
-          // Action Buttons per Mode
-          if (widget.mode == YouTubeBrowserMode.queueOnly) ...[
-            ElevatedButton.icon(
-              onPressed: _applyAddToQueue,
-              icon: const Icon(Icons.playlist_add_rounded, size: 20),
-              label: const Text(
-                '+ Tambahkan ke Antrean',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ] else if (widget.mode == YouTubeBrowserMode.createRoom) ...[
-            ElevatedButton.icon(
-              onPressed: _applyWatchNow,
-              icon: const Icon(Icons.meeting_room_rounded, size: 20),
-              label: const Text(
-                'Buka Room dengan Video Ini',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ] else if (widget.mode == YouTubeBrowserMode.watchNow) ...[
-            ElevatedButton.icon(
-              onPressed: _applyWatchNow,
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: const Text(
-                'Putar Sekarang di Room',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: AppColors.primaryNeon,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ] else ...[
-            // General mode
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: ElevatedButton.icon(
-                    onPressed: _applyWatchNow,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                    label: const Text(
-                      'Tonton Sekarang',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+            // Action Buttons per Mode
+            if (widget.mode == YouTubeBrowserMode.queueOnly) ...[
+              Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      backgroundColor: AppColors.primaryNeon,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _applyAddToQueue,
+                  icon: const Icon(Icons.playlist_add_rounded,
+                      size: 22, color: Colors.white),
+                  label: const Text(
+                    '+ Pilih & Tambah ke Antrean',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                if (widget.queueController != null) ...[
-                  const SizedBox(width: 8),
+              ),
+            ] else if (widget.mode == YouTubeBrowserMode.createRoom) ...[
+              Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _applyWatchNow,
+                  icon: const Icon(Icons.check_circle_rounded,
+                      size: 21, color: Colors.white),
+                  label: const Text(
+                    'Pilih Video Ini & Buat Room',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ] else if (widget.mode == YouTubeBrowserMode.watchNow) ...[
+              Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _applyWatchNow,
+                  icon: const Icon(Icons.play_circle_fill_rounded,
+                      size: 22, color: Colors.white),
+                  label: const Text(
+                    'Pilih & Putar Video Ini',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // General mode
+              Row(
+                children: [
                   Expanded(
-                    flex: 2,
-                    child: OutlinedButton.icon(
-                      onPressed: _applyAddToQueue,
-                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                      label: const Text('+ Antrean'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        foregroundColor: AppColors.primaryNeon,
-                        side: const BorderSide(color: AppColors.primaryNeon),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    flex: 3,
+                    child: Container(
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _applyWatchNow,
+                        icon: const Icon(Icons.play_arrow_rounded,
+                            size: 21, color: Colors.white),
+                        label: const Text(
+                          'Pilih & Tonton Sekarang',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
                   ),
+                  if (widget.queueController != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton.icon(
+                          onPressed: _applyAddToQueue,
+                          icon: const Icon(Icons.playlist_add_rounded, size: 19),
+                          label: const Text(
+                            '+ Antrean',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primaryNeonLight,
+                            side: const BorderSide(
+                              color: AppColors.primaryNeonLight,
+                              width: 1.4,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildUnsupportedPlatformFallback() {
     return Padding(
@@ -1065,11 +1237,16 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
                             : (widget.mode == YouTubeBrowserMode.watchNow
                                 ? 'Putar Sekarang di Room'
                                 : 'Tonton Video Ini')),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(46),
-                    backgroundColor: AppColors.primaryNeon,
-                    foregroundColor: Colors.black,
+                    minimumSize: const Size.fromHeight(48),
+                    backgroundColor: AppColors.primaryNeonDark,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

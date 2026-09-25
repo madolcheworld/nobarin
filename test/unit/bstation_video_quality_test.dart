@@ -236,6 +236,28 @@ void main() {
 
       expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
       expect(player.availableQualities.firstWhere((q) => q.id == '1080').label, equals('1080p FHD'));
+      expect(player.maxDetectedHeight, equals(1080));
+      expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
+    });
+
+    test('4. Stream resolution > default max auto-expands Bstation available quality tiers', () async {
+      await player.loadMedia(
+        'bstation',
+        'https://www.bilibili.tv/id/video/2048573920',
+        autoPlay: false,
+      );
+
+      // Before explicit qualities list, if <video> reports 1080p (or 1080x1920 vertical)
+      player.bstationController?.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'resolution',
+        'height': 1920,
+        'width': 1080,
+      }));
+
+      expect(player.bstationController?.detectedHeight, equals(1080));
+      expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
+      expect(player.maxDetectedHeight, equals(1080));
+      expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
     });
   });
 

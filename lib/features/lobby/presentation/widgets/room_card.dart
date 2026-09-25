@@ -17,6 +17,13 @@ class RoomCard extends StatelessWidget {
   });
 
   ({String label, IconData icon, Color color}) _getSourceInfo(String? type, [String? url]) {
+    if (type == 'screenshare') {
+      return (
+        label: 'Mirror Layar',
+        icon: Icons.mobile_screen_share_rounded,
+        color: AppColors.secondaryNeon,
+      );
+    }
     if (type == 'youtube') {
       return (
         label: 'YouTube',
@@ -406,9 +413,9 @@ class RoomCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF15132A),
+            AppColors.surfaceElevated,
             source.color.withValues(alpha: 0.18),
-            const Color(0xFF0D101C),
+            AppColors.background,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

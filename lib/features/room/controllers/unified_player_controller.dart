@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -44,6 +44,9 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool _isPlaying = false;
   bool _isBuffering = false;
   bool _isFullscreen = false;
+  bool _isFullscreenTransition = false;
+  bool _wasPlayingBeforeFullscreen = false;
+  Timer? _fullscreenTransitionTimer;
   double _position = 0.0;
   double _duration = 0.0;
   double _playbackSpeed = 1.0;
@@ -78,7 +81,7 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   /// Initializes platform-specific video controller settings (e.g. Android emulator detection).
   static Future<void> initializePlatformSettings() async {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       _isAndroidEmulator = false;
       return;
     }
@@ -105,6 +108,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   bool get isBuffering => _isBuffering;
   bool get isFullscreen => _isFullscreen;
+  bool get isFullscreenTransition => _isFullscreenTransition;
   double get position => _position;
   double get duration => _duration;
   double get playbackSpeed => _playbackSpeed;
@@ -122,9 +126,50 @@ class UnifiedPlayerController extends ChangeNotifier {
   VideoQuality? get selectedQuality => _selectedQuality;
   bool get hasMultipleQualities => _availableQualities.length > 1;
 
+  /// Maximum resolution height detected across available qualities or active video stream
+  int? get maxDetectedHeight {
+    int maxH = 0;
+    for (final q in _availableQualities) {
+      if (q.height != null && q.height! > maxH) {
+        maxH = q.height!;
+      }
+    }
+    if (maxH > 0) return maxH;
+
+    if (_mediaType == 'bstation' && _bstationController?.detectedHeight != null) {
+      return _bstationController!.detectedHeight;
+    }
+    if (_mediaType == 'dailymotion' && _dailymotionController?.detectedHeight != null) {
+      return _dailymotionController!.detectedHeight;
+    }
+    if (_mediaType == 'youtube' && _youtubeQuality.isNotEmpty) {
+      return VideoQuality.youtube(_youtubeQuality).height;
+    }
+    if (_mediaType == 'direct_url' && _mkPlayer != null) {
+      try {
+        final h = _mkPlayer!.state.height;
+        final w = _mkPlayer!.state.width;
+        return VideoQuality.normalizeResolutionHeight(width: w, height: h);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Formatted label of the maximum resolution supported by the current video
+  String? get maxResolutionLabel {
+    final h = maxDetectedHeight;
+    if (h == null || h <= 0) return null;
+    if (h >= 4320) return '8K (${h}p)';
+    if (h >= 2160) return '4K (${h}p)';
+    if (h >= 1440) return '2K (${h}p)';
+    if (h >= 1080) return 'Full HD (${h}p)';
+    if (h >= 720) return 'HD (${h}p)';
+    return '${h}p';
+  }
+
   /// Whether the user can select an explicit quality from the quality sheet for this media
   bool get supportsQualitySelection {
-    if (_mediaType == 'youtube') return false; // Handled by YouTube internal adaptive player & gear menu
+    if (_mediaType == 'youtube') return _availableQualities.length > 1;
     if (isLocalFile || isP2PStream) return false; // Handled by Fixed Original passthrough
     if (_mediaType == 'dailymotion') return true;
     if (_mediaType == 'bstation') return true;
@@ -137,6 +182,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     final trimmed = url.trim();
     return trimmed.startsWith('/') ||
         trimmed.startsWith('file://') ||
+        trimmed.startsWith('content://') ||
         trimmed.startsWith('blob:') ||
         RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed);
   }
@@ -176,7 +222,9 @@ class UnifiedPlayerController extends ChangeNotifier {
 
     if (_mediaType == 'direct_url') {
       if (isLocalFile || isP2PStream) {
-        final h = _mkPlayer?.state.height;
+        final rawH = _mkPlayer?.state.height;
+        final rawW = _mkPlayer?.state.width;
+        final h = VideoQuality.normalizeResolutionHeight(width: rawW, height: rawH);
         if (h != null && h > 0) return '${h}p (Asli)';
         return 'Asli';
       }
@@ -186,10 +234,17 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_mkPlayer != null) {
         try {
           final currentTrack = _mkPlayer!.state.track.video;
-          if (currentTrack.h != null && currentTrack.h! > 0) {
-            return 'Auto (${currentTrack.h}p)';
+          final normTrackH = VideoQuality.normalizeResolutionHeight(
+            width: currentTrack.w,
+            height: currentTrack.h,
+          );
+          if (normTrackH != null && normTrackH > 0) {
+            return 'Auto (${normTrackH}p)';
           }
-          final stateH = _mkPlayer!.state.height;
+          final stateH = VideoQuality.normalizeResolutionHeight(
+            width: _mkPlayer!.state.width,
+            height: _mkPlayer!.state.height,
+          );
           if (stateH != null && stateH > 0) {
             return 'Auto (${stateH}p)';
           }
@@ -200,13 +255,15 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   String _formatYoutubeQuality(String q) {
+    if (q == 'hd2160' || q == '2160' || q == 'highres') return 'Auto (4K)';
+    if (q == 'hd2880' || q == '2880') return 'Auto (5K)';
+    if (q == 'hd1440' || q == '1440') return 'Auto (1440p)';
     if (q == 'hd1080' || q == '1080') return 'Auto (1080p)';
     if (q == 'hd720' || q == '720') return 'Auto (720p)';
     if (q == 'large' || q == '480') return 'Auto (480p)';
     if (q == 'medium' || q == '360') return 'Auto (360p)';
     if (q == 'small' || q == '240') return 'Auto (240p)';
     if (q == 'tiny' || q == '144') return 'Auto (144p)';
-    if (q == 'highres') return 'Auto (4K)';
     return 'Auto ($q)';
   }
 
@@ -259,6 +316,11 @@ class UnifiedPlayerController extends ChangeNotifier {
           if (_webVideoAdapter != null && _webVideoAdapter!.isMuted != _isMuted) {
             _isMuted = _webVideoAdapter!.isMuted;
           }
+          if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+            debugPrint('[UnifiedPlayerController] WebVideoAdapter spurious pause ignored during fullscreen transition');
+            _webVideoAdapter?.play();
+            return;
+          }
           if (_isPlaying != playing) {
             _isPlaying = playing;
             notifyListeners();
@@ -296,7 +358,7 @@ class UnifiedPlayerController extends ChangeNotifier {
 
       // On Android Emulator, default vo=gpu fails with EGL_BAD_ATTRIBUTE (0x3004) causing black screen.
       // mediacodec_embed renders directly to the Surface without EGL context creation failures.
-      final bool isEmu = (!kIsWeb && Platform.isAndroid) && (_isAndroidEmulator == true);
+      final bool isEmu = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) && (_isAndroidEmulator == true);
       _mkVideoController = VideoController(
         _mkPlayer!,
         configuration: VideoControllerConfiguration(
@@ -322,6 +384,11 @@ class UnifiedPlayerController extends ChangeNotifier {
         if (_isDisposed || _mediaType != 'direct_url') return;
         if (playing && _errorMessage != null) {
           _errorMessage = null;
+        }
+        if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+          debugPrint('[UnifiedPlayerController] MediaKit spurious pause ignored during fullscreen transition');
+          _mkPlayer?.play();
+          return;
         }
         if (_isPlaying != playing) {
           _isPlaying = playing;
@@ -367,13 +434,17 @@ class UnifiedPlayerController extends ChangeNotifier {
       // Listen to video dimensions for single files / P2P stream
       _subscriptions.add(_mkPlayer!.stream.videoParams.listen((params) {
         if (_isDisposed || _mediaType != 'direct_url') return;
+        final normH = VideoQuality.normalizeResolutionHeight(
+          width: params.w,
+          height: params.h,
+        );
         if ((isLocalFile || isP2PStream || _availableQualities.length <= 1) &&
-            params.h != null &&
-            params.h! > 0) {
+            normH != null &&
+            normH > 0) {
           _availableQualities = [
             VideoQuality.fixed(
-              label: '${params.h}p (Kualitas Asli)',
-              height: params.h,
+              label: '${normH}p (Kualitas Asli)',
+              height: normH,
               width: params.w,
             ),
           ];
@@ -393,19 +464,20 @@ class UnifiedPlayerController extends ChangeNotifier {
 
     // If local file or single track container, treat as original fixed quality
     if (isLocalFile || isP2PStream || validTracks.length <= 1) {
-      final h = validTracks.isNotEmpty
+      final rawH = validTracks.isNotEmpty
           ? (validTracks.first.h ?? _mkPlayer?.state.height)
           : _mkPlayer?.state.height;
-      final w = validTracks.isNotEmpty
+      final rawW = validTracks.isNotEmpty
           ? (validTracks.first.w ?? _mkPlayer?.state.width)
           : _mkPlayer?.state.width;
+      final normH = VideoQuality.normalizeResolutionHeight(width: rawW, height: rawH);
       _availableQualities = [
         VideoQuality.fixed(
-          label: (h != null && h > 0)
-              ? '${h}p (Kualitas Asli)'
+          label: (normH != null && normH > 0)
+              ? '${normH}p (Kualitas Asli)'
               : 'Kualitas Asli (Direct)',
-          height: h,
-          width: w,
+          height: normH,
+          width: rawW,
         ),
       ];
       _selectedQuality = _availableQualities.first;
@@ -419,18 +491,38 @@ class UnifiedPlayerController extends ChangeNotifier {
     final Set<String> seen = {'auto'};
 
     validTracks.sort((a, b) {
-      final hA = a.h ?? 0;
-      final hB = b.h ?? 0;
+      final hA = VideoQuality.normalizeResolutionHeight(width: a.w, height: a.h) ?? 0;
+      final hB = VideoQuality.normalizeResolutionHeight(width: b.w, height: b.h) ?? 0;
       if (hA != hB) return hB.compareTo(hA);
       return (b.bitrate ?? 0).compareTo(a.bitrate ?? 0);
     });
 
+    // Count occurrences of each normalized height to disambiguate duplicate heights by bitrate
+    final Map<int, int> heightCounts = {};
     for (final track in validTracks) {
+      final normH = VideoQuality.normalizeResolutionHeight(width: track.w, height: track.h);
+      if (normH != null && normH > 0) {
+        heightCounts[normH] = (heightCounts[normH] ?? 0) + 1;
+      }
+    }
+
+    for (final track in validTracks) {
+      final normH = VideoQuality.normalizeResolutionHeight(width: track.w, height: track.h);
       String label;
-      if (track.h != null && track.h! > 0) {
-        label = '${track.h}p';
+      if (normH != null && normH > 0) {
+        if (normH >= 2160) {
+          label = '4K (${normH}p)';
+        } else if (normH >= 1440) {
+          label = '2K (${normH}p)';
+        } else {
+          label = '${normH}p';
+        }
         if (track.fps != null && track.fps! > 30) {
-          label += '${track.fps!.round()}';
+          label += ' ${track.fps!.round()}fps';
+        }
+        if ((heightCounts[normH] ?? 0) > 1 && track.bitrate != null && track.bitrate! > 0) {
+          final mbps = (track.bitrate! / 1000000).toStringAsFixed(1);
+          label += ' ($mbps Mbps)';
         }
       } else if (track.title != null && track.title!.isNotEmpty) {
         label = track.title!;
@@ -444,7 +536,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           VideoQuality(
             id: track.id,
             label: label,
-            height: track.h,
+            height: normH,
             width: track.w,
             bitrate: track.bitrate,
             mode: QualityControlMode.directTrack,
@@ -472,12 +564,16 @@ class UnifiedPlayerController extends ChangeNotifier {
         orElse: () => const VideoQuality.auto(),
       );
     } else {
+      final normH = VideoQuality.normalizeResolutionHeight(
+        width: currentTrack.w,
+        height: currentTrack.h,
+      );
       _selectedQuality = _availableQualities.firstWhere(
         (q) => q.id == currentTrack.id,
         orElse: () => VideoQuality(
           id: currentTrack.id,
-          label: currentTrack.h != null ? '${currentTrack.h}p' : currentTrack.id,
-          height: currentTrack.h,
+          label: normH != null ? '${normH}p' : currentTrack.id,
+          height: normH,
           width: currentTrack.w,
           bitrate: currentTrack.bitrate,
           mode: QualityControlMode.directTrack,
@@ -488,13 +584,49 @@ class UnifiedPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Extracts an 11-character YouTube video ID reliably from any URL format,
+  /// including Shorts, Live streams, embed URLs, and URLs with tracking parameters.
+  static String? extractYoutubeId(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    // 1. Direct 11-char ID
+    if (RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+
+    // 2. Try library method first
+    final libId = YoutubePlayerController.convertUrlToId(trimmed);
+    if (libId != null && RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(libId)) {
+      return libId;
+    }
+
+    // 3. Fallback regexes
+    final patterns = [
+      RegExp(r'(?:youtube\.com|youtu\.be).*?[?&]v=([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+      RegExp(r'(?:youtube\.com|youtube-nocookie\.com)\/embed\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+      RegExp(r'youtube\.com\/shorts\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+      RegExp(r'youtube\.com\/live\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+      RegExp(r'youtu\.be\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(trimmed);
+      if (match != null && match.groupCount >= 1) {
+        return match.group(1);
+      }
+    }
+
+    return null;
+  }
+
   /// Centralized detection of platform, ID, and title from any video URL (Direct or YouTube)
   static DetectedMedia? detectMediaFromUrl(String url) {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
 
     if (trimmed.contains('youtube.com') || trimmed.contains('youtu.be')) {
-      final ytId = YoutubePlayerController.convertUrlToId(trimmed);
+      final ytId = extractYoutubeId(trimmed);
       if (ytId != null && ytId.isNotEmpty) {
         return DetectedMedia(
           mediaType: 'youtube',
@@ -504,19 +636,23 @@ class UnifiedPlayerController extends ChangeNotifier {
           thumbnailUrl: 'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
         );
       }
+      // If recognized as YouTube domain but video ID cannot be parsed (e.g. channel or search URL),
+      // DO NOT fall through to direct_url!
+      return null;
     }
 
     if (trimmed.contains('bilibili.tv') ||
         trimmed.contains('bilibili.com') ||
         trimmed.contains('b23.tv')) {
-      final uri = Uri.tryParse(trimmed);
+      final canonicalUrl = trimmed.startsWith('http') ? trimmed : 'https://$trimmed';
+      final uri = Uri.tryParse(canonicalUrl);
       String? mediaId;
       if (uri != null && uri.pathSegments.isNotEmpty) {
-        mediaId = uri.pathSegments.last;
+        mediaId = uri.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
       }
       return DetectedMedia(
         mediaType: 'bstation',
-        mediaUrl: trimmed,
+        mediaUrl: canonicalUrl,
         mediaId: mediaId,
         title: 'Video Bstation',
       );
@@ -533,29 +669,54 @@ class UnifiedPlayerController extends ChangeNotifier {
           thumbnailUrl: 'https://www.dailymotion.com/thumbnail/video/$dmId',
         );
       }
+      // If recognized as Dailymotion domain but video ID cannot be parsed,
+      // DO NOT fall through to direct_url!
+      return null;
     }
 
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       final uri = Uri.tryParse(trimmed);
-      var filename = uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'Direct Video';
+      var filename = uri != null && uri.pathSegments.isNotEmpty
+          ? uri.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? 'Direct Video'
+          : 'Direct Video';
       if (filename.contains('?')) {
         filename = filename.split('?').first;
       }
-      if (RegExp(r'^\d+(\.[a-zA-Z0-9]+)?$').hasMatch(filename)) {
+      try {
+        filename = Uri.decodeComponent(filename);
+      } catch (_) {}
+      final dotIdx = filename.lastIndexOf('.');
+      if (dotIdx != -1 && dotIdx > 0) {
+        filename = filename.substring(0, dotIdx);
+      }
+      filename = filename.replaceAll(RegExp(r'[-_]+'), ' ').trim();
+      if (RegExp(r'^\d+$').hasMatch(filename) || filename.isEmpty) {
         filename = 'Video Stream';
       }
       return DetectedMedia(
         mediaType: 'direct_url',
         mediaUrl: trimmed,
-        title: filename.isNotEmpty ? filename : 'Direct Video Stream',
+        title: filename,
       );
     }
 
     if (trimmed.startsWith('/') ||
         trimmed.startsWith('file://') ||
+        trimmed.startsWith('content://') ||
         RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(trimmed)) {
-      final cleanPath = trimmed.replaceFirst(RegExp(r'^file:\/\/'), '');
-      final filename = cleanPath.split(RegExp(r'[/\\]')).last;
+      var cleanPath = trimmed.replaceFirst(RegExp(r'^(file|content):\/\/'), '');
+      try {
+        cleanPath = Uri.decodeComponent(cleanPath);
+      } catch (_) {}
+      var filename = cleanPath.split(RegExp(r'[/\\]')).last;
+      if (filename.contains('?')) {
+        filename = filename.split('?').first;
+      }
+      final dotIdx = filename.lastIndexOf('.');
+      if (dotIdx != -1 && dotIdx > 0) {
+        filename = filename.substring(0, dotIdx);
+      }
+      filename = filename.replaceAll(RegExp(r'[-_]+'), ' ').trim();
       return DetectedMedia(
         mediaType: 'direct_url',
         mediaUrl: trimmed,
@@ -566,7 +727,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     if (trimmed.startsWith('p2p://')) {
       final uri = Uri.tryParse(trimmed);
       final filename = uri != null && uri.pathSegments.isNotEmpty
-          ? uri.pathSegments.last
+          ? uri.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? 'P2P Stream'
           : 'P2P Stream';
       return DetectedMedia(
         mediaType: 'direct_url',
@@ -614,10 +775,20 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (value.playerState == PlayerState.ended) {
         onPlaybackEnded?.call();
       }
+      if (playing || value.playerState == PlayerState.cued) {
+        if (_availableQualities.length <= 1) {
+          _fetchYoutubeAvailableQualities();
+        }
+      }
       if (_isPlaying != playing &&
           !buffering &&
           value.playerState != PlayerState.unknown &&
           value.playerState != PlayerState.cued) {
+        if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+          debugPrint('[UnifiedPlayerController] YouTube spurious pause ignored during fullscreen transition');
+          _ytController?.playVideo();
+          return;
+        }
         _isPlaying = playing;
         if (playing && !_isMuted && !kIsWeb) {
           _ytController?.unMute();
@@ -653,6 +824,11 @@ class UnifiedPlayerController extends ChangeNotifier {
     };
     _bstationController!.onPlayingChanged = (playing) {
       if (_isDisposed || _mediaType != 'bstation') return;
+      if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+        debugPrint('[UnifiedPlayerController] Bstation spurious pause ignored during fullscreen transition');
+        _bstationController?.play();
+        return;
+      }
       if (_isPlaying != playing) {
         _isPlaying = playing;
         notifyListeners();
@@ -701,6 +877,11 @@ class UnifiedPlayerController extends ChangeNotifier {
     };
     _dailymotionController!.onPlayingChanged = (playing) {
       if (_isDisposed || _mediaType != 'dailymotion') return;
+      if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+        debugPrint('[UnifiedPlayerController] Dailymotion spurious pause ignored during fullscreen transition');
+        _dailymotionController?.play();
+        return;
+      }
       if (_isPlaying != playing) {
         _isPlaying = playing;
         notifyListeners();
@@ -752,6 +933,24 @@ class UnifiedPlayerController extends ChangeNotifier {
       return;
     }
 
+    if (type == 'screenshare') {
+      _isPlaying = false;
+      await _bstationController?.pause();
+      await _dailymotionController?.pause();
+      if (_ytController != null) {
+        try {
+          await _ytController!.pauseVideo();
+        } catch (_) {}
+      }
+      if (kIsWeb && _webVideoAdapter != null) {
+        await _webVideoAdapter?.pause();
+      } else if (_mkPlayer != null) {
+        await _mkPlayer?.stop();
+      }
+      notifyListeners();
+      return;
+    }
+
     if (type == 'youtube') {
       _youtubeQuality = '';
       _availableQualities = [
@@ -772,7 +971,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _mkPlayer?.stop();
       }
 
-      final videoId = YoutubePlayerController.convertUrlToId(url) ?? url;
+      final videoId = extractYoutubeId(url) ?? url;
       try {
         if (_ytController == null) {
           _ytController = YoutubePlayerController(
@@ -1011,6 +1210,13 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   Future<void> pause() async {
+    _fullscreenTransitionTimer?.cancel();
+    _fullscreenTransitionTimer = null;
+    _isFullscreenTransition = false;
+    _wasPlayingBeforeFullscreen = false;
+    _bstationController?.setFullscreenTransition(false);
+    _dailymotionController?.setFullscreenTransition(false);
+
     _isPlaying = false;
     notifyListeners();
 
@@ -1158,7 +1364,19 @@ class UnifiedPlayerController extends ChangeNotifier {
     _saveUserQualityPreference(quality);
 
     try {
-      if (_mediaType == 'bstation') {
+      if (_mediaType == 'youtube') {
+        if (_ytController != null) {
+          final qCode = quality.isAuto ? 'default' : quality.id;
+          try {
+            await _ytController!.webViewController.runJavaScript(
+              'player.setPlaybackQuality("$qCode");',
+            );
+            await _ytController!.webViewController.runJavaScript(
+              'player.setPlaybackQualityRange("$qCode", "$qCode");',
+            );
+          } catch (_) {}
+        }
+      } else if (_mediaType == 'bstation') {
         await _bstationController?.setQuality(quality.id);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.setQuality(quality.id);
@@ -1184,16 +1402,84 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   void _updateYoutubeQuality(String? quality) {
     _youtubeQuality = quality ?? '';
-    final label = _formatYoutubeQuality(_youtubeQuality);
-    _availableQualities = [
-      VideoQuality(
-        id: quality ?? 'auto',
-        label: label,
-        mode: QualityControlMode.embeddedUi,
-      ),
-    ];
-    _selectedQuality = _availableQualities.first;
+    if (_availableQualities.length <= 1) {
+      final label = _formatYoutubeQuality(_youtubeQuality);
+      final normHeight = VideoQuality.youtube(_youtubeQuality).height;
+      _availableQualities = [
+        VideoQuality(
+          id: quality ?? 'auto',
+          label: label,
+          height: normHeight,
+          mode: QualityControlMode.embeddedUi,
+        ),
+      ];
+      _selectedQuality = _availableQualities.first;
+    }
     notifyListeners();
+    _fetchYoutubeAvailableQualities();
+  }
+
+  Future<void> _fetchYoutubeAvailableQualities() async {
+    if (_isDisposed || _mediaType != 'youtube' || _ytController == null) return;
+    try {
+      final raw = await _ytController!.webViewController.runJavaScriptReturningResult(
+        'player.getAvailableQualityLevels();',
+      );
+      List<dynamic>? levels;
+      if (raw is List) {
+        levels = raw;
+      } else if (raw is String &&
+          raw.isNotEmpty &&
+          raw != 'null' &&
+          raw != 'undefined') {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            levels = decoded;
+          } else if (decoded is String) {
+            final inner = jsonDecode(decoded);
+            if (inner is List) levels = inner;
+          }
+        } catch (_) {
+          final cleaned = raw.replaceAll(RegExp(r'[\[\]"\s]'), '');
+          if (cleaned.isNotEmpty) {
+            levels = cleaned.split(',');
+          }
+        }
+      }
+      if (levels != null && levels.isNotEmpty) {
+        final List<VideoQuality> list = [
+          const VideoQuality.auto(
+            label: 'Auto (Otomatis YouTube)',
+            mode: QualityControlMode.webviewBridge,
+          ),
+        ];
+        final Set<String> seen = {'auto'};
+        for (final item in levels) {
+          final code = item.toString().trim();
+          if (code.isEmpty || code == 'auto' || seen.contains(code)) continue;
+          final q = VideoQuality.youtube(code);
+          if (q.height != null && q.height! > 0) {
+            seen.add(code);
+            list.add(q);
+          }
+        }
+        if (list.length > 1) {
+          list.sort((a, b) {
+            if (a.isAuto) return -1;
+            if (b.isAuto) return 1;
+            return (b.height ?? 0).compareTo(a.height ?? 0);
+          });
+          _availableQualities = list;
+          if (_selectedQuality == null ||
+              !_availableQualities.any((q) => q.id == _selectedQuality!.id)) {
+            _selectedQuality = _availableQualities.first;
+          }
+          notifyListeners();
+          _applySavedQualityPreference();
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveUserQualityPreference(VideoQuality quality) async {
@@ -1253,8 +1539,43 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
   }
 
+  void _beginFullscreenTransition() {
+    _fullscreenTransitionTimer?.cancel();
+    _fullscreenTransitionTimer = null;
+    if (_isDisposed || !_isPlaying) {
+      _isFullscreenTransition = false;
+      _wasPlayingBeforeFullscreen = false;
+      _bstationController?.setFullscreenTransition(false);
+      _dailymotionController?.setFullscreenTransition(false);
+      return;
+    }
+    _isFullscreenTransition = true;
+    _wasPlayingBeforeFullscreen = true;
+    _bstationController?.setFullscreenTransition(true);
+    _dailymotionController?.setFullscreenTransition(true);
+
+    _fullscreenTransitionTimer = Timer(const Duration(milliseconds: 1500), () {
+      _endFullscreenTransition();
+    });
+  }
+
+  void _endFullscreenTransition() {
+    _fullscreenTransitionTimer?.cancel();
+    _fullscreenTransitionTimer = null;
+    _isFullscreenTransition = false;
+    _bstationController?.setFullscreenTransition(false);
+    _dailymotionController?.setFullscreenTransition(false);
+
+    // If it was playing before entering/exiting fullscreen, ensure playback continues seamlessly
+    if (!_isDisposed && _wasPlayingBeforeFullscreen && !_isPlaying) {
+      debugPrint('[UnifiedPlayerController] Auto-restoring playback after fullscreen transition');
+      play();
+    }
+  }
+
   Future<void> enterFullscreen() async {
     if (_isFullscreen) return;
+    _beginFullscreenTransition();
     _isFullscreen = true;
     notifyListeners();
 
@@ -1262,6 +1583,8 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   Future<void> exitFullscreen() async {
+    if (!_isFullscreen) return;
+    _beginFullscreenTransition();
     _isFullscreen = false;
     notifyListeners();
 
@@ -1279,8 +1602,12 @@ class UnifiedPlayerController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _fullscreenTransitionTimer?.cancel();
+    _fullscreenTransitionTimer = null;
+    _isFullscreenTransition = false;
     if (_isFullscreen) {
-      exitFullscreen();
+      _isFullscreen = false;
+      FullscreenHelper.exitFullscreen();
     }
     for (final sub in _subscriptions) {
       sub.cancel();

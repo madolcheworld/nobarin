@@ -24,6 +24,7 @@ class SyncController extends ChangeNotifier {
   RealtimeChannel? _realtimeChannel;
   Timer? _heartbeatTimer;
   bool _isApplyingRemoteSync = false;
+  int _remoteSyncSession = 0;
   bool _isDisposed = false;
 
   // Packet sequence number & ordering guard
@@ -171,6 +172,10 @@ class SyncController extends ChangeNotifier {
   void _setupPlayerListeners() {
     player.onPlaybackStateChanged = (state) {
       if (_isApplyingRemoteSync || !canControl) return;
+      if (player.isFullscreenTransition && state == 'paused') {
+        debugPrint('[SyncController] Suppressed spurious pause broadcast during fullscreen transition');
+        return;
+      }
       broadcastSync(state: state, action: state);
     };
 
@@ -225,6 +230,7 @@ class SyncController extends ChangeNotifier {
       _lastProcessedSeqIdPerController[controllerId] = payload.seqId;
     }
 
+    final int currentSession = ++_remoteSyncSession;
     _latestPayload = payload;
     _isApplyingRemoteSync = true;
 
@@ -360,9 +366,11 @@ class SyncController extends ChangeNotifier {
         }
       }
     } finally {
-      // Delay releasing flag briefly to avoid local echo
+      // Delay releasing flag briefly to avoid local echo, guarded by session token
       Future.delayed(const Duration(milliseconds: 300), () {
-        _isApplyingRemoteSync = false;
+        if (!_isDisposed && _remoteSyncSession == currentSession) {
+          _isApplyingRemoteSync = false;
+        }
       });
     }
   }
@@ -458,6 +466,23 @@ class SyncController extends ChangeNotifier {
   Future<void> requestChangeMedia(String type, String url) async {
     if (!canControl) return;
     syncEngine.resetFilter();
+
+    // Auto-host local file if this device is host/controller and file is not yet hosted or changed
+    if (!kIsWeb && UnifiedPlayerController.isLocalFilePath(url)) {
+      if (!P2PFileStreamService.instance.isHosting ||
+          P2PFileStreamService.instance.hostedFilePath != url) {
+        try {
+          await P2PFileStreamService.instance.hostFile(
+            filePath: url,
+            hostUserId: currentUser.id,
+            hostUserName: currentUser.username,
+          );
+        } catch (e) {
+          debugPrint('[SyncController] Auto-host local file failed: $e');
+        }
+      }
+    }
+
     await player.loadMedia(type, url, autoPlay: true);
 
     String broadcastUrl = url;

@@ -18,6 +18,7 @@ typedef ScreenPeerConnectionFunction = Future<RTCPeerConnection> Function(
 typedef RendererFactory = RTCVideoRenderer Function();
 
 typedef BackgroundServiceHandler = Future<void> Function(bool enable);
+typedef CapturePermissionRequester = Future<bool> Function();
 
 /// Controller for WebRTC P2P Screen Sharing in Watch Party rooms.
 class WebRtcScreenShareController extends ChangeNotifier {
@@ -35,6 +36,7 @@ class WebRtcScreenShareController extends ChangeNotifier {
   final ScreenPeerConnectionFunction _peerConnectionFunction;
   final RendererFactory _rendererFactory;
   final BackgroundServiceHandler _backgroundServiceHandler;
+  final CapturePermissionRequester _capturePermissionRequester;
 
   bool _isSharing = false;
   String? _sharerId;
@@ -82,32 +84,48 @@ class WebRtcScreenShareController extends ChangeNotifier {
     ScreenPeerConnectionFunction? peerConnectionFunction,
     RendererFactory? rendererFactory,
     BackgroundServiceHandler? backgroundServiceHandler,
+    CapturePermissionRequester? capturePermissionRequester,
   })  : _displayMediaFunction =
             displayMediaFunction ?? _defaultDisplayMedia,
         _peerConnectionFunction =
             peerConnectionFunction ?? _defaultPeerConnection,
         _rendererFactory = rendererFactory ?? _defaultRendererFactory,
         _backgroundServiceHandler =
-            backgroundServiceHandler ?? _defaultBackgroundHandler {
+            backgroundServiceHandler ?? _defaultBackgroundHandler,
+        _capturePermissionRequester =
+            capturePermissionRequester ?? _defaultCapturePermissionRequester {
     _localRenderer = _rendererFactory();
     _remoteRenderer = _rendererFactory();
+  }
+
+  static Future<bool> _defaultCapturePermissionRequester() async {
+    if (WebRTC.platformIsAndroid) {
+      try {
+        return await Helper.requestCapturePermission();
+      } catch (e) {
+        debugPrint('[WebRtcScreenShareController] requestCapturePermission error: $e');
+        return false;
+      }
+    }
+    return true;
   }
 
   static Future<void> _defaultBackgroundHandler(bool enable) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
       if (enable) {
-        var hasPermissions = await FlutterBackground.hasPermissions;
-        if (!hasPermissions) {
-          const androidConfig = FlutterBackgroundAndroidConfig(
-            notificationTitle: 'Nobarin - Berbagi Layar',
-            notificationText: 'Sedang membagikan layar Anda.',
-            notificationImportance: AndroidNotificationImportance.normal,
-            notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
-          );
-          hasPermissions = await FlutterBackground.initialize(androidConfig: androidConfig);
-        }
-        if (hasPermissions && !FlutterBackground.isBackgroundExecutionEnabled) {
+        const androidConfig = FlutterBackgroundAndroidConfig(
+          notificationTitle: '🔴 Nobarin - Sedang Berbagi Layar',
+          notificationText:
+              'Layar perangkat Anda sedang disiarkan ke room. Ketuk untuk kembali.',
+          notificationImportance: AndroidNotificationImportance.high,
+          notificationIcon:
+              AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+          showBadge: true,
+        );
+        final initialized =
+            await FlutterBackground.initialize(androidConfig: androidConfig);
+        if (initialized && !FlutterBackground.isBackgroundExecutionEnabled) {
           await FlutterBackground.enableBackgroundExecution();
         }
       } else {
@@ -255,10 +273,23 @@ class WebRtcScreenShareController extends ChangeNotifier {
       return false;
     }
 
-    _errorMessage = null;
-
     try {
-      await _backgroundServiceHandler(true);
+      // 1. On Android, acquire MediaProjection consent first
+      final hasCapturePermission = await _capturePermissionRequester();
+      if (!hasCapturePermission) {
+        _errorMessage = 'Izin berbagi layar dibatalkan.';
+        notifyListeners();
+        return false;
+      }
+
+      // 2. Enable background execution now that media projection permission is granted
+      try {
+        await _backgroundServiceHandler(true);
+      } catch (e) {
+        debugPrint('[WebRtcScreenShareController] Background service start note: $e');
+      }
+
+      // 3. Acquire display media (getDisplayMedia)
       final stream = await _displayMediaFunction({
         'video': true,
         'audio': false,
@@ -324,30 +355,60 @@ class WebRtcScreenShareController extends ChangeNotifier {
   /// Stops screen sharing, cleans up resources, and notifies peers.
   Future<void> stopScreenShare({bool forcedByHost = false}) async {
     if (_isSharing) {
-      try {
-        await _backgroundServiceHandler(false);
-      } catch (e) {
-        debugPrint('[WebRtcScreenShareController] Error stopping background service: $e');
-      }
-
-      try {
-        _localStream?.getTracks().forEach((track) => track.stop());
-        await _localStream?.dispose();
-        _localStream = null;
-        _localRenderer.srcObject = null;
-      } catch (e) {
-        debugPrint('[WebRtcScreenShareController] Error stopping local stream: $e');
-      }
-
-      await WebRtcSignalingHelper.closeAndDisposePeers(
-        _peerConnections,
-        tag: 'WebRtcScreenShareController',
-      );
-      _candidateBuffer.clear();
-
+      // Immediately flag as not sharing to prevent re-entrant calls from track.onEnded
       _isSharing = false;
       _sharerId = null;
       _sharerName = null;
+      notifyListeners();
+
+      // 1. Detach renderer before stopping/disposing the native stream
+      try {
+        _localRenderer.srcObject = null;
+      } catch (e) {
+        debugPrint(
+            '[WebRtcScreenShareController] Error clearing local renderer: $e');
+      }
+
+      // 2. Clear onEnded callbacks, stop tracks, and dispose local stream
+      final streamToDispose = _localStream;
+      _localStream = null;
+      if (streamToDispose != null) {
+        try {
+          for (final track in streamToDispose.getTracks()) {
+            track.onEnded = null;
+            try {
+              track.stop();
+            } catch (_) {}
+          }
+          await streamToDispose.dispose();
+        } catch (e) {
+          debugPrint(
+              '[WebRtcScreenShareController] Error disposing local stream: $e');
+        }
+      }
+
+      // 3. Close peer connections
+      try {
+        await WebRtcSignalingHelper.closeAndDisposePeers(
+          _peerConnections,
+          tag: 'WebRtcScreenShareController',
+        );
+      } catch (e) {
+        debugPrint('[WebRtcScreenShareController] Error closing peers: $e');
+      }
+      _candidateBuffer.clear();
+
+      // 4. Disable background execution service AFTER capture stream has stopped
+      try {
+        await _backgroundServiceHandler(false).timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => debugPrint(
+              '[WebRtcScreenShareController] Background service stop timed out'),
+        );
+      } catch (e) {
+        debugPrint(
+            '[WebRtcScreenShareController] Error stopping background service: $e');
+      }
 
       await _sendSignalingMessage('SCREEN_SHARE_STATE', {
         'action': 'stop',
@@ -605,9 +666,18 @@ class WebRtcScreenShareController extends ChangeNotifier {
 
     pc.onTrack = (event) {
       if (event.track.kind == 'video') {
-        _remoteStream = event.streams.isNotEmpty ? event.streams[0] : null;
+        if (event.streams.isNotEmpty) {
+          _remoteStream = event.streams[0];
+        } else if (_remoteStream == null) {
+          final streams = pc.getRemoteStreams();
+          if (streams.isNotEmpty) {
+            _remoteStream = streams[0];
+          }
+        }
         try {
-          _remoteRenderer.srcObject = _remoteStream;
+          if (_remoteStream != null) {
+            _remoteRenderer.srcObject = _remoteStream;
+          }
         } catch (e) {
           debugPrint('[WebRtcScreenShareController] Error setting remote srcObject: $e');
         }
@@ -672,6 +742,10 @@ class WebRtcScreenShareController extends ChangeNotifier {
       tag: 'WebRtcScreenShareController',
     );
     _candidateBuffer.clear();
+
+    try {
+      _localRenderer.srcObject = null;
+    } catch (_) {}
 
     WebRtcSignalingHelper.disposeMediaStream(
       _localStream,

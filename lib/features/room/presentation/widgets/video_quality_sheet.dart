@@ -98,7 +98,10 @@ class VideoQualitySheet extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -122,17 +125,36 @@ class VideoQualitySheet extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Aktif: ${player.currentQualityLabel}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              'Aktif: ${player.currentQualityLabel}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
                               ),
                             ),
+                            if (player.maxResolutionLabel != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondaryNeon.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: AppColors.secondaryNeon.withValues(alpha: 0.4),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Maks: ${player.maxResolutionLabel}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.secondaryNeon,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ],
@@ -151,7 +173,9 @@ class VideoQualitySheet extends StatelessWidget {
               const SizedBox(height: 16),
 
               // Content: List of Qualities or Informational Notice
-              if (player.supportsQualitySelection) ...[
+              if (player.supportsQualitySelection &&
+                  qualities.isNotEmpty &&
+                  (mediaType != 'youtube' || player.hasMultipleQualities)) ...[
                 Flexible(
                   child: ListView.separated(
                     shrinkWrap: true,
@@ -205,7 +229,7 @@ class VideoQualitySheet extends StatelessWidget {
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFFFF0000).withValues(alpha: 0.25),
+                      color: AppColors.youtubeRed.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Column(
@@ -216,13 +240,13 @@ class VideoQualitySheet extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFF0000)
+                              color: AppColors.youtubeRed
                                   .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
                               Icons.smart_display_rounded,
-                              color: Color(0xFFFF0000),
+                              color: AppColors.youtubeRed,
                               size: 22,
                             ),
                           ),
@@ -296,7 +320,7 @@ class VideoQualitySheet extends StatelessWidget {
                   ),
                 ),
               ] else ...[
-                // Local File or P2P Stream Direct Passthrough
+                // Local File, P2P Stream, or Single-Track Direct Video Passthrough
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -320,7 +344,9 @@ class VideoQualitySheet extends StatelessWidget {
                             child: Icon(
                               isP2P
                                   ? Icons.hub_rounded
-                                  : Icons.folder_copy_rounded,
+                                  : (isLocal
+                                      ? Icons.folder_copy_rounded
+                                      : Icons.high_quality_rounded),
                               color: sourceColor,
                               size: 22,
                             ),
@@ -333,7 +359,9 @@ class VideoQualitySheet extends StatelessWidget {
                                 Text(
                                   isP2P
                                       ? 'Streaming P2P Langsung'
-                                      : 'File Video Lokal',
+                                      : (isLocal
+                                          ? 'File Video Lokal'
+                                          : 'Resolusi Asli Video'),
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -342,7 +370,9 @@ class VideoQualitySheet extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Format: ${player.currentQualityLabel}',
+                                  player.maxResolutionLabel != null
+                                      ? 'Resolusi Terdeteksi: ${player.maxResolutionLabel}'
+                                      : 'Format: ${player.currentQualityLabel}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: sourceColor,
@@ -358,7 +388,9 @@ class VideoQualitySheet extends StatelessWidget {
                       Text(
                         isP2P
                             ? 'Video ditransmisikan langsung antar perangkat tanpa kompresi tambahan untuk menjaga kualitas gambar sejernih mungkin.'
-                            : 'Video dimainkan langsung dari penyimpanan perangkat Anda pada resolusi aslinya tanpa kompresi ulang, menghemat baterai & performa grafis.',
+                            : (isLocal
+                                ? 'Video dimainkan langsung dari penyimpanan perangkat Anda pada resolusi aslinya tanpa kompresi ulang, menghemat baterai & performa grafis.'
+                                : 'Sumber video ini menyediakan satu stream langsung (Single Track) dan diputar otomatis pada resolusi maksimal yang tersedia.'),
                         style: const TextStyle(
                           fontSize: 12,
                           height: 1.4,
@@ -387,15 +419,15 @@ class VideoQualitySheet extends StatelessWidget {
                     Icon(
                       Icons.devices_rounded,
                       size: 15,
-                      color: AppColors.textMuted,
+                      color: AppColors.textSecondary,
                     ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Pengaturan ini berlaku khusus di perangkat Anda tanpa memengaruhi penonton lain.',
                         style: TextStyle(
-                          fontSize: 10.5,
-                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -414,10 +446,10 @@ class VideoQualitySheet extends StatelessWidget {
     bool isLocal = false,
     bool isP2P = false,
   }) {
-    if (type == 'youtube') return const Color(0xFFFF0000);
-    if (type == 'bstation') return const Color(0xFF00A1D6);
-    if (type == 'dailymotion') return const Color(0xFF0066DC);
-    if (isP2P) return const Color(0xFF8B5CF6);
+    if (type == 'youtube') return AppColors.youtubeRed;
+    if (type == 'bstation') return AppColors.bstationBlue;
+    if (type == 'dailymotion') return AppColors.dailymotionBlue;
+    if (isP2P) return AppColors.p2pPurple;
     if (isLocal) return AppColors.accentGreen;
     return AppColors.primaryNeon;
   }
@@ -514,7 +546,49 @@ class _QualityTile extends StatelessWidget {
                                 : AppColors.textPrimary,
                           ),
                         ),
-                        if (quality.height != null && quality.height! >= 1080) ...[
+                        if (quality.height != null && quality.height! >= 2160) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryNeon.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '4K',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryNeon,
+                              ),
+                            ),
+                          ),
+                        ] else if (quality.height != null &&
+                            quality.height! >= 1440) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryNeon.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '2K',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryNeon,
+                              ),
+                            ),
+                          ),
+                        ] else if (quality.height != null &&
+                            quality.height! >= 1080) ...[
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(

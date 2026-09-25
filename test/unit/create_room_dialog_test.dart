@@ -69,6 +69,7 @@ void main() {
       expect(find.text('Bstation / Bilibili'), findsOneWidget);
       expect(find.text('Dailymotion'), findsOneWidget);
       expect(find.text('File Video Lokal (P2P)'), findsOneWidget);
+      expect(find.text('Mirror Layar / Bagikan Layar'), findsOneWidget);
 
       // Verify Direct Video is cleanly removed
       expect(find.textContaining('Direct Video'), findsNothing);
@@ -260,6 +261,50 @@ void main() {
       expect(resultRoom!.title, 'Nobar Testing Seru');
       expect(resultRoom!.currentMediaUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
       expect(resultRoom!.hostName, 'RiyanTester');
+    });
+
+    testWidgets('Tapping Mirror Layar card in Step 1 advances to Step 2 with screen share preview',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(buildTestableDialog());
+      await tester.pump();
+
+      // Find and tap Mirror Layar card
+      final mirrorCard = find.text('Mirror Layar / Bagikan Layar');
+      expect(mirrorCard, findsOneWidget);
+      await tester.tap(mirrorCard);
+      await tester.pumpAndSettle();
+
+      // Should be on Step 2 with Mirror Layar preview
+      expect(find.text('Pengaturan Room'), findsAtLeast(1));
+      expect(find.text('Langkah 2 dari 2'), findsOneWidget);
+      expect(find.text('Mirror Layar'), findsWidgets);
+      expect(find.text('WebRTC P2P'), findsOneWidget);
+      expect(find.text('Nobar: Mirror Layar'), findsOneWidget);
+    });
+
+    testWidgets('Opening with screenshare initialMediaType opens directly at Step 2',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        buildTestableDialog(
+          initialMediaType: 'screenshare',
+          initialMediaUrl: 'screenshare',
+          initialTitle: 'Nobar Live Mirror',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Pengaturan Room'), findsAtLeast(1));
+      expect(find.text('Langkah 2 dari 2'), findsOneWidget);
+      expect(find.text('Nobar Live Mirror'), findsAtLeast(1));
+      expect(find.text('WebRTC P2P'), findsOneWidget);
     });
   });
 }

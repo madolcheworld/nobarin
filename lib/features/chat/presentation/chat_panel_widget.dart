@@ -281,7 +281,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                             Icon(
                               Icons.chat_bubble_outline_rounded,
                               size: 32,
-                              color: AppColors.textMuted.withValues(alpha: 0.4),
+                              color: AppColors.textMuted.withValues(alpha: 0.65),
                             ),
                             const SizedBox(height: 8),
                             const Text(
@@ -289,7 +289,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textMuted,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -483,7 +483,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                           : (isMe
                               ? (msg.status == MessageStatus.failed
                                   ? AppColors.accentRed.withValues(alpha: 0.2)
-                                  : const Color(0xFF281C44))
+                                  : AppColors.chatBubbleSelf)
                               : AppColors.glassFill),
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
@@ -517,10 +517,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                     child: Text(
                       msg.content,
                       style: TextStyle(
-                        fontSize: isSingleEmoji ? 30 : 13.5,
-                        color: Colors.white,
+                        fontSize: isSingleEmoji ? 30 : 14.0,
+                        color: AppColors.textPrimary,
                         fontWeight: isMe ? FontWeight.w500 : FontWeight.w400,
-                        height: isSingleEmoji ? 1.2 : 1.35,
+                        height: isSingleEmoji ? 1.2 : 1.4,
                       ),
                     ),
                   ),
@@ -667,7 +667,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
         builder: (context, constraints) {
           final double maxBarWidth =
               constraints.maxWidth > 520 ? 520 : constraints.maxWidth;
-          final bool isVeryNarrow = constraints.maxWidth < 310;
+          final bool isVeryNarrow = constraints.maxWidth < 340;
 
           if (isVeryNarrow) {
             return SizedBox(
@@ -675,11 +675,14 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                itemCount: emojis.length + 1,
+                itemCount: emojis.length + 2,
                 separatorBuilder: (_, _) => const SizedBox(width: 6),
                 itemBuilder: (context, index) {
                   if (index == emojis.length) {
                     return _buildAddReactionButton(compact: true);
+                  }
+                  if (index == emojis.length + 1) {
+                    return _buildToggleVisibilityButton(compact: true);
                   }
                   return _buildQuickReactionItem(emojis[index], compact: true);
                 },
@@ -705,6 +708,12 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: _buildAddReactionButton(),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _buildToggleVisibilityButton(),
                     ),
                   ),
                 ],
@@ -772,6 +781,92 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
             Icons.add_rounded,
             size: 18,
             color: AppColors.secondaryNeon,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleVisibilityButton({bool compact = false}) {
+    final isEnabled = widget.chatController.showFloatingReactions;
+    return Material(
+      color: isEnabled
+          ? AppColors.primaryNeon.withValues(alpha: 0.12)
+          : Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () {
+          AppHaptics.light();
+          widget.chatController.toggleFloatingReactions();
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(milliseconds: 1500),
+              backgroundColor: AppColors.surfaceElevated,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color:
+                      isEnabled ? AppColors.textMuted : AppColors.primaryNeon,
+                  width: 0.8,
+                ),
+              ),
+              content: Row(
+                children: [
+                  Icon(
+                    !isEnabled
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    size: 16,
+                    color: !isEnabled
+                        ? AppColors.primaryNeon
+                        : AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      !isEnabled
+                          ? 'Reaksi melayang di video ditampilkan'
+                          : 'Reaksi melayang di video disembunyikan',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(10),
+        splashColor: AppColors.primaryNeon.withValues(alpha: 0.25),
+        child: Container(
+          width: compact ? 38 : null,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isEnabled
+                  ? AppColors.primaryNeon.withValues(alpha: 0.5)
+                  : AppColors.border.withValues(alpha: 0.6),
+              width: 0.8,
+            ),
+          ),
+          child: Tooltip(
+            message: isEnabled
+                ? 'Sembunyikan reaksi melayang di video'
+                : 'Tampilkan reaksi melayang di video',
+            child: Icon(
+              isEnabled
+                  ? Icons.visibility_rounded
+                  : Icons.visibility_off_rounded,
+              size: 18,
+              color: isEnabled ? AppColors.primaryNeon : AppColors.textMuted,
+            ),
           ),
         ),
       ),

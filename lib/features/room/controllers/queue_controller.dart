@@ -21,6 +21,7 @@ class QueueController extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   bool _isDisposed = false;
+  bool _isPoppingNext = false;
   RealtimeChannel? _realtimeChannel;
 
   List<QueueItem> get items => List.unmodifiable(_items);
@@ -263,29 +264,34 @@ class QueueController extends ChangeNotifier {
 
   /// Pops the next item from the queue and immediately starts playback
   Future<void> playNext() async {
-    if (_items.isEmpty) return;
-    final nextItem = _items.removeAt(0);
+    if (_isPoppingNext || _items.isEmpty) return;
+    _isPoppingNext = true;
+    try {
+      final nextItem = _items.removeAt(0);
 
-    for (int i = 0; i < _items.length; i++) {
-      _items[i] = _items[i].copyWith(orderIndex: i);
+      for (int i = 0; i < _items.length; i++) {
+        _items[i] = _items[i].copyWith(orderIndex: i);
+      }
+      notifyListeners();
+      _broadcastQueueSync();
+
+      if (supabase != null) {
+        try {
+          await supabase!.from('room_queue').delete().eq('id', nextItem.id);
+        } catch (_) {}
+      }
+
+      chatController?.sendSystemMessage(
+        'Memutar "${nextItem.title}" dari antrean.',
+      );
+
+      await syncController.requestChangeMedia(
+        nextItem.mediaType,
+        nextItem.mediaUrl,
+      );
+    } finally {
+      _isPoppingNext = false;
     }
-    notifyListeners();
-    _broadcastQueueSync();
-
-    if (supabase != null) {
-      try {
-        await supabase!.from('room_queue').delete().eq('id', nextItem.id);
-      } catch (_) {}
-    }
-
-    chatController?.sendSystemMessage(
-      'Memutar "${nextItem.title}" dari antrean.',
-    );
-
-    await syncController.requestChangeMedia(
-      nextItem.mediaType,
-      nextItem.mediaUrl,
-    );
   }
 
   /// Directly plays a specific queue item and removes it from the queue

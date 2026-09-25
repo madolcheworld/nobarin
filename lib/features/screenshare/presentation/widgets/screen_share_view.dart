@@ -47,7 +47,8 @@ class _ScreenShareViewState extends State<ScreenShareView> {
       builder: (context, _) {
         final isSharing = widget.controller.isSharing;
         final sharerName = widget.controller.sharerName ?? 'Peserta';
-        final hasRemoteStream = widget.controller.remoteStream != null;
+        final hasRemoteStream = widget.controller.remoteStream != null ||
+            widget.controller.remoteRenderer.srcObject != null;
 
         Widget content;
         if (isSharing) {

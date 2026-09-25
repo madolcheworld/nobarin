@@ -205,11 +205,7 @@ class _FullscreenReactionBarState extends State<FullscreenReactionBar>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: _isExpanded
-                      ? const LinearGradient(
-                          colors: [Color(0xFFFF007A), Color(0xFFFF8A00)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
+                      ? AppColors.comboMegaGradient
                       : LinearGradient(
                           colors: [
                             Colors.black.withValues(alpha: 0.7),
@@ -225,7 +221,7 @@ class _FullscreenReactionBarState extends State<FullscreenReactionBar>
                   boxShadow: [
                     BoxShadow(
                       color: (_isExpanded
-                              ? const Color(0xFFFF007A)
+                              ? AppColors.accentPink
                               : AppColors.primaryNeon)
                           .withValues(alpha: 0.4),
                       blurRadius: 12,

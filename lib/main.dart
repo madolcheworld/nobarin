@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
+import 'core/constants/app_colors.dart';
 import 'core/network/supabase_client.dart';
 import 'core/utils/ntp_clock_sync.dart';
 import 'features/room/controllers/unified_player_controller.dart';
@@ -25,7 +27,7 @@ void main() async {
   // 3. Graceful dark-neon fallback widget when a widget build fails
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Material(
-      color: const Color(0xFF090B14),
+      color: AppColors.background,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -34,14 +36,14 @@ void main() async {
             children: [
               const Icon(
                 Icons.warning_amber_rounded,
-                color: Color(0xFFFF5252),
+                color: AppColors.accentRed,
                 size: 44,
               ),
               const SizedBox(height: 12),
               const Text(
                 'Terjadi Kendala Tampilan',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -55,7 +57,7 @@ void main() async {
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Color(0xFF9E9E9E),
+                  color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -75,15 +77,15 @@ void main() async {
   // Initialize Supabase Backend
   await SupabaseService().initialize();
 
-  // Initialize NTP server clock sync with Supabase
+  // Initialize NTP server clock sync in background without blocking app launch
   if (SupabaseService().isInitialized) {
     final client = SupabaseService().clientOrNull;
     if (client != null) {
-      try {
-        await NtpClockSync().syncWithSupabase(client);
-      } catch (e) {
-        debugPrint('[Main] NTP Clock Sync warning: $e');
-      }
+      unawaited(
+        NtpClockSync().syncWithSupabase(client).catchError((e) {
+          debugPrint('[Main] NTP Clock Sync warning: $e');
+        }),
+      );
     }
   }
 
