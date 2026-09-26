@@ -1,8 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nobarin/features/room/controllers/unified_player_controller.dart';
 import 'package:nobarin/features/room/models/video_quality.dart';
 import 'package:nobarin/features/room/services/hls_manifest_parser.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('VideoQuality Model & Logic Tests', () {
     test('Auto quality is properly configured', () {
       const autoQuality = VideoQuality.auto();
@@ -235,6 +243,61 @@ segment1.ts
       );
       expect(variants, isEmpty);
       expect(HlsManifestParser.parseMasterPlaylist(mediaPlaylist, baseUri: baseUri), isEmpty);
+    });
+
+    test('UnifiedPlayerController switches HLS variant streamUrl and restores Auto without mutating canonical mediaUrl', () async {
+      final player = UnifiedPlayerController();
+      addTearDown(player.dispose);
+
+      const masterUrl = 'https://cdn.example.com/streams/master.m3u8';
+      await player.loadMedia('direct_url', masterUrl, autoPlay: false);
+
+      const manifest = '''
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360
+360p/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1280x720
+720p/index.m3u8
+''';
+      final parsedQualities = HlsManifestParser.parseMasterPlaylist(
+        manifest,
+        baseUri: Uri.parse(masterUrl),
+      );
+      player.setAvailableQualitiesForTesting(parsedQualities);
+
+      expect(player.mediaUrl, equals(masterUrl));
+      expect(player.activeVariantStreamUrl, isEmpty);
+
+      // Switch to 720p
+      final q720 = player.availableQualities.firstWhere((q) => q.height == 720);
+      await player.setVideoQuality(q720);
+      expect(player.selectedQuality?.height, equals(720));
+      expect(player.currentQualityLabel, equals('720p'));
+      expect(
+        player.activeVariantStreamUrl,
+        equals('https://cdn.example.com/streams/720p/index.m3u8'),
+      );
+      // Canonical mediaUrl must remain masterUrl so SyncController does not reload on heartbeat
+      expect(player.mediaUrl, equals(masterUrl));
+
+      // Switch to 360p
+      final q360 = player.availableQualities.firstWhere((q) => q.height == 360);
+      await player.setVideoQuality(q360);
+      expect(player.selectedQuality?.height, equals(360));
+      expect(player.currentQualityLabel, equals('360p'));
+      expect(
+        player.activeVariantStreamUrl,
+        equals('https://cdn.example.com/streams/360p/index.m3u8'),
+      );
+      expect(player.mediaUrl, equals(masterUrl));
+
+      // Switch back to Auto
+      final qAuto = player.availableQualities.firstWhere((q) => q.isAuto);
+      await player.setVideoQuality(qAuto);
+      expect(player.selectedQuality?.isAuto, isTrue);
+      expect(player.activeVariantStreamUrl, isEmpty);
+      expect(player.mediaUrl, equals(masterUrl));
     });
   });
 }

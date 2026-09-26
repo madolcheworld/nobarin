@@ -138,5 +138,57 @@ void main() {
 
       expect(find.text('Mirror Layar / Bagikan Layar'), findsNothing);
     });
+
+    testWidgets(
+        'does NOT render tempel link or URL fields when isAddingToQueueInitial is true',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaSourcePicker(
+              syncController: syncController,
+              isAddingToQueueInitial: true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Video sources and header should be available in queue
+      expect(find.text('Tambah ke Antrean'), findsOneWidget);
+      expect(find.text('Cari di YouTube'), findsOneWidget);
+
+      // Tempel link and its inputs/buttons must NOT be rendered in queue mode
+      expect(find.text('atau tempel link'), findsNothing);
+      expect(find.text('Link Video / Stream'), findsNothing);
+      expect(find.text('Tempel tautan video di sini...'), findsNothing);
+      expect(find.text('Putar Sekarang'), findsNothing);
+    });
+
+    testWidgets(
+        'renders tempel link section and Putar Sekarang button when isAddingToQueueInitial is false',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaSourcePicker(
+              syncController: syncController,
+              isAddingToQueueInitial: false,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // In change source mode, tempel link is available for direct playback
+      expect(find.text('Ganti Sumber Video'), findsOneWidget);
+      expect(find.text('YouTube'), findsOneWidget);
+      expect(find.text('atau tempel link'), findsOneWidget);
+      expect(find.text('Link Video / Stream'), findsOneWidget);
+      expect(find.text('Putar Sekarang'), findsOneWidget);
+      expect(find.text('Tambahkan ke Antrean Saja'), findsNothing);
+    });
   });
 }

@@ -11,6 +11,7 @@ import 'widgets/emoji_picker_sheet.dart';
 class ChatPanelWidget extends StatefulWidget {
   final ChatController chatController;
   final bool showReactions;
+  final bool isCompact;
   final String? hostId;
   final String? hostName;
   final Set<String> coHostUserIds;
@@ -19,6 +20,7 @@ class ChatPanelWidget extends StatefulWidget {
     super.key,
     required this.chatController,
     this.showReactions = true,
+    this.isCompact = false,
     this.hostId,
     this.hostName,
     this.coHostUserIds = const {},
@@ -31,8 +33,12 @@ class ChatPanelWidget extends StatefulWidget {
 class _ChatPanelWidgetState extends State<ChatPanelWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   String? _lastMessageId;
+  ChatMessage? _replyingToMessage;
+  bool _isUserScrolledUp = false;
+  int _newScrolledUpCount = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -44,6 +50,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     _lastMessageId = msgs.isNotEmpty ? msgs.last.id : null;
     widget.chatController.addListener(_handleChatUpdate);
     _inputController.addListener(_onTextChanged);
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
@@ -55,7 +62,26 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
       oldWidget.chatController.removeListener(_handleChatUpdate);
       final msgs = widget.chatController.messages;
       _lastMessageId = msgs.isNotEmpty ? msgs.last.id : null;
+      _replyingToMessage = null;
+      _isUserScrolledUp = false;
+      _newScrolledUpCount = 0;
       widget.chatController.addListener(_handleChatUpdate);
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.offset;
+    final scrolledUp = (maxScroll - currentScroll) > 90;
+    if (scrolledUp != _isUserScrolledUp ||
+        (!scrolledUp && _newScrolledUpCount > 0)) {
+      setState(() {
+        _isUserScrolledUp = scrolledUp;
+        if (!scrolledUp) {
+          _newScrolledUpCount = 0;
+        }
+      });
     }
   }
 
@@ -69,7 +95,20 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     final latestId = msgs.isNotEmpty ? msgs.last.id : null;
     if (latestId != _lastMessageId) {
       _lastMessageId = latestId;
-      _scrollToBottom();
+      final lastMsg = msgs.isNotEmpty ? msgs.last : null;
+      final isFromMe =
+          lastMsg?.userId == widget.chatController.currentUser.id;
+      if (_isUserScrolledUp && !isFromMe) {
+        if (lastMsg != null && !lastMsg.isReaction && !lastMsg.isSystem) {
+          if (mounted) {
+            setState(() {
+              _newScrolledUpCount++;
+            });
+          }
+        }
+      } else {
+        _scrollToBottom();
+      }
     }
   }
 
@@ -78,12 +117,22 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     widget.chatController.setTyping(false);
     widget.chatController.removeListener(_handleChatUpdate);
     _inputController.removeListener(_onTextChanged);
+    _scrollController.removeListener(_onScroll);
     _inputController.dispose();
+    _inputFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _scrollToBottom() {
+    if (_newScrolledUpCount > 0 || _isUserScrolledUp) {
+      if (mounted) {
+        setState(() {
+          _newScrolledUpCount = 0;
+          _isUserScrolledUp = false;
+        });
+      }
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -95,11 +144,31 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     });
   }
 
+  void _startReply(ChatMessage msg) {
+    if (msg.isSystem || msg.isReaction) return;
+    AppHaptics.selection();
+    setState(() {
+      _replyingToMessage = msg;
+    });
+    _inputFocusNode.requestFocus();
+  }
+
+  void _cancelReply() {
+    AppHaptics.light();
+    setState(() {
+      _replyingToMessage = null;
+    });
+  }
+
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     AppHaptics.light();
-    widget.chatController.sendMessage(text);
+    final replyTarget = _replyingToMessage;
+    setState(() {
+      _replyingToMessage = null;
+    });
+    widget.chatController.sendMessage(text, replyTo: replyTarget);
     _inputController.clear();
     _scrollToBottom();
   }
@@ -154,9 +223,11 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     AppHaptics.medium();
     final currentUserId = widget.chatController.currentUser.id;
     final isMe = msg.userId == currentUserId;
-    final isHostOrCoHost = (widget.hostId != null && widget.hostId == currentUserId) ||
-        widget.coHostUserIds.contains(currentUserId);
+    final isHostOrCoHost =
+        (widget.hostId != null && widget.hostId == currentUserId) ||
+            widget.coHostUserIds.contains(currentUserId);
     final canDelete = isMe || isHostOrCoHost;
+    final isPinned = widget.chatController.pinnedMessage?.id == msg.id;
     final snippet = msg.content.characters.length > 25
         ? '${msg.content.characters.take(25)}...'
         : msg.content;
@@ -164,6 +235,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceElevated,
@@ -183,153 +255,205 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.textMuted.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Text(
-                'Aksi untuk ${msg.username}: "$snippet"',
-                style:
-                    const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 14),
-              // Emojis row
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ...['❤️', '👍', '😂', '🔥', '😮', '😢', '👏', '🎉']
-                        .map((emoji) {
-                      final hasReacted = msg.hasUserReacted(
-                        emoji,
-                        widget.chatController.currentUser.id,
-                      );
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: InkWell(
-                          onTap: () {
-                            AppHaptics.selection();
-                            Navigator.of(ctx).pop();
-                            widget.chatController
-                                .toggleMessageReaction(msg.id, emoji);
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: hasReacted
-                                  ? AppColors.primaryNeon.withValues(alpha: 0.25)
-                                  : Colors.transparent,
-                              shape: BoxShape.circle,
-                            ),
-                            child:
-                                Text(emoji, style: const TextStyle(fontSize: 26)),
-                          ),
-                        ),
-                      );
-                    }),
-                    // More icon
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(ctx).pop();
-                          EmojiPickerSheet.show(
-                            context,
-                            title: 'Pilih Reaksi Pesan',
-                            onSelectEmoji: (emoji) {
-                              widget.chatController
-                                  .toggleMessageReaction(msg.id, emoji);
-                            },
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.textMuted.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Text(
+                    'Aksi untuk ${msg.username}: "$snippet"',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 14),
+                  // Emojis row
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...['❤️', '👍', '😂', '🔥', '😮', '😢', '👏', '🎉']
+                            .map((emoji) {
+                          final hasReacted = msg.hasUserReacted(
+                            emoji,
+                            widget.chatController.currentUser.id,
                           );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.add_rounded,
-                            size: 22,
-                            color: AppColors.secondaryNeon,
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: InkWell(
+                              onTap: () {
+                                AppHaptics.selection();
+                                Navigator.of(ctx).pop();
+                                widget.chatController
+                                    .toggleMessageReaction(msg.id, emoji);
+                              },
+                              borderRadius: BorderRadius.circular(24),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: hasReacted
+                                      ? AppColors.primaryNeon
+                                          .withValues(alpha: 0.25)
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(emoji,
+                                    style: const TextStyle(fontSize: 26)),
+                              ),
+                            ),
+                          );
+                        }),
+                        // More icon
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              EmojiPickerSheet.show(
+                                context,
+                                title: 'Pilih Reaksi Pesan',
+                                onSelectEmoji: (emoji) {
+                                  widget.chatController
+                                      .toggleMessageReaction(msg.id, emoji);
+                                },
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(
+                                color: AppColors.surface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                size: 22,
+                                color: AppColors.secondaryNeon,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const Divider(color: AppColors.border, height: 24, thickness: 0.8),
-              // Actions List
-              ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                leading: const Icon(Icons.copy_rounded, size: 20, color: AppColors.textPrimary),
-                title: const Text('Salin Pesan', style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  Clipboard.setData(ClipboardData(text: msg.content));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Pesan disalin ke clipboard'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-              if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
-                ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.flag_outlined, size: 20, color: AppColors.accentRed),
-                  title: const Text('Laporkan Pesan', style: TextStyle(fontSize: 13, color: AppColors.accentRed)),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _showReportDialog(msg);
-                  },
-                ),
-              if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
-                ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.block_rounded, size: 20, color: AppColors.textMuted),
-                  title: Text('Blokir ${msg.username}', style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _showBlockUserConfirmation(msg);
-                  },
-                ),
-              if (canDelete)
-                ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.accentRed),
-                  title: const Text('Hapus Pesan', style: TextStyle(fontSize: 13, color: AppColors.accentRed)),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    widget.chatController.deleteMessage(msg.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Pesan telah dihapus'),
-                        duration: Duration(seconds: 1),
+                  ),
+                  const Divider(
+                      color: AppColors.border, height: 24, thickness: 0.8),
+                  // Actions List
+                  ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    leading: const Icon(Icons.reply_rounded,
+                        size: 20, color: AppColors.secondaryNeon),
+                    title: const Text('Balas Pesan',
+                        style: TextStyle(
+                            fontSize: 13, color: AppColors.textPrimary)),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _startReply(msg);
+                    },
+                  ),
+                  if (isHostOrCoHost)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(
+                        isPinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                        size: 20,
+                        color: AppColors.primaryNeon,
                       ),
-                    );
-                  },
-                ),
-            ],
+                      title: Text(
+                        isPinned ? 'Lepas Sematan' : 'Sematkan Komentar',
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.primaryNeonLight),
+                      ),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        if (isPinned) {
+                          widget.chatController.unpinMessage();
+                        } else {
+                          widget.chatController.pinMessage(msg);
+                        }
+                      },
+                    ),
+                  ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    leading: const Icon(Icons.copy_rounded,
+                        size: 20, color: AppColors.textPrimary),
+                    title: const Text('Salin Pesan',
+                        style: TextStyle(
+                            fontSize: 13, color: AppColors.textPrimary)),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      Clipboard.setData(ClipboardData(text: msg.content));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Pesan disalin ke clipboard'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                  if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.flag_outlined,
+                          size: 20, color: AppColors.accentRed),
+                      title: const Text('Laporkan Pesan',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.accentRed)),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _showReportDialog(msg);
+                      },
+                    ),
+                  if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.block_rounded,
+                          size: 20, color: AppColors.textMuted),
+                      title: Text('Blokir ${msg.username}',
+                          style: const TextStyle(
+                              fontSize: 13, color: AppColors.textMuted)),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _showBlockUserConfirmation(msg);
+                      },
+                    ),
+                  if (canDelete)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.delete_outline_rounded,
+                          size: 20, color: AppColors.accentRed),
+                      title: const Text('Hapus Pesan',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.accentRed)),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        widget.chatController.deleteMessage(msg.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Pesan telah dihapus'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
           ),
@@ -360,7 +484,11 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
           children: [
             Icon(Icons.flag_rounded, color: AppColors.accentRed, size: 22),
             SizedBox(width: 8),
-            Text('Laporkan Pesan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            Text('Laporkan Pesan',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary)),
           ],
         ),
         content: Column(
@@ -369,7 +497,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
           children: [
             Text(
               'Laporkan konten dari ${msg.username}. Pilih alasan pelaporan:',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             ...reasons.map(
@@ -381,11 +510,13 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                       backgroundColor: AppColors.surfaceElevated,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: AppColors.primaryNeon, width: 0.8),
+                        side: const BorderSide(
+                            color: AppColors.primaryNeon, width: 0.8),
                       ),
                       content: const Text(
                         'Laporan Anda telah diterima dan akan ditinjau tim moderator. Terima kasih.',
-                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        style: TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
                       ),
                       duration: const Duration(seconds: 3),
                     ),
@@ -393,15 +524,18 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                 },
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                   child: Row(
                     children: [
-                      const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.textMuted),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           reason,
-                          style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                          style: const TextStyle(
+                              fontSize: 13, color: AppColors.textPrimary),
                         ),
                       ),
                     ],
@@ -414,7 +548,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Batal', style: TextStyle(color: AppColors.textMuted)),
+            child: const Text('Batal',
+                style: TextStyle(color: AppColors.textMuted)),
           ),
         ],
       ),
@@ -432,7 +567,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
         ),
         title: Text(
           'Blokir ${msg.username}?',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary),
         ),
         content: Text(
           'Pesan dari pengguna ${msg.username} tidak akan lagi ditampilkan pada layar Anda selama sesi room.',
@@ -441,13 +579,15 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Batal', style: TextStyle(color: AppColors.textMuted)),
+            child: const Text('Batal',
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accentRed,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
@@ -476,53 +616,155 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
       builder: (context, _) {
         final messages = widget.chatController.messages;
         final currentUserId = widget.chatController.currentUser.id;
+        final pinnedMsg = widget.chatController.pinnedMessage;
+        final isHostOrCoHost =
+            (widget.hostId != null && widget.hostId == currentUserId) ||
+                widget.coHostUserIds.contains(currentUserId);
+        final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
         return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
+          decoration: BoxDecoration(
+            color: widget.isCompact ? Colors.transparent : AppColors.surface,
           ),
           child: Column(
             children: [
-              // Message List
+              // Pinned Comment Banner (hidden while typing in compact fullscreen to preserve space)
+              if (pinnedMsg != null && !(widget.isCompact && isKeyboardOpen))
+                _buildPinnedMessageBanner(pinnedMsg, isHostOrCoHost),
+
+              // Message List + Smart Scroll Floating Pill
               Expanded(
-                child: messages.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: 32,
-                              color: AppColors.textMuted.withValues(alpha: 0.65),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Belum ada pesan',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
+                child: Stack(
+                  children: [
+                    messages.isEmpty
+                        ? Center(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.chat_bubble_outline_rounded,
+                                    size: widget.isCompact ? 26 : 32,
+                                    color: AppColors.textMuted
+                                        .withValues(alpha: 0.65),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Belum ada pesan',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              final msg = messages[index];
+                              if (msg.isSystem) {
+                                return _buildSystemMessage(msg);
+                              }
+                              final bool isMe = msg.userId == currentUserId;
+                              final prevMsg =
+                                  index > 0 ? messages[index - 1] : null;
+                              final nextMsg = index + 1 < messages.length
+                                  ? messages[index + 1]
+                                  : null;
+
+                              final bool isGroupedWithPrev = prevMsg != null &&
+                                  !prevMsg.isSystem &&
+                                  !prevMsg.isReaction &&
+                                  !msg.isSystem &&
+                                  !msg.isReaction &&
+                                  prevMsg.userId != null &&
+                                  prevMsg.userId == msg.userId &&
+                                  msg.createdAt
+                                          .difference(prevMsg.createdAt)
+                                          .inMinutes
+                                          .abs() <
+                                      2;
+
+                              final bool isGroupedWithNext = nextMsg != null &&
+                                  !nextMsg.isSystem &&
+                                  !nextMsg.isReaction &&
+                                  !msg.isSystem &&
+                                  !msg.isReaction &&
+                                  nextMsg.userId != null &&
+                                  nextMsg.userId == msg.userId &&
+                                  nextMsg.createdAt
+                                          .difference(msg.createdAt)
+                                          .inMinutes
+                                          .abs() <
+                                      2;
+
+                              return _buildMessageBubble(
+                                msg,
+                                isMe,
+                                isGroupedWithPrev: isGroupedWithPrev,
+                                isGroupedWithNext: isGroupedWithNext,
+                              );
+                            },
+                          ),
+
+                    // Floating "Komentar Baru" Smart Scroll Pill
+                    if (_isUserScrolledUp && _newScrolledUpCount > 0)
+                      Positioned(
+                        bottom: 10,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              key: const ValueKey('new_messages_pill'),
+                              onTap: _scrollToBottom,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.primaryGradient,
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: AppColors.neonVioletGlow,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.arrow_downward_rounded,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '$_newScrolledUpCount Komentar Baru',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = messages[index];
-                          if (msg.isSystem) {
-                            return _buildSystemMessage(msg);
-                          }
-                          final bool isMe = msg.userId == currentUserId;
-                          return _buildMessageBubble(msg, isMe);
-                        },
                       ),
+                  ],
+                ),
               ),
 
               // Quick Reactions Row (Responsive & Polished across any screen size)
@@ -530,6 +772,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
 
               // Typing Indicator Banner
               _buildTypingIndicator(widget.chatController.typingStatusText),
+
+              // Reply Quote Preview Banner
+              if (_replyingToMessage != null)
+                _buildReplyPreviewBanner(_replyingToMessage!),
 
               // Input Bar
               Container(
@@ -541,8 +787,12 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                 ),
                 child: SafeArea(
                   top: false,
+                  bottom: !widget.isCompact,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: widget.isCompact ? 6 : 8,
+                    ),
                     child: Row(
                       children: [
                         // Emoji Picker for text input
@@ -560,6 +810,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                         Expanded(
                           child: TextField(
                             controller: _inputController,
+                            focusNode: _inputFocusNode,
                             maxLength: 500,
                             buildCounter: (context,
                                     {required currentLength,
@@ -568,9 +819,14 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                                 null,
                             style: const TextStyle(fontSize: 14),
                             decoration: InputDecoration(
-                              hintText: 'Tulis pesan...',
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
+                              isDense: widget.isCompact,
+                              hintText: _replyingToMessage != null
+                                  ? 'Balas ${_replyingToMessage!.username}...'
+                                  : 'Tulis pesan...',
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: widget.isCompact ? 8 : 10,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
                                 borderSide:
@@ -587,11 +843,14 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                         ),
                         const SizedBox(width: 8),
                         Container(
+                          width: widget.isCompact ? 38 : null,
+                          height: widget.isCompact ? 38 : null,
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: AppColors.primaryGradient,
                           ),
                           child: IconButton(
+                            padding: EdgeInsets.zero,
                             tooltip: 'Kirim pesan',
                             icon: const Icon(Icons.send_rounded,
                                 size: 18, color: Colors.white),
@@ -607,6 +866,172 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPinnedMessageBanner(ChatMessage pinned, bool canUnpin) {
+    return Container(
+      key: const ValueKey('pinned_message_banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated.withValues(alpha: 0.95),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.primaryNeon.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: AppColors.primaryNeon.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.push_pin_rounded,
+              size: 14,
+              color: AppColors.primaryNeonLight,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Komentar Disematkan • ',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryNeonLight,
+                      ),
+                    ),
+                    Flexible(
+                      child: Text(
+                        pinned.username,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.secondaryNeon,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  pinned.content,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (canUnpin)
+            IconButton(
+              key: const ValueKey('unpin_message_button'),
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: AppColors.textMuted,
+              ),
+              tooltip: 'Lepas Sematan',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              onPressed: () {
+                AppHaptics.light();
+                widget.chatController.unpinMessage();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyPreviewBanner(ChatMessage replyTo) {
+    return Container(
+      key: const ValueKey('reply_preview_banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated.withValues(alpha: 0.95),
+        border: const Border(
+          top: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.reply_rounded,
+            size: 16,
+            color: AppColors.secondaryNeon,
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 2.5,
+            height: 26,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryNeon,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Membalas ${replyTo.username}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.secondaryNeon,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  replyTo.content,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('cancel_reply_button'),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: AppColors.textMuted,
+            ),
+            tooltip: 'Batal membalas',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: _cancelReply,
+          ),
+        ],
+      ),
     );
   }
 
@@ -631,7 +1056,12 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage msg, bool isMe) {
+  Widget _buildMessageBubble(
+    ChatMessage msg,
+    bool isMe, {
+    bool isGroupedWithPrev = false,
+    bool isGroupedWithNext = false,
+  }) {
     final isHost = widget.hostId != null &&
         widget.hostId!.isNotEmpty &&
         msg.userId == widget.hostId;
@@ -642,19 +1072,26 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
     final isSingleEmoji = msg.isReaction ||
         (!isAsciiOrSymbol && trimmedContent.characters.length == 1);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    final bubbleRow = Padding(
+      padding: EdgeInsets.only(
+        top: isGroupedWithPrev ? 1.5 : 4.0,
+        bottom: isGroupedWithNext ? 1.5 : 4.0,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment:
             isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!isMe) ...[
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: AppColors.surfaceElevated,
-              child: Text(msg.avatarUrl, style: const TextStyle(fontSize: 14)),
-            ),
+            if (isGroupedWithPrev)
+              const SizedBox(width: 28)
+            else
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: AppColors.surfaceElevated,
+                child:
+                    Text(msg.avatarUrl, style: const TextStyle(fontSize: 14)),
+              ),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -662,7 +1099,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
               crossAxisAlignment:
                   isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (!isMe)
+                if (!isMe && !isGroupedWithPrev)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 2),
                     child: Row(
@@ -688,6 +1125,13 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                   ),
                 GestureDetector(
                   onLongPress: () => _showMessageReactionBar(msg),
+                  onDoubleTap: (!msg.isSystem && !msg.isReaction)
+                      ? () {
+                          AppHaptics.medium();
+                          widget.chatController
+                              .toggleMessageReaction(msg.id, '❤️');
+                        }
+                      : null,
                   child: Container(
                     padding: isSingleEmoji
                         ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
@@ -702,8 +1146,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                                   : AppColors.chatBubbleSelf)
                               : AppColors.glassFill),
                       borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
+                        topLeft: Radius.circular(
+                            !isMe && isGroupedWithPrev ? 6 : 16),
+                        topRight:
+                            Radius.circular(isMe && isGroupedWithPrev ? 6 : 16),
                         bottomLeft: Radius.circular(isMe ? 16 : 4),
                         bottomRight: Radius.circular(isMe ? 4 : 16),
                       ),
@@ -713,7 +1159,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                               color: isMe
                                   ? (msg.status == MessageStatus.failed
                                       ? AppColors.accentRed
-                                      : AppColors.primaryNeon.withValues(alpha: 0.45))
+                                      : AppColors.primaryNeon
+                                          .withValues(alpha: 0.45))
                                   : AppColors.glassBorder,
                               width: 1,
                             ),
@@ -722,7 +1169,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                           ? [
                               BoxShadow(
                                 color: isMe
-                                    ? AppColors.primaryNeon.withValues(alpha: 0.15)
+                                    ? AppColors.primaryNeon
+                                        .withValues(alpha: 0.15)
                                     : Colors.black.withValues(alpha: 0.20),
                                 blurRadius: isMe ? 8 : 4,
                                 offset: const Offset(0, 2),
@@ -730,14 +1178,65 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                             ]
                           : null,
                     ),
-                    child: Text(
-                      msg.content,
-                      style: TextStyle(
-                        fontSize: isSingleEmoji ? 30 : 14.0,
-                        color: AppColors.textPrimary,
-                        fontWeight: isMe ? FontWeight.w500 : FontWeight.w400,
-                        height: isSingleEmoji ? 1.2 : 1.4,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (msg.isReply && !isSingleEmoji)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.24),
+                              borderRadius: BorderRadius.circular(8),
+                              border: const Border(
+                                left: BorderSide(
+                                  color: AppColors.secondaryNeon,
+                                  width: 2.5,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  msg.replyToUsername ?? 'Komentar',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.secondaryNeon,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  msg.replyToContent ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        Text(
+                          msg.content,
+                          style: TextStyle(
+                            fontSize: isSingleEmoji ? 30 : 14.0,
+                            color: AppColors.textPrimary,
+                            fontWeight:
+                                isMe ? FontWeight.w500 : FontWeight.w400,
+                            height: isSingleEmoji ? 1.2 : 1.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -748,13 +1247,14 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                     child: Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      alignment: isMe ? WrapAlignment.end : WrapAlignment.start,
+                      alignment:
+                          isMe ? WrapAlignment.end : WrapAlignment.start,
                       children: msg.reactions.entries.map((entry) {
                         final emoji = entry.key;
                         final count = entry.value.length;
                         if (count == 0) return const SizedBox.shrink();
-                        final hasReacted =
-                            entry.value.contains(widget.chatController.currentUser.id);
+                        final hasReacted = entry.value
+                            .contains(widget.chatController.currentUser.id);
 
                         return Material(
                           color: hasReacted
@@ -804,67 +1304,108 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget>
                       }).toList(),
                     ),
                   ),
-                Padding(
-                  padding:
-                      const EdgeInsets.only(top: 2, left: 4, right: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        TimeFormatter.formatChatTime(msg.createdAt),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      if (isMe) ...[
-                        const SizedBox(width: 4),
-                        if (msg.status == MessageStatus.sending)
-                          const SizedBox(
-                            width: 10,
-                            height: 10,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: AppColors.textMuted,
-                            ),
-                          )
-                        else if (msg.status == MessageStatus.failed)
-                          InkWell(
-                            onTap: () => widget.chatController.retryMessage(msg.id),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.error_outline_rounded,
-                                    size: 12, color: AppColors.accentRed),
-                                SizedBox(width: 2),
-                                Text(
-                                  'Gagal (Kirim ulang)',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.accentRed,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
+                if (!isGroupedWithNext ||
+                    msg.status != MessageStatus.sent ||
+                    msg.hasReactions)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 2, left: 4, right: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          TimeFormatter.formatChatTime(msg.createdAt),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textMuted,
                           ),
+                        ),
+                        if (isMe) ...[
+                          const SizedBox(width: 4),
+                          if (msg.status == MessageStatus.sending)
+                            const SizedBox(
+                              width: 10,
+                              height: 10,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: AppColors.textMuted,
+                              ),
+                            )
+                          else if (msg.status == MessageStatus.failed)
+                            InkWell(
+                              onTap: () =>
+                                  widget.chatController.retryMessage(msg.id),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.error_outline_rounded,
+                                      size: 12, color: AppColors.accentRed),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    'Gagal (Kirim ulang)',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.accentRed,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
           if (isMe) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: AppColors.surfaceElevated,
-              child: Text(msg.avatarUrl, style: const TextStyle(fontSize: 14)),
-            ),
+            if (isGroupedWithPrev)
+              const SizedBox(width: 28)
+            else
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: AppColors.surfaceElevated,
+                child:
+                    Text(msg.avatarUrl, style: const TextStyle(fontSize: 14)),
+              ),
           ],
         ],
       ),
+    );
+
+    if (msg.isSystem || msg.isReaction) {
+      return bubbleRow;
+    }
+
+    return Dismissible(
+      key: ValueKey('swipe_reply_${msg.id}'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {DismissDirection.startToEnd: 0.22},
+      confirmDismiss: (_) async {
+        _startReply(msg);
+        return false;
+      },
+      background: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.secondaryNeon.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.reply_rounded,
+              size: 16,
+              color: AppColors.secondaryNeon,
+            ),
+          ),
+        ),
+      ),
+      child: bubbleRow,
     );
   }
 

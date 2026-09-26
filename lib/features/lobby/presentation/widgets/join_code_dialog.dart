@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../room/models/room_model.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../../core/widgets/nobarin_button.dart';
 import '../lobby_controller.dart';
 
 class JoinCodeDialog extends ConsumerStatefulWidget {
@@ -32,6 +33,11 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
     if (input.isEmpty) {
       AppHaptics.heavy();
       setState(() => _errorMessage = 'Masukkan kode room');
+      return;
+    }
+    if (input.length > 256) {
+      AppHaptics.heavy();
+      setState(() => _errorMessage = 'Kode atau tautan room terlalu panjang');
       return;
     }
 
@@ -160,26 +166,12 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                               ],
                             ),
                           ),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: _isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceHighlight.withValues(alpha: 0.4),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ),
+                          NobarinModalIconButton(
+                            icon: Icons.close_rounded,
+                            tooltip: 'Tutup',
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.of(context).pop(),
                           ),
                         ],
                       ),
@@ -235,6 +227,14 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                         ),
                         child: TextField(
                           controller: _codeController,
+                          maxLength: 256,
+                          buildCounter:
+                              (
+                                _, {
+                                required currentLength,
+                                required isFocused,
+                                required maxLength,
+                              }) => null,
                           enabled: !_isLoading,
                           autofocus: true,
                           textCapitalization: TextCapitalization.characters,
@@ -382,106 +382,25 @@ class _JoinCodeDialogState extends ConsumerState<JoinCodeDialog> {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
+                            child: NobarinSecondaryButton(
+                              label: 'Batal',
+                              isNeutral: true,
+                              height: 48,
                               onPressed: _isLoading
                                   ? null
                                   : () => Navigator.of(context).pop(),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                foregroundColor: AppColors.textSecondary,
-                                side: BorderSide(
-                                  color: AppColors.border.withValues(alpha: 0.8),
-                                  width: 1.2,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text(
-                                'Batal',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: _isLoading
-                                    ? null
-                                    : AppColors.cyanGradient,
-                                color: _isLoading
-                                    ? AppColors.surfaceHighlight
-                                    : null,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: _isLoading
-                                    ? null
-                                    : [
-                                        BoxShadow(
-                                          color: AppColors.secondaryNeon
-                                              .withValues(alpha: 0.35),
-                                          blurRadius: 14,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ],
-                              ),
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _handleJoin,
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  disabledBackgroundColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: _isLoading
-                                    ? const Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Mencari...',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            'Gabung',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          SizedBox(width: 6),
-                                          Icon(
-                                            Icons.arrow_forward_rounded,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
-                                        ],
-                                      ),
-                              ),
+                            child: NobarinPrimaryButton(
+                              label: 'Gabung',
+                              icon: Icons.login_rounded,
+                              height: 48,
+                              isLoading: _isLoading,
+                              gradient: AppColors.cyanGradient,
+                              glowShadows: AppColors.neonCyanGlow,
+                              onPressed: _isLoading ? null : _handleJoin,
                             ),
                           ),
                         ],

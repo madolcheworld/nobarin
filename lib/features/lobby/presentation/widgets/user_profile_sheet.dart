@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../../core/utils/input_validators.dart';
 import '../../../auth/presentation/auth_controller.dart';
 
 class UserProfileSheet extends ConsumerStatefulWidget {
@@ -43,11 +44,14 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
   }
 
   Future<void> _handleSave() async {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      setState(() => _errorMessage = 'Nama pengguna tidak boleh kosong');
+    final validationError =
+        InputValidators.validateUsername(_nameController.text);
+    if (validationError != null) {
+      setState(() => _errorMessage = validationError);
       return;
     }
+
+    final name = InputValidators.sanitizeText(_nameController.text);
 
     setState(() {
       _isSaving = true;

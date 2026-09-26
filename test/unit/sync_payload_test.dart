@@ -99,5 +99,23 @@ void main() {
       expect(fromJson.p2pMetadata!['lan_url'], 'http://192.168.1.66:36113/video');
       expect(fromJson.p2pMetadata!['host_user_id'], 'host-user-99');
     });
+
+    test('sanitizes corrupt or extreme numeric values from remote broadcast', () {
+      final corruptJson = {
+        'media_type': 'youtube',
+        'media_url': 'https://youtube.com/watch?v=123',
+        'state': 'invalid_state',
+        'position_seconds': double.nan,
+        'playback_speed': double.infinity,
+        'controller_id': 'hacker',
+        'max_duration_seconds': 120.0,
+      };
+
+      final payload = SyncPayload.fromJson(corruptJson);
+      expect(payload.positionSeconds, 0.0);
+      expect(payload.playbackSpeed, 1.0);
+      expect(payload.state, 'paused'); // invalid state defaults to paused safely
+      expect(payload.isPlaying, isFalse);
+    });
   });
 }

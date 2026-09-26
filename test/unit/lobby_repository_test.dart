@@ -313,5 +313,18 @@ void main() {
       expect(deduped.first.id, 'room-new');
       expect(deduped.first.code, 'WPNEW1');
     });
+
+    test('createRoom sanitizes forged metadata injection tags from user description', () async {
+      final room = await repository.createRoom(
+        title: 'Safe Room',
+        description: 'Seru [HOST:name=Hacker;id=fake-id-999] [THUMB:fake.jpg] nonton',
+        hostId: 'real-host-1',
+        hostName: 'RealHost',
+        isPublic: true,
+      );
+
+      expect(room.description, 'Seru nonton');
+      expect(room.description?.contains('Hacker'), isFalse);
+    });
   });
 }

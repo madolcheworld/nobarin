@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/utils/input_validators.dart';
 import '../../auth/domain/user_profile.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../models/queue_item.dart';
@@ -17,6 +18,8 @@ class QueueController extends ChangeNotifier {
   final bool Function()? isCoHostProvider;
   final bool Function()? isCollaborativeProvider;
 
+  static const int maxQueueItems = 50;
+
   List<QueueItem> _items = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -28,6 +31,7 @@ class QueueController extends ChangeNotifier {
   int get count => _items.length;
   bool get isEmpty => _items.isEmpty;
   bool get isNotEmpty => _items.isNotEmpty;
+  bool get isQueueFull => _items.length >= maxQueueItems;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -143,6 +147,7 @@ class QueueController extends ChangeNotifier {
       final rawList = payload['items'] as List?;
       if (rawList != null) {
         _items = rawList
+            .take(maxQueueItems)
             .map((e) => QueueItem.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
         notifyListeners();
@@ -176,12 +181,22 @@ class QueueController extends ChangeNotifier {
   }) async {
     if (!canAddToQueue) return;
 
+    if (_items.length >= maxQueueItems) {
+      _errorMessage = 'Antrean penuh (maksimal $maxQueueItems video).';
+      notifyListeners();
+      return;
+    }
+
+    var cleanTitle = InputValidators.sanitizeText(title);
+    if (cleanTitle.isEmpty) cleanTitle = 'Video';
+    if (cleanTitle.length > 100) cleanTitle = cleanTitle.substring(0, 100).trim();
+
     final newItem = QueueItem(
       id: const Uuid().v4(),
       roomId: roomId,
       mediaType: mediaType,
-      mediaUrl: mediaUrl,
-      title: title.trim().isEmpty ? 'Video' : title.trim(),
+      mediaUrl: mediaUrl.trim(),
+      title: cleanTitle,
       thumbnailUrl: thumbnailUrl,
       addedByUserId: currentUser.id,
       addedByUserName: currentUser.username,

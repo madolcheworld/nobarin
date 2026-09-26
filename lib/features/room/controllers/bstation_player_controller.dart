@@ -313,6 +313,8 @@ class BstationPlayerController extends ChangeNotifier {
             video.addEventListener('loadedmetadata', reportBstationResolution);
             video.addEventListener('resize', reportBstationResolution);
             // 4. Track available qualities from page & network playurl responses
+            window.__nobarBstationQnMap = window.__nobarBstationQnMap || {};
+            window.__nobarBstationStreamUrls = window.__nobarBstationStreamUrls || {};
             function extractFromPlayInfoObj(pData, addQualityItem, qMap, hMap) {
               if (!pData || typeof pData !== 'object') return;
               var sfList = pData.support_formats || (pData.playurl && pData.playurl.support_formats) || (pData.video_resource && pData.video_resource.support_formats);
@@ -327,6 +329,10 @@ class BstationPlayerController extends ChangeNotifier {
                     if (m) hVal = parseInt(m[1], 10);
                   }
                   if (hVal) {
+                    if (qCode) {
+                      window.__nobarBstationQnMap[String(hVal)] = qCode;
+                      window.__nobarBstationQnMap[String(qCode)] = qCode;
+                    }
                     addQualityItem(String(hVal), hVal, desc || (hVal + 'p'));
                   }
                 }
@@ -339,7 +345,15 @@ class BstationPlayerController extends ChangeNotifier {
                   var qId = dvObj.id || dvObj.quality;
                   var dvH = dvObj.height || hMap[qId];
                   var dvDesc = dvObj.description || dvObj.new_description || qMap[qId];
+                  var bUrl = dvObj.base_url || dvObj.baseUrl || dvObj.url;
                   if (dvH) {
+                    if (qId) {
+                      window.__nobarBstationQnMap[String(dvH)] = qId;
+                      window.__nobarBstationQnMap[String(qId)] = qId;
+                    }
+                    if (bUrl && !window.__nobarBstationStreamUrls[String(dvH)]) {
+                      window.__nobarBstationStreamUrls[String(dvH)] = bUrl;
+                    }
                     addQualityItem(String(dvH), dvH, dvDesc || (dvH + 'p'));
                   }
                 }
@@ -349,6 +363,8 @@ class BstationPlayerController extends ChangeNotifier {
                 for (var j = 0; j < acc.length; j++) {
                   var code = acc[j];
                   if (hMap[code]) {
+                    window.__nobarBstationQnMap[String(hMap[code])] = code;
+                    window.__nobarBstationQnMap[String(code)] = code;
                     addQualityItem(String(hMap[code]), hMap[code], qMap[code] || (hMap[code] + 'p'));
                   }
                 }
@@ -555,6 +571,9 @@ class BstationPlayerController extends ChangeNotifier {
             if (normH != null && normH > 0 && normH != _detectedHeight) {
               _detectedHeight = normH;
               _detectedWidth = w;
+              debugPrint(
+                '[BstationPlayer] Resolution changed: ${w}x$h (norm=${normH}p)',
+              );
               notifyListeners();
             }
             break;
@@ -646,7 +665,13 @@ class BstationPlayerController extends ChangeNotifier {
       if (b.isAuto) return 1;
       return (b.height ?? 0).compareTo(a.height ?? 0);
     });
+    final oldSig = _availableQualities.map((q) => q.id).join('|');
+    final newSig = detected.map((q) => q.id).join('|');
+    if (oldSig == newSig) return;
     _availableQualities = detected;
+    debugPrint(
+      '[BstationPlayer] Detected qualities: ${_availableQualities.map((q) => q.id).join(', ')}',
+    );
     notifyListeners();
     onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
   }
@@ -656,6 +681,7 @@ class BstationPlayerController extends ChangeNotifier {
 
   /// Sets video quality for Bstation player
   Future<void> setQuality(String qualityId) async {
+    debugPrint('[BstationPlayer] setQuality($qualityId)');
     _selectedQuality = _availableQualities.firstWhere(
       (q) => q.id == qualityId,
       orElse: () => VideoQuality.bstation(id: qualityId, label: '${qualityId}p'),
@@ -665,8 +691,9 @@ class BstationPlayerController extends ChangeNotifier {
 
     if (_webViewController != null) {
       try {
+        final targetHeight = _selectedQuality?.height ?? int.tryParse(qualityId) ?? 0;
         await _webViewController!.runJavaScript('''
-          (function(targetId) {
+          (function(targetId, targetHeightNum) {
             try {
               var codeMap = {
                 '2160': 120,
@@ -678,26 +705,39 @@ class BstationPlayerController extends ChangeNotifier {
                 '480': 32,
                 '360': 16,
                 '240': 6,
-                'auto': -1
+                'auto': 0
               };
-              var qCode = codeMap[targetId] || parseInt(targetId, 10) || 0;
+              var hMap = { 125: 2160, 120: 2160, 116: 1080, 112: 1080, 80: 1080, 74: 720, 64: 720, 32: 480, 16: 360, 6: 240 };
+              var dynamicQn = (window.__nobarBstationQnMap && window.__nobarBstationQnMap[targetId]) ||
+                              (targetHeightNum > 0 && window.__nobarBstationQnMap && window.__nobarBstationQnMap[String(targetHeightNum)]);
+              var qCode = dynamicQn || codeMap[targetId] || (targetHeightNum > 0 ? codeMap[String(targetHeightNum)] : 0) || parseInt(targetId, 10) || 0;
+              var resolvedHeight = targetHeightNum > 0 ? targetHeightNum : (hMap[qCode] || parseInt(targetId, 10) || 0);
+              var heightToken = resolvedHeight > 0 ? String(resolvedHeight) : targetId;
 
-              // 1. Try to open quality menu if closed (for Bstation / Bilibili web)
-              var menuTriggers = [
-                '.bstar-web-player__quality-btn',
-                '.bpx-player-ctrl-quality',
-                '.player-mobile-control-quality',
-                '[class*="quality-btn"]',
-                '[class*="ctrl-quality"]'
-              ];
-              for (var m = 0; m < menuTriggers.length; m++) {
-                var trigger = document.querySelector(menuTriggers[m]);
-                if (trigger) {
-                  trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+              // 1. Update Bilibili / Bstation localStorage quality preferences
+              try {
+                var qValToSave = targetId === 'auto' ? 0 : (qCode > 0 ? qCode : resolvedHeight);
+                localStorage.setItem('bstar_player_quality', String(resolvedHeight || targetId));
+                localStorage.setItem('bilibili_player_quality', String(qValToSave));
+                var profRaw = localStorage.getItem('bpx_player_profile');
+                var prof = profRaw ? JSON.parse(profRaw) : {};
+                prof.media = prof.media || {};
+                prof.media.quality = qValToSave;
+                localStorage.setItem('bpx_player_profile', JSON.stringify(prof));
+              } catch (_) {}
+
+              // 2. Try bilibili / bstation player instance if available
+              if (window.player) {
+                if (typeof window.player.requestQuality === 'function') {
+                  window.player.requestQuality(targetId === 'auto' ? 0 : (qCode > 0 ? qCode : resolvedHeight));
+                  return;
+                }
+                if (typeof window.player.switchQuality === 'function') {
+                  window.player.switchQuality(targetId === 'auto' ? 0 : (qCode > 0 ? qCode : resolvedHeight));
+                  return;
                 }
               }
 
-              // 2. Check quality buttons in Bstation web player
               var selectors = [
                 '.bpx-player-ctrl-quality-menu-item',
                 '.bstar-web-player__quality-item',
@@ -709,47 +749,80 @@ class BstationPlayerController extends ChangeNotifier {
                 '[data-quality]',
                 '[data-value]'
               ];
-              var items = document.querySelectorAll(selectors.join(','));
-              for (var i = 0; i < items.length; i++) {
-                var el = items[i];
-                var text = (el.textContent || '').toLowerCase().trim();
-                var val = (el.getAttribute('data-quality') || el.getAttribute('data-value') || '').trim();
 
-                var isMatch = false;
-                if (targetId === 'auto') {
-                  if (val === 'auto' || val === '-1' || text.indexOf('auto') !== -1 || text.indexOf('otomatis') !== -1 || text.indexOf('自动') !== -1) {
-                    isMatch = true;
+              function clickMatchingBstationQuality() {
+                var items = document.querySelectorAll(selectors.join(','));
+                for (var i = 0; i < items.length; i++) {
+                  var el = items[i];
+                  var text = (el.textContent || '').toLowerCase().trim();
+                  var val = (el.getAttribute('data-quality') || el.getAttribute('data-value') || '').trim();
+
+                  var isMatch = false;
+                  if (targetId === 'auto') {
+                    if (val === 'auto' || val === '0' || val === '-1' || text.indexOf('auto') !== -1 || text.indexOf('otomatis') !== -1 || text.indexOf('自动') !== -1) {
+                      isMatch = true;
+                    }
+                  } else {
+                    if (val === targetId ||
+                        (qCode > 0 && val === String(qCode)) ||
+                        (heightToken && val === heightToken) ||
+                        text.indexOf(targetId.toLowerCase()) !== -1 ||
+                        (heightToken && text.indexOf(heightToken) !== -1) ||
+                        (resolvedHeight === 2160 && text.indexOf('4k') !== -1)) {
+                      isMatch = true;
+                    }
                   }
-                } else {
-                  if (val === targetId || (qCode > 0 && val === String(qCode)) || text.indexOf(targetId) !== -1) {
-                    isMatch = true;
+
+                  if (isMatch) {
+                    el.click();
+                    return true;
                   }
                 }
+                return false;
+              }
 
-                if (isMatch) {
-                  el.click();
-                  return;
+              // 3. Try immediate click if quality menu items are already in DOM
+              if (clickMatchingBstationQuality()) return;
+
+              // 4. Open quality menu trigger (click + mouseenter) and wait for submenu mount
+              var menuTriggers = [
+                '.bstar-web-player__quality-btn',
+                '.bpx-player-ctrl-quality',
+                '.player-mobile-control-quality',
+                '[class*="quality-btn"]',
+                '[class*="ctrl-quality"]',
+                '[class*="quality-value"]'
+              ];
+              var triggeredMenu = false;
+              for (var m = 0; m < menuTriggers.length; m++) {
+                var trigger = document.querySelector(menuTriggers[m]);
+                if (trigger) {
+                  triggeredMenu = true;
+                  trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                  trigger.click();
                 }
               }
 
-              // 3. Try bilibili / bstation player instance if available
-              if (window.player) {
-                if (qCode > 0) {
-                  if (typeof window.player.requestQuality === 'function') {
-                    window.player.requestQuality(qCode);
-                    return;
-                  }
-                  if (typeof window.player.switchQuality === 'function') {
-                    window.player.switchQuality(qCode);
-                    return;
-                  }
+              if (triggeredMenu) {
+                setTimeout(function() {
+                  clickMatchingBstationQuality();
+                }, 90);
+                return;
+              }
+
+              // 5. Fallback for player.bilibili.com embed: reload with &quality= parameter at current time
+              if (window.location.hostname.indexOf('player.bilibili.com') !== -1 && qCode > 0) {
+                var video = document.querySelector('video');
+                var curSec = video ? Math.round(video.currentTime || 0) : 0;
+                var urlObj = new URL(window.location.href);
+                urlObj.searchParams.set('quality', String(qCode));
+                if (curSec > 0) {
+                  urlObj.searchParams.set('t', String(curSec));
                 }
-                if (typeof window.player.switchQuality === 'function') {
-                  window.player.switchQuality(parseInt(targetId, 10));
-                }
+                window.location.replace(urlObj.toString());
               }
             } catch (e) {}
-          })('$qualityId');
+          })('$qualityId', $targetHeight);
         ''');
       } catch (_) {}
     }

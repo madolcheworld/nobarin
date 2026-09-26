@@ -1,3 +1,5 @@
+import '../../../core/utils/input_validators.dart';
+
 enum DriftAction {
   noAction,
   microSpeedUp,
@@ -45,18 +47,33 @@ class SyncPayload {
             ? Map<String, dynamic>.from(raw['payload'] as Map)
             : raw;
 
+    final rawPos = (json['position_seconds'] as num?)?.toDouble();
+    final rawSpeed = (json['playback_speed'] as num?)?.toDouble();
+    final rawMaxDuration = (json['max_duration_seconds'] as num?)?.toDouble();
+    final sanitizedPos = InputValidators.sanitizePlaybackPosition(
+      rawPos,
+      maxDuration: rawMaxDuration,
+    );
+    final sanitizedSpeed = InputValidators.sanitizePlaybackSpeed(rawSpeed);
+    final rawState = json['state'] as String? ?? 'paused';
+    final state = (rawState == 'playing' || rawState == 'buffering' || rawState == 'paused')
+        ? rawState
+        : 'paused';
+
     return SyncPayload(
       mediaType: json['media_type'] as String? ?? 'direct_url',
       mediaUrl: json['media_url'] as String? ?? '',
-      state: json['state'] as String? ?? 'paused',
-      positionSeconds: (json['position_seconds'] as num?)?.toDouble() ?? 0.0,
+      state: state,
+      positionSeconds: sanitizedPos,
       timestampMs: (json['timestamp_ms'] as num?)?.toInt() ?? 0,
-      playbackSpeed: (json['playback_speed'] as num?)?.toDouble() ?? 1.0,
+      playbackSpeed: sanitizedSpeed,
       controllerId: json['controller_id'] as String? ?? '',
       seqId: (json['seq_id'] as num?)?.toInt() ?? 0,
       action: json['action'] as String?,
       actionEpoch: (json['action_epoch'] as num?)?.toInt(),
-      maxDurationSeconds: (json['max_duration_seconds'] as num?)?.toDouble(),
+      maxDurationSeconds: rawMaxDuration != null && rawMaxDuration > 0
+          ? rawMaxDuration
+          : null,
       p2pMetadata: json['p2p_metadata'] as Map<String, dynamic>?,
     );
   }

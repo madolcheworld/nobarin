@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_haptics.dart';
+import '../../../core/utils/input_validators.dart';
 import '../../../core/widgets/frosted_glass_box.dart';
 import 'auth_controller.dart';
 
@@ -39,16 +40,18 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
   Future<void> _handleStart() async {
     AppHaptics.medium();
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
+    final validationError =
+        InputValidators.validateUsername(_nameController.text);
+    if (validationError != null) {
       AppHaptics.heavy();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('Silakan masukkan nama atau nickname kamu'),
+              const Icon(Icons.info_outline_rounded,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(validationError)),
             ],
           ),
           backgroundColor: AppColors.surfaceElevated,
@@ -57,6 +60,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
       );
       return;
     }
+    final name = InputValidators.sanitizeText(_nameController.text);
 
     setState(() => _isLoading = true);
     final profile = await ref.read(authControllerProvider.notifier).loginAsGuest(
@@ -293,6 +297,14 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
                           TextField(
                             controller: _nameController,
+                            maxLength: 24,
+                            buildCounter:
+                                (
+                                  _, {
+                                  required currentLength,
+                                  required isFocused,
+                                  required maxLength,
+                                }) => null,
                             style: const TextStyle(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.w500,

@@ -46,6 +46,7 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   String _mediaType = 'direct_url';
   String _mediaUrl = '';
+  final ValueNotifier<bool> hasMediaNotifier = ValueNotifier<bool>(false);
   bool _isPlaying = false;
   bool _isBuffering = false;
   bool _isFullscreen = false;
@@ -66,6 +67,10 @@ class UnifiedPlayerController extends ChangeNotifier {
   String _youtubeQuality = '';
   bool _isDetectingQualities = false;
   String _hlsMasterUrl = '';
+  String _activeVariantStreamUrl = '';
+  double? _pendingQualitySeekSeconds;
+  bool _isSwitchingQuality = false;
+  bool _hasAppliedSavedQualityForCurrentMedia = false;
   List<VideoQuality> _parsedHlsQualities = [];
   Timer? _ytQualityPollTimer;
   Timer? _qualityDetectTimeoutTimer;
@@ -116,6 +121,10 @@ class UnifiedPlayerController extends ChangeNotifier {
   void Function(double positionSeconds)? onPositionChanged;
   void Function(String state)? onPlaybackStateChanged;
   void Function()? onPlaybackEnded;
+
+  /// Optional hook allowing RoomScreen to intercept back-button fullscreen exit
+  /// (e.g., to close the fullscreen comment drawer first). Returns true if intercepted.
+  bool Function()? onInterceptExitFullscreen;
 
   String get mediaType => _mediaType;
   String get mediaUrl => _mediaUrl;
@@ -404,6 +413,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       // (e.g. .pict, .png, .jpg, .txt, .html used by streaming CDNs like playcdn).
       try {
         final dynamic nativePlatform = _mkPlayer!.platform;
+        nativePlatform.setProperty('tls-verify', 'no');
         nativePlatform.setProperty(
           'demuxer-lavf-o',
           'allowed_extensions=ALL,allowed_segment_extensions=ALL',
@@ -426,94 +436,165 @@ class UnifiedPlayerController extends ChangeNotifier {
         ),
       );
 
-      _subscriptions.add(_mkPlayer!.stream.position.listen((pos) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        _position = pos.inMilliseconds / 1000.0;
-        notifyListeners();
-        onPositionChanged?.call(_position);
-      }));
-
-      _subscriptions.add(_mkPlayer!.stream.duration.listen((dur) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        _duration = dur.inMilliseconds / 1000.0;
-        notifyListeners();
-      }));
-
-      _subscriptions.add(_mkPlayer!.stream.playing.listen((playing) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        if (playing && _errorMessage != null) {
-          _errorMessage = null;
-        }
-        if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
-          debugPrint('[UnifiedPlayerController] MediaKit spurious pause ignored during fullscreen transition');
-          _mkPlayer?.play();
-          return;
-        }
-        if (_isPlaying != playing) {
-          _isPlaying = playing;
-          notifyListeners();
-          onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
-        }
-      }));
-
-      _subscriptions.add(_mkPlayer!.stream.buffering.listen((buffering) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        if (_isBuffering != buffering) {
-          _isBuffering = buffering;
-          notifyListeners();
-        }
-      }));
-
-      _subscriptions.add(_mkPlayer!.stream.completed.listen((completed) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        if (completed) {
-          onPlaybackEnded?.call();
-        }
-      }));
-
-      _subscriptions.add(_mkPlayer!.stream.error.listen((err) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        _errorMessage = 'Gagal memutar video: $err';
-        _isPlaying = false;
-        notifyListeners();
-      }));
-
-      // Listen to available video tracks for quality selection
-      _subscriptions.add(_mkPlayer!.stream.tracks.listen((tracks) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        _updateMediaKitQualities(tracks.video);
-      }));
-
-      // Listen to active video track
-      _subscriptions.add(_mkPlayer!.stream.track.listen((track) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        _updateSelectedMediaKitQuality(track.video);
-      }));
-
-      // Listen to video dimensions for single files / P2P stream
-      _subscriptions.add(_mkPlayer!.stream.videoParams.listen((params) {
-        if (_isDisposed || _mediaType != 'direct_url') return;
-        final normH = VideoQuality.normalizeResolutionHeight(
-          width: params.w,
-          height: params.h,
-        );
-        if ((isLocalFile || isP2PStream || (!_isDetectingQualities && _availableQualities.length <= 1)) &&
-            normH != null &&
-            normH > 0) {
-          _availableQualities = [
-            VideoQuality.fixed(
-              label: '${normH}p (Kualitas Asli)',
-              height: normH,
-              width: params.w,
-            ),
-          ];
-          _selectedQuality = _availableQualities.first;
-          notifyListeners();
-        }
-      }));
+      _bindMediaKitListeners();
     } catch (e) {
       debugPrint('[UnifiedPlayerController] Error init media_kit: $e');
     }
+  }
+
+  void _bindMediaKitListeners() {
+    if (_mkPlayer == null) return;
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    if (_ytController != null) {
+      _setupYoutubeListeners();
+    }
+
+    _subscriptions.add(_mkPlayer!.stream.position.listen((pos) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      final posSec = pos.inMilliseconds / 1000.0;
+      if (posSec > 0 && _errorMessage != null && (_mkPlayer?.state.playing ?? false)) {
+        _errorMessage = null;
+        _isPlaying = true;
+      }
+      if (_isSwitchingQuality && _pendingQualitySeekSeconds != null) {
+        if (posSec < 0.5 && _pendingQualitySeekSeconds! > 1.0) {
+          return;
+        }
+        if ((posSec - _pendingQualitySeekSeconds!).abs() <= 2.5) {
+          _isSwitchingQuality = false;
+          _pendingQualitySeekSeconds = null;
+        }
+      }
+      _position = posSec;
+      notifyListeners();
+      onPositionChanged?.call(_position);
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.duration.listen((dur) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      final durSec = dur.inMilliseconds / 1000.0;
+      if (durSec > 0) {
+        _duration = durSec;
+        if (_pendingQualitySeekSeconds != null && _pendingQualitySeekSeconds! > 0) {
+          final targetSeek = _pendingQualitySeekSeconds!;
+          _pendingQualitySeekSeconds = null;
+          _mkPlayer
+              ?.seek(Duration(milliseconds: (targetSeek * 1000).round()))
+              .whenComplete(() {
+            _isSwitchingQuality = false;
+          });
+        }
+        notifyListeners();
+      }
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.playing.listen((playing) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      if (playing && _errorMessage != null) {
+        _errorMessage = null;
+      }
+      if (!playing && _isSwitchingQuality) {
+        return;
+      }
+      if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+        debugPrint('[UnifiedPlayerController] MediaKit spurious pause ignored during fullscreen transition');
+        _mkPlayer?.play();
+        return;
+      }
+      if (_isPlaying != playing) {
+        _isPlaying = playing;
+        notifyListeners();
+        onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+      }
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.buffering.listen((buffering) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      if (_isBuffering != buffering) {
+        _isBuffering = buffering;
+        notifyListeners();
+      }
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.completed.listen((completed) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      if (completed && !_isSwitchingQuality) {
+        onPlaybackEnded?.call();
+      }
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.error.listen((err) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      final trimmedErr = err.trim();
+      final isFatalOpenError = trimmedErr.startsWith('Failed to open') ||
+          trimmedErr.startsWith('Can not open') ||
+          trimmedErr.contains('Unrecognized file format');
+      if (!isFatalOpenError) {
+        debugPrint('[UnifiedPlayerController] Non-fatal MediaKit warning ignored: $trimmedErr');
+        return;
+      }
+      debugPrint('[UnifiedPlayerController] MediaKit fatal stream.error: $trimmedErr');
+      _errorMessage = 'Gagal memutar video: $trimmedErr';
+      _isPlaying = false;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.log.listen((log) {
+      if (_isDisposed) return;
+      debugPrint('[MPV:${log.level}] ${log.prefix}: ${log.text}');
+    }));
+
+    // Listen to available video tracks for quality selection
+    _subscriptions.add(_mkPlayer!.stream.tracks.listen((tracks) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      _updateMediaKitQualities(tracks.video);
+    }));
+
+    // Listen to active video track
+    _subscriptions.add(_mkPlayer!.stream.track.listen((track) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      _updateSelectedMediaKitQuality(track.video);
+    }));
+
+    // Listen to video dimensions for single files / P2P stream
+    _subscriptions.add(_mkPlayer!.stream.videoParams.listen((params) {
+      if (_isDisposed || _mediaType != 'direct_url') return;
+      final normH = VideoQuality.normalizeResolutionHeight(
+        width: params.w,
+        height: params.h,
+      );
+      if (params.w != null && params.h != null && params.h! > 0) {
+        if (_errorMessage != null) {
+          _errorMessage = null;
+        }
+        debugPrint(
+          '[UnifiedPlayerController] MediaKit videoParams: ${params.w}x${params.h} (norm=${normH}p)',
+        );
+      }
+      if ((isLocalFile ||
+              isP2PStream ||
+              (!_isDetectingQualities &&
+                  _availableQualities.length <= 1 &&
+                  _parsedHlsQualities.isEmpty &&
+                  _activeVariantStreamUrl.isEmpty)) &&
+          normH != null &&
+          normH > 0) {
+        _availableQualities = [
+          VideoQuality.fixed(
+            label: '${normH}p (Kualitas Asli)',
+            height: normH,
+            width: params.w,
+          ),
+        ];
+        _selectedQuality = _availableQualities.first;
+        notifyListeners();
+      } else if (normH != null && normH > 0) {
+        notifyListeners();
+      }
+    }));
   }
 
   Future<void> _probeHlsManifestQualities(String url) async {
@@ -528,7 +609,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         _mergeHlsAndMediaKitQualities(
           _mkPlayer?.state.tracks.video ?? const <VideoTrack>[],
         );
-      } else {
+      } else if (_parsedHlsQualities.isEmpty && _availableQualities.length <= 1) {
         _updateMediaKitQualities(
           _mkPlayer?.state.tracks.video ?? const <VideoTrack>[],
         );
@@ -567,14 +648,23 @@ class UnifiedPlayerController extends ChangeNotifier {
         continue;
       }
       VideoTrack? matchedTrack;
-      for (final track in validTracks) {
-        final normH = VideoQuality.normalizeResolutionHeight(
-          width: track.w,
-          height: track.h,
-        );
-        if (normH != null && q.height != null && normH == q.height) {
-          matchedTrack = track;
-          break;
+      if (_activeVariantStreamUrl.isEmpty) {
+        for (final track in validTracks) {
+          final normH = VideoQuality.normalizeResolutionHeight(
+            width: track.w,
+            height: track.h,
+          );
+          if (normH != null && q.height != null && normH == q.height) {
+            matchedTrack = track;
+            break;
+          }
+          if (track.bitrate != null &&
+              q.bitrate != null &&
+              track.bitrate! > 0 &&
+              (track.bitrate! - q.bitrate!).abs() < 50000) {
+            matchedTrack = track;
+            break;
+          }
         }
       }
       enriched.add(
@@ -587,7 +677,7 @@ class UnifiedPlayerController extends ChangeNotifier {
           fps: q.fps,
           streamUrl: q.streamUrl,
           mode: QualityControlMode.directTrack,
-          rawTrack: matchedTrack ?? q.rawTrack,
+          rawTrack: matchedTrack ?? (_activeVariantStreamUrl.isEmpty ? q.rawTrack : null),
         ),
       );
     }
@@ -715,11 +805,18 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
       return;
     }
-    if (_parsedHlsQualities.isNotEmpty &&
-        _selectedQuality != null &&
-        !_selectedQuality!.isAuto &&
-        _selectedQuality!.streamUrl != null) {
+    if (_activeVariantStreamUrl.isNotEmpty ||
+        (_parsedHlsQualities.isNotEmpty &&
+            _selectedQuality != null &&
+            !_selectedQuality!.isAuto &&
+            _selectedQuality!.streamUrl != null)) {
       // Keep explicit HLS variant selection
+      return;
+    }
+    if (_selectedQuality != null && _selectedQuality!.isAuto) {
+      // Preserve Auto selection when libmpv resolves an adaptive track;
+      // currentQualityLabel will dynamically display 'Auto (720p)'.
+      notifyListeners();
       return;
     }
     if (currentTrack.id == 'auto' || currentTrack.id == 'no') {
@@ -940,6 +1037,19 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   void _setupYoutubeListeners() {
     if (_ytController == null) return;
+
+    _ytController!.setFullScreenListener((isYtFullscreen) {
+      if (_isDisposed || _mediaType != 'youtube') return;
+      if (!isYtFullscreen && _isFullscreen) {
+        if (onInterceptExitFullscreen != null && onInterceptExitFullscreen!()) {
+          _ytController?.enterFullScreen(lock: false);
+          return;
+        }
+        exitFullscreen();
+      } else if (isYtFullscreen && !_isFullscreen) {
+        enterFullscreen();
+      }
+    });
 
     _subscriptions.add(_ytController!.videoStateStream.listen((state) {
       if (_isDisposed || _mediaType != 'youtube') return;
@@ -1274,7 +1384,8 @@ class UnifiedPlayerController extends ChangeNotifier {
 
     _isDetectingQualities = true;
     notifyListeners();
-    _startQualityDetectTimeout(const Duration(seconds: 6));
+    _startQualityDetectTimeout(const Duration(seconds: 12));
+    debugPrint('[UnifiedPlayerController] refreshAvailableQualities(type=$_mediaType, url=$_mediaUrl)');
 
     if (_mediaType == 'youtube') {
       await _fetchYoutubeAvailableQualities();
@@ -1290,23 +1401,44 @@ class UnifiedPlayerController extends ChangeNotifier {
       await _probeHlsManifestQualities(targetUrl);
     } else if (_mediaType == 'dailymotion') {
       final dmId = DailymotionPlayerController.extractVideoId(_mediaUrl);
-      if (dmId != null && _dailymotionController != null) {
+      if (dmId != null) {
+        _dailymotionController ??= DailymotionPlayerController();
+        _setupDailymotionListeners();
         await _dailymotionController!.loadUrl(
           _mediaUrl,
           autoPlay: _isPlaying,
           startSeconds: _position,
         );
       }
+    } else if (_mediaType == 'bstation') {
+      _bstationController ??= BstationPlayerController();
+      _setupBstationListeners();
+      await _bstationController!.loadUrl(
+        _mediaUrl,
+        autoPlay: _isPlaying,
+        startSeconds: _position,
+      );
+    } else if (_mediaType == 'google_drive') {
+      _googleDriveController ??= GoogleDrivePlayerController();
+      _setupGoogleDriveListeners();
+      await _googleDriveController!.loadUrl(
+        _mediaUrl,
+        autoPlay: _isPlaying,
+        startSeconds: _position,
+      );
     } else if (_mediaType == 'web_browser') {
-      if (_webBrowserController != null) {
-        await _webBrowserController!.loadUrl(
-          _mediaUrl,
-          autoPlay: _isPlaying,
-          startSeconds: _position,
-        );
-      }
+      _webBrowserController ??= WebBrowserPlayerController();
+      _setupWebBrowserListeners();
+      await _webBrowserController!.loadUrl(
+        _mediaUrl,
+        autoPlay: _isPlaying,
+        startSeconds: _position,
+      );
     }
   }
+
+  @visibleForTesting
+  String get activeVariantStreamUrl => _activeVariantStreamUrl;
 
   @visibleForTesting
   void setAvailableQualitiesForTesting(
@@ -1315,9 +1447,16 @@ class UnifiedPlayerController extends ChangeNotifier {
     bool isDetecting = false,
   }) {
     _availableQualities = List<VideoQuality>.from(qualities);
+    if (isHlsStream) {
+      _parsedHlsQualities = List<VideoQuality>.from(qualities);
+    }
     _selectedQuality =
         selected ?? (_availableQualities.isNotEmpty ? _availableQualities.first : null);
     _isDetectingQualities = isDetecting;
+    _hasAppliedSavedQualityForCurrentMedia = false;
+    if (!isDetecting) {
+      _qualityDetectTimeoutTimer?.cancel();
+    }
     notifyListeners();
   }
 
@@ -1334,9 +1473,17 @@ class UnifiedPlayerController extends ChangeNotifier {
     _isBuffering = false;
     _mediaType = type;
     _mediaUrl = url;
+    final hasMedia = url.isNotEmpty && type != 'screenshare';
+    if (hasMediaNotifier.value != hasMedia) {
+      hasMediaNotifier.value = hasMedia;
+    }
     _position = startSeconds;
     _playbackSpeed = 1.0;
     _hlsMasterUrl = '';
+    _activeVariantStreamUrl = '';
+    _pendingQualitySeekSeconds = null;
+    _isSwitchingQuality = false;
+    _hasAppliedSavedQualityForCurrentMedia = false;
     _parsedHlsQualities = [];
     _isDetectingQualities = false;
     _availableQualities = [const VideoQuality.auto()];
@@ -1362,7 +1509,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
       notifyListeners();
       return;
@@ -1388,7 +1535,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
 
       final videoId = extractYoutubeId(url) ?? url;
@@ -1405,6 +1552,10 @@ class UnifiedPlayerController extends ChangeNotifier {
             ),
           );
           _setupYoutubeListeners();
+        }
+
+        if (_isFullscreen) {
+          _ytController!.enterFullScreen(lock: false);
         }
 
         if (autoPlay) {
@@ -1458,7 +1609,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
 
       try {
@@ -1501,7 +1652,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       ];
       _selectedQuality = _availableQualities.first;
       _isDetectingQualities = true;
-      _startQualityDetectTimeout(const Duration(seconds: 10));
+      _startQualityDetectTimeout(const Duration(seconds: 12));
 
       // Pause YouTube, Bstation, Google Drive, Web Browser, and direct video player if active
       if (_ytController != null) {
@@ -1515,7 +1666,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
 
       try {
@@ -1572,7 +1723,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
 
       try {
@@ -1629,7 +1780,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
       } else if (_mkPlayer != null) {
-        await _mkPlayer?.stop();
+        unawaited(_mkPlayer!.stop());
       }
 
       try {
@@ -1713,8 +1864,10 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isPlaying = false;
     } else if (_mkPlayer != null) {
       try {
+        _bindMediaKitListeners();
         try {
           final dynamic nativePlatform = _mkPlayer!.platform;
+          await nativePlatform.setProperty('tls-verify', 'no');
           await nativePlatform.setProperty(
             'demuxer-lavf-o',
             'allowed_extensions=ALL,allowed_segment_extensions=ALL',
@@ -1726,12 +1879,13 @@ class UnifiedPlayerController extends ChangeNotifier {
           );
         } catch (_) {}
         await _mkPlayer!.setVolume(_isMuted ? 0 : _volume * 100);
-        await _mkPlayer!.open(Media(url), play: autoPlay);
+        final startDur = startSeconds > 0
+            ? Duration(milliseconds: (startSeconds * 1000).round())
+            : null;
         if (startSeconds > 0) {
-          await _mkPlayer!.seek(
-            Duration(milliseconds: (startSeconds * 1000).round()),
-          );
+          _pendingQualitySeekSeconds = startSeconds;
         }
+        await _mkPlayer!.open(Media(url, start: startDur), play: autoPlay);
         _isPlaying = autoPlay;
       } catch (e) {
         debugPrint('[UnifiedPlayerController] MediaKit open error: $e');
@@ -1969,24 +2123,107 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   /// Sets video playback quality (local client preference).
   Future<void> setVideoQuality(VideoQuality quality) async {
+    _hasAppliedSavedQualityForCurrentMedia = true;
+    final bool wasPlayingVariant = _activeVariantStreamUrl.isNotEmpty;
+    if (_mediaType == 'direct_url') {
+      if (quality.isAuto) {
+        _activeVariantStreamUrl = '';
+      } else if (quality.streamUrl != null && quality.streamUrl!.isNotEmpty) {
+        _activeVariantStreamUrl = quality.streamUrl!;
+      }
+    }
     _selectedQuality = quality;
     notifyListeners();
-    _saveUserQualityPreference(quality);
+    unawaited(_saveUserQualityPreference(quality));
 
     try {
       if (_mediaType == 'youtube') {
         if (_ytController != null) {
           final qCode = quality.isAuto ? 'default' : quality.id;
+          final targetHeight = quality.height ?? 0;
           try {
-            await _ytController!.webViewController.runJavaScript(
-              'player.setPlaybackQuality("$qCode");',
+            final res = await _ytController!.webViewController
+                .runJavaScriptReturningResult('''
+              (function() {
+                var results = [];
+                var isAuto = ${quality.isAuto ? 'true' : 'false'};
+                var qCode = "$qCode";
+                var targetHeight = $targetHeight;
+
+                function applyToPlayer(p, label) {
+                  if (!p) return;
+                  try {
+                    if (isAuto) {
+                      if (typeof p.setPlaybackQualityRange === 'function') {
+                        p.setPlaybackQualityRange("tiny", "highres");
+                        results.push(label + ":range(tiny,highres)");
+                      }
+                      if (typeof p.setPlaybackQuality === 'function') {
+                        p.setPlaybackQuality("default");
+                        results.push(label + ":quality(default)");
+                      }
+                    } else {
+                      if (typeof p.setPlaybackQualityRange === 'function') {
+                        p.setPlaybackQualityRange(qCode, qCode);
+                        results.push(label + ":range(" + qCode + ")");
+                      }
+                      if (typeof p.setPlaybackQuality === 'function') {
+                        p.setPlaybackQuality(qCode);
+                        results.push(label + ":quality(" + qCode + ")");
+                      }
+                    }
+                  } catch (err) {
+                    results.push(label + ":err(" + err + ")");
+                  }
+                }
+
+                // 1. Target internal #movie_player inside same-origin YouTube embed iframe
+                try {
+                  var iframes = document.getElementsByTagName('iframe');
+                  for (var i = 0; i < iframes.length; i++) {
+                    var cw = iframes[i].contentWindow;
+                    var cd = iframes[i].contentDocument || (cw && cw.document);
+                    if (cw && targetHeight > 0 && !isAuto) {
+                      try {
+                        var now = Date.now();
+                        var qPayload = JSON.stringify({
+                          data: JSON.stringify({ quality: targetHeight, previousQuality: targetHeight }),
+                          expiration: now + 2592000000,
+                          creation: now
+                        });
+                        cw.localStorage.setItem('yt-player-quality', qPayload);
+                        cw.sessionStorage.setItem('yt-player-quality', qPayload);
+                      } catch (_) {}
+                    }
+                    if (cd) {
+                      var mp = cd.getElementById('movie_player') || cd.querySelector('.html5-video-player');
+                      if (mp) {
+                        applyToPlayer(mp, 'movie_player');
+                        if (typeof mp.getPlaybackQuality === 'function') {
+                          results.push('mpNow:' + mp.getPlaybackQuality());
+                        }
+                      }
+                    }
+                  }
+                } catch (e) {
+                  results.push('iframeErr:' + e);
+                }
+
+                // 2. Also call outer YT.Player wrapper
+                if (typeof player !== 'undefined' && player) {
+                  applyToPlayer(player, 'outer_player');
+                }
+                return results.join(',');
+              })();
+            ''');
+            debugPrint(
+              '[UnifiedPlayerController] YouTube setVideoQuality($qCode) -> $res',
             );
-            if (!kIsWeb) {
-              await _ytController!.webViewController.runJavaScript(
-                'if (player.setPlaybackQualityRange) player.setPlaybackQualityRange("$qCode", "$qCode");',
-              );
-            }
-          } catch (_) {}
+          } catch (e) {
+            debugPrint(
+              '[UnifiedPlayerController] YouTube setVideoQuality JS error: $e',
+            );
+          }
         }
       } else if (_mediaType == 'bstation') {
         await _bstationController?.setQuality(quality.id);
@@ -2000,19 +2237,44 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _webVideoAdapter?.setQuality(quality.id);
       } else if (_mkPlayer != null) {
         if (quality.isAuto) {
-          if (_hlsMasterUrl.isNotEmpty && _mediaUrl != _hlsMasterUrl) {
+          final masterTarget = _hlsMasterUrl.isNotEmpty ? _hlsMasterUrl : _mediaUrl;
+          debugPrint(
+            '[UnifiedPlayerController] Direct/HLS setVideoQuality(auto) -> master=$masterTarget',
+          );
+          if (masterTarget.isNotEmpty &&
+              (wasPlayingVariant || (_hlsMasterUrl.isNotEmpty && _mediaUrl != _hlsMasterUrl))) {
             final resumePos = _position;
             final wasPlaying = _isPlaying;
-            _mediaUrl = _hlsMasterUrl;
-            await _mkPlayer!.open(Media(_hlsMasterUrl), play: wasPlaying);
-            if (resumePos > 0) {
-              await _mkPlayer!.seek(
-                Duration(milliseconds: (resumePos * 1000).round()),
-              );
-            }
+            final resumeDur = resumePos > 0
+                ? Duration(milliseconds: (resumePos * 1000).round())
+                : null;
+            _isSwitchingQuality = resumePos > 0;
+            _pendingQualitySeekSeconds = resumePos > 0 ? resumePos : null;
+            await _mkPlayer!.open(
+              Media(masterTarget, start: resumeDur),
+              play: wasPlaying,
+            );
           }
           await _mkPlayer!.setVideoTrack(VideoTrack.auto());
-        } else if (quality.rawTrack is VideoTrack) {
+        } else if (quality.streamUrl != null && quality.streamUrl!.isNotEmpty) {
+          debugPrint(
+            '[UnifiedPlayerController] Direct/HLS setVideoQuality(${quality.id}) -> variantUrl=${quality.streamUrl}',
+          );
+          final resumePos = _position;
+          final wasPlaying = _isPlaying;
+          final resumeDur = resumePos > 0
+              ? Duration(milliseconds: (resumePos * 1000).round())
+              : null;
+          _isSwitchingQuality = resumePos > 0;
+          _pendingQualitySeekSeconds = resumePos > 0 ? resumePos : null;
+          await _mkPlayer!.open(
+            Media(quality.streamUrl!, start: resumeDur),
+            play: wasPlaying,
+          );
+        } else if (quality.rawTrack is VideoTrack && !wasPlayingVariant) {
+          debugPrint(
+            '[UnifiedPlayerController] Direct/HLS setVideoQuality(${quality.id}) -> rawTrack=${(quality.rawTrack as VideoTrack).id}',
+          );
           await _mkPlayer!.setVideoTrack(quality.rawTrack as VideoTrack);
         } else {
           final validTracks = _mkPlayer!.state.tracks.video
@@ -2032,18 +2294,19 @@ class UnifiedPlayerController extends ChangeNotifier {
               matchedTrack = t;
               break;
             }
+            if (t.bitrate != null &&
+                quality.bitrate != null &&
+                t.bitrate! > 0 &&
+                (t.bitrate! - quality.bitrate!).abs() < 50000) {
+              matchedTrack = t;
+              break;
+            }
           }
           if (matchedTrack != null) {
+            debugPrint(
+              '[UnifiedPlayerController] Direct/HLS setVideoQuality(${quality.id}) -> matchedTrack=${matchedTrack.id}',
+            );
             await _mkPlayer!.setVideoTrack(matchedTrack);
-          } else if (quality.streamUrl != null && quality.streamUrl!.isNotEmpty) {
-            final resumePos = _position;
-            final wasPlaying = _isPlaying;
-            await _mkPlayer!.open(Media(quality.streamUrl!), play: wasPlaying);
-            if (resumePos > 0) {
-              await _mkPlayer!.seek(
-                Duration(milliseconds: (resumePos * 1000).round()),
-              );
-            }
           } else {
             await _mkPlayer!.setVideoTrack(VideoTrack.auto());
           }
@@ -2055,6 +2318,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   void _updateYoutubeQuality(String? quality) {
+    debugPrint('[UnifiedPlayerController] YouTube playbackQuality changed to: $quality');
     _youtubeQuality = quality ?? '';
     notifyListeners();
     if (_availableQualities.length <= 1) {
@@ -2065,9 +2329,27 @@ class UnifiedPlayerController extends ChangeNotifier {
   Future<void> _fetchYoutubeAvailableQualities() async {
     if (_isDisposed || _mediaType != 'youtube' || _ytController == null) return;
     try {
-      final raw = await _ytController!.webViewController.runJavaScriptReturningResult(
-        'player.getAvailableQualityLevels();',
-      );
+      final raw = await _ytController!.webViewController.runJavaScriptReturningResult('''
+        (function() {
+          try {
+            var iframes = document.getElementsByTagName('iframe');
+            for (var i = 0; i < iframes.length; i++) {
+              var cd = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+              if (cd) {
+                var mp = cd.getElementById('movie_player') || cd.querySelector('.html5-video-player');
+                if (mp && typeof mp.getAvailableQualityLevels === 'function') {
+                  var l = mp.getAvailableQualityLevels();
+                  if (l && l.length > 0) return l;
+                }
+              }
+            }
+          } catch (_) {}
+          if (typeof player !== 'undefined' && player && typeof player.getAvailableQualityLevels === 'function') {
+            return player.getAvailableQualityLevels();
+          }
+          return [];
+        })();
+      ''');
       List<dynamic>? levels;
       if (raw is List) {
         levels = raw;
@@ -2142,8 +2424,10 @@ class UnifiedPlayerController extends ChangeNotifier {
   }
 
   Future<void> _applySavedQualityPreference() async {
+    if (_hasAppliedSavedQualityForCurrentMedia) return;
     if (_availableQualities.length <= 1) return;
     if (!supportsQualitySelection) return;
+    _hasAppliedSavedQualityForCurrentMedia = true;
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2161,7 +2445,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       // If not exact match, find closest height <= targetHeight
       if (match == null) {
         final sorted = _availableQualities
-            .where((q) => !q.isAuto && q.height != null)
+             .where((q) => !q.isAuto && q.height != null)
             .toList()
           ..sort((a, b) => b.height!.compareTo(a.height!));
         for (final q in sorted) {
@@ -2226,6 +2510,9 @@ class UnifiedPlayerController extends ChangeNotifier {
     if (_isFullscreen) return;
     _beginFullscreenTransition();
     _isFullscreen = true;
+    if (_mediaType == 'youtube' && _ytController != null && !_ytController!.value.fullScreenOption.enabled) {
+      _ytController!.enterFullScreen(lock: false);
+    }
     notifyListeners();
 
     await FullscreenHelper.enterFullscreen();
@@ -2235,6 +2522,9 @@ class UnifiedPlayerController extends ChangeNotifier {
     if (!_isFullscreen) return;
     _beginFullscreenTransition();
     _isFullscreen = false;
+    if (_mediaType == 'youtube' && _ytController != null && _ytController!.value.fullScreenOption.enabled) {
+      _ytController!.exitFullScreen(lock: false);
+    }
     notifyListeners();
 
     await FullscreenHelper.exitFullscreen();
@@ -2251,6 +2541,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    hasMediaNotifier.dispose();
     _ytQualityPollTimer?.cancel();
     _qualityDetectTimeoutTimer?.cancel();
     _fullscreenTransitionTimer?.cancel();

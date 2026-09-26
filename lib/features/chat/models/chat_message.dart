@@ -13,6 +13,9 @@ class ChatMessage {
   final DateTime createdAt;
   final MessageStatus status;
   final Map<String, List<String>> reactions; // emoji -> list of userIds
+  final String? replyToId;
+  final String? replyToUsername;
+  final String? replyToContent;
 
   const ChatMessage({
     required this.id,
@@ -25,6 +28,9 @@ class ChatMessage {
     required this.createdAt,
     this.status = MessageStatus.sent,
     this.reactions = const {},
+    this.replyToId,
+    this.replyToUsername,
+    this.replyToContent,
   });
 
   factory ChatMessage.text({
@@ -37,6 +43,9 @@ class ChatMessage {
     DateTime? createdAt,
     MessageStatus status = MessageStatus.sent,
     Map<String, List<String>> reactions = const {},
+    String? replyToId,
+    String? replyToUsername,
+    String? replyToContent,
   }) {
     return ChatMessage(
       id: id,
@@ -49,6 +58,9 @@ class ChatMessage {
       createdAt: createdAt ?? DateTime.now(),
       status: status,
       reactions: reactions,
+      replyToId: replyToId,
+      replyToUsername: replyToUsername,
+      replyToContent: replyToContent,
     );
   }
 
@@ -56,6 +68,7 @@ class ChatMessage {
   bool get isReaction => type == 'emoji_reaction';
   bool get isText => type == 'text';
   bool get hasReactions => reactions.isNotEmpty;
+  bool get isReply => replyToId != null && replyToId!.isNotEmpty;
   int get totalReactionsCount =>
       reactions.values.fold(0, (sum, list) => sum + list.length);
 
@@ -74,6 +87,9 @@ class ChatMessage {
     DateTime? createdAt,
     MessageStatus? status,
     Map<String, List<String>>? reactions,
+    String? replyToId,
+    String? replyToUsername,
+    String? replyToContent,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -86,6 +102,9 @@ class ChatMessage {
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
       reactions: reactions ?? this.reactions,
+      replyToId: replyToId ?? this.replyToId,
+      replyToUsername: replyToUsername ?? this.replyToUsername,
+      replyToContent: replyToContent ?? this.replyToContent,
     );
   }
 
@@ -143,6 +162,9 @@ class ChatMessage {
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
       reactions: parsedReactions,
+      replyToId: json['reply_to_id'] as String?,
+      replyToUsername: json['reply_to_username'] as String?,
+      replyToContent: json['reply_to_content'] as String?,
     );
   }
 
@@ -157,6 +179,11 @@ class ChatMessage {
       'type': type,
       'created_at': createdAt.toIso8601String(),
       if (reactions.isNotEmpty) 'reactions': reactions,
+      if (replyToId != null && replyToId!.isNotEmpty) 'reply_to_id': replyToId,
+      if (replyToUsername != null && replyToUsername!.isNotEmpty)
+        'reply_to_username': replyToUsername,
+      if (replyToContent != null && replyToContent!.isNotEmpty)
+        'reply_to_content': replyToContent,
     };
   }
 }

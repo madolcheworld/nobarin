@@ -70,44 +70,46 @@ class ParticipantsTabView extends StatelessWidget {
       return a.username.toLowerCase().compareTo(b.username.toLowerCase());
     });
 
-    return ListView(
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      children: [
-        // Participants List Items
-        ...sortedList.map((user) {
-          final isMe = (currentUserId != null && user.id == currentUserId) ||
-              (currentUsername != null && user.username == currentUsername);
-          final isHost = (hostId != null && hostId!.isNotEmpty && user.id == hostId) ||
-              (hostName != null &&
-                  hostName!.isNotEmpty &&
-                  hostName != 'Host' &&
-                  user.username == hostName);
-          final isCoHost = coHostUserIds.contains(user.id) ||
-              coHostUserIds.contains(user.username);
-          final isSpeaking = isMe
-              ? (voiceController?.isLocalSpeaking ?? false)
-              : (voiceController?.activeSpeakerIds.contains(user.id) ??
-                  speakingUserIds.contains(user.id));
-          final isMuted = isMe
-              ? (voiceController?.isMicMuted ?? true)
-              : (voiceController?.isUserMuted(user.id) ?? true);
+      itemCount: sortedList.length,
+      itemBuilder: (context, index) {
+        final user = sortedList[index];
+        final isMe = (currentUserId != null && user.id == currentUserId) ||
+            (currentUsername != null && user.username == currentUsername);
+        final isHost =
+            (hostId != null && hostId!.isNotEmpty && user.id == hostId) ||
+                (hostName != null &&
+                    hostName!.isNotEmpty &&
+                    hostName != 'Host' &&
+                    user.username == hostName);
+        final isCoHost = coHostUserIds.contains(user.id) ||
+            coHostUserIds.contains(user.username);
+        final isSpeaking = isMe
+            ? (voiceController?.isLocalSpeaking ?? false)
+            : (voiceController?.activeSpeakerIds.contains(user.id) ??
+                speakingUserIds.contains(user.id));
+        final isMuted = isMe
+            ? (voiceController?.isMicMuted ?? true)
+            : (voiceController?.isUserMuted(user.id) ?? true);
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            decoration: BoxDecoration(
+        return Container(
+          key: ValueKey(user.id),
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: isMe
+                ? AppColors.primaryNeon.withValues(alpha: 0.06)
+                : AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
               color: isMe
-                  ? AppColors.primaryNeon.withValues(alpha: 0.06)
-                  : AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isMe
-                    ? AppColors.primaryNeon.withValues(alpha: 0.3)
-                    : AppColors.borderLight,
-              ),
+                  ? AppColors.primaryNeon.withValues(alpha: 0.3)
+                  : AppColors.borderLight,
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: ListTile(
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               leading: SpeakingAvatarIndicator(
@@ -282,8 +284,7 @@ class ParticipantsTabView extends StatelessWidget {
               ),
             ),
           );
-        }),
-      ],
-    );
+        },
+      );
+    }
   }
-}

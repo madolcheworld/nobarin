@@ -9,6 +9,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/video_title_resolver.dart';
+import '../../../core/widgets/nobarin_button.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/queue_controller.dart';
 import '../../room/controllers/sync_controller.dart';
@@ -2310,168 +2311,52 @@ class _WebBrowserSheetState extends State<WebBrowserSheet> {
 
             // Action Buttons per Mode
             if (widget.mode == WebBrowserMode.queueOnly) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: '+ Pilih & Tambah ke Antrean',
+                icon: Icons.playlist_add_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyAddToQueue,
-                  icon: const Icon(
-                    Icons.playlist_add_rounded,
-                    size: 22,
-                    color: Colors.white,
-                  ),
-                  label: const Text(
-                    '+ Pilih & Tambah ke Antrean',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyAddToQueue,
               ),
             ] else if (widget.mode == WebBrowserMode.createRoom) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: 'Pilih Video Ini & Buat Room',
+                icon: Icons.check_circle_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyWatchNow,
-                  icon: const Icon(
-                    Icons.check_circle_rounded,
-                    size: 21,
-                    color: Colors.white,
-                  ),
-                  label: const Text(
-                    'Pilih Video Ini & Buat Room',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyWatchNow,
               ),
             ] else if (widget.mode == WebBrowserMode.watchNow) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: 'Pilih & Putar Video Ini',
+                icon: Icons.play_circle_fill_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyWatchNow,
-                  icon: const Icon(
-                    Icons.play_circle_fill_rounded,
-                    size: 22,
-                    color: Colors.white,
-                  ),
-                  label: const Text(
-                    'Pilih & Putar Video Ini',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyWatchNow,
               ),
             ] else ...[
               Row(
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Container(
+                    child: NobarinPrimaryButton(
+                      label: 'Pilih & Tonton Sekarang',
+                      icon: Icons.play_arrow_rounded,
                       height: 46,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: _applyWatchNow,
-                        icon: const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 21,
-                          color: Colors.white,
-                        ),
-                        label: const Text(
-                          'Pilih & Tonton Sekarang',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
+                      fontSize: 14.5,
+                      onPressed: _applyWatchNow,
                     ),
                   ),
                   if (widget.queueController != null) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       flex: 2,
-                      child: SizedBox(
+                      child: NobarinSecondaryButton(
+                        label: '+ Antrean',
+                        icon: Icons.playlist_add_rounded,
                         height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed: _applyAddToQueue,
-                          icon: const Icon(
-                            Icons.playlist_add_rounded,
-                            size: 19,
-                          ),
-                          label: const Text(
-                            '+ Antrean',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.webBrowserTeal,
-                            side: const BorderSide(
-                              color: AppColors.webBrowserTeal,
-                              width: 1.4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
+                        accentColor: AppColors.webBrowserTeal,
+                        onPressed: _applyAddToQueue,
                       ),
                     ),
                   ],
@@ -2549,49 +2434,21 @@ class _WebBrowserSheetState extends State<WebBrowserSheet> {
               if (widget.mode == WebBrowserMode.queueOnly)
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: NobarinPrimaryButton(
+                    label: '+ Tambahkan ke Antrean',
+                    icon: Icons.playlist_add_rounded,
+                    fontSize: 15,
                     onPressed: _handleManualFallbackQueue,
-                    icon: const Icon(Icons.playlist_add_rounded, size: 20),
-                    label: const Text(
-                      '+ Tambahkan ke Antrean',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppColors.primaryNeonDark,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                   ),
                 )
               else if (widget.mode == WebBrowserMode.createRoom)
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: NobarinPrimaryButton(
+                    label: 'Buka Room dengan Video Ini',
+                    icon: Icons.meeting_room_rounded,
+                    fontSize: 15,
                     onPressed: _handleManualFallbackSubmit,
-                    icon: const Icon(Icons.meeting_room_rounded, size: 20),
-                    label: const Text(
-                      'Buka Room dengan Video Ini',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppColors.primaryNeonDark,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                   ),
                 )
               else
@@ -2599,27 +2456,13 @@ class _WebBrowserSheetState extends State<WebBrowserSheet> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: ElevatedButton.icon(
+                      child: NobarinPrimaryButton(
+                        label: widget.mode == WebBrowserMode.watchNow
+                            ? 'Putar Sekarang di Room'
+                            : 'Tonton Video Ini',
+                        icon: Icons.play_arrow_rounded,
+                        fontSize: 15,
                         onPressed: _handleManualFallbackSubmit,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                        label: Text(
-                          widget.mode == WebBrowserMode.watchNow
-                              ? 'Putar Sekarang di Room'
-                              : 'Tonton Video Ini',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: AppColors.primaryNeonDark,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
                       ),
                     ),
                     if (widget.queueController != null &&
@@ -2627,27 +2470,11 @@ class _WebBrowserSheetState extends State<WebBrowserSheet> {
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
-                        child: OutlinedButton.icon(
+                        child: NobarinSecondaryButton(
+                          label: '+ Antrean',
+                          icon: Icons.playlist_add_rounded,
+                          accentColor: AppColors.webBrowserTeal,
                           onPressed: _handleManualFallbackQueue,
-                          icon: const Icon(
-                            Icons.playlist_add_rounded,
-                            size: 18,
-                          ),
-                          label: const Text(
-                            '+ Antrean',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            foregroundColor: AppColors.webBrowserTeal,
-                            side: const BorderSide(
-                              color: AppColors.webBrowserTeal,
-                              width: 1.4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
                         ),
                       ),
                     ],

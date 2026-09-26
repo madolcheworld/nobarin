@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/video_title_resolver.dart';
+import '../../../core/widgets/nobarin_button.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/google_drive_player_controller.dart';
 import '../../room/controllers/queue_controller.dart';
@@ -1118,63 +1119,36 @@ class _GoogleDriveBrowserSheetState extends State<GoogleDriveBrowserSheet> {
       case GoogleDriveBrowserMode.createRoom:
         return SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
+          child: NobarinPrimaryButton(
+            label: 'Buka Room dengan Video Ini',
+            icon: Icons.check_circle_rounded,
+            height: 46,
+            fontSize: 14,
             onPressed: () => _applySelectedVideo(),
-            icon: const Icon(Icons.check_circle_rounded, size: 16),
-            label: const Text(
-              'Buka Room dengan Video Ini',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.googleDriveGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
           ),
         );
 
       case GoogleDriveBrowserMode.queueOnly:
         return SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
+          child: NobarinPrimaryButton(
+            label: '+ Tambahkan ke Antrean',
+            icon: Icons.playlist_add_rounded,
+            height: 46,
+            fontSize: 14,
             onPressed: () => _applySelectedVideo(addToQueue: true),
-            icon: const Icon(Icons.playlist_add_rounded, size: 16),
-            label: const Text(
-              '+ Tambahkan ke Antrean',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryNeon,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
           ),
         );
 
       case GoogleDriveBrowserMode.watchNow:
         return SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
+          child: NobarinPrimaryButton(
+            label: 'Putar Sekarang di Room',
+            icon: Icons.play_arrow_rounded,
+            height: 46,
+            fontSize: 14,
             onPressed: () => _applySelectedVideo(),
-            icon: const Icon(Icons.play_arrow_rounded, size: 18),
-            label: const Text(
-              'Putar Sekarang di Room',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.googleDriveGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
           ),
         );
 
@@ -1182,42 +1156,22 @@ class _GoogleDriveBrowserSheetState extends State<GoogleDriveBrowserSheet> {
         return Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
+              child: NobarinPrimaryButton(
+                label: 'Tonton Sekarang',
+                icon: Icons.play_arrow_rounded,
+                height: 44,
+                fontSize: 13.5,
                 onPressed: () => _applySelectedVideo(),
-                icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                label: const Text(
-                  'Tonton Sekarang',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.googleDriveGreen,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
+              child: NobarinSecondaryButton(
+                label: '+ Antrean',
+                icon: Icons.playlist_add_rounded,
+                height: 44,
+                fontSize: 13,
                 onPressed: () => _applySelectedVideo(addToQueue: true),
-                icon: const Icon(Icons.playlist_add_rounded, size: 16),
-                label: const Text(
-                  '+ Antrean',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: BorderSide(
-                    color: AppColors.primaryNeon.withValues(alpha: 0.6),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
               ),
             ),
           ],
@@ -1365,49 +1319,21 @@ class _GoogleDriveBrowserSheetState extends State<GoogleDriveBrowserSheet> {
             if (widget.mode == GoogleDriveBrowserMode.queueOnly)
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: NobarinPrimaryButton(
+                  label: '+ Tambahkan ke Antrean',
+                  icon: Icons.playlist_add_rounded,
+                  fontSize: 15,
                   onPressed: _handleManualFallbackQueue,
-                  icon: const Icon(Icons.playlist_add_rounded, size: 20),
-                  label: const Text(
-                    '+ Tambahkan ke Antrean',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: AppColors.googleDriveGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
                 ),
               )
             else if (widget.mode == GoogleDriveBrowserMode.createRoom)
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: NobarinPrimaryButton(
+                  label: 'Buka Room dengan Video Ini',
+                  icon: Icons.meeting_room_rounded,
+                  fontSize: 15,
                   onPressed: _handleManualFallbackSubmit,
-                  icon: const Icon(Icons.meeting_room_rounded, size: 20),
-                  label: const Text(
-                    'Buka Room dengan Video Ini',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: AppColors.googleDriveGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
                 ),
               )
             else
@@ -1415,51 +1341,24 @@ class _GoogleDriveBrowserSheetState extends State<GoogleDriveBrowserSheet> {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: ElevatedButton.icon(
+                    child: NobarinPrimaryButton(
+                      label: widget.mode == GoogleDriveBrowserMode.watchNow
+                          ? 'Putar Sekarang di Room'
+                          : 'Tonton Video Ini',
+                      icon: Icons.play_arrow_rounded,
+                      fontSize: 15,
                       onPressed: _handleManualFallbackSubmit,
-                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                      label: Text(
-                        widget.mode == GoogleDriveBrowserMode.watchNow
-                            ? 'Putar Sekarang di Room'
-                            : 'Tonton Video Ini',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: AppColors.googleDriveGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
                     ),
                   ),
                   if (widget.queueController != null) ...[
                     const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
-                      child: OutlinedButton.icon(
+                      child: NobarinSecondaryButton(
+                        label: 'Antrean',
+                        icon: Icons.playlist_add_rounded,
+                        accentColor: AppColors.googleDriveGreen,
                         onPressed: _handleManualFallbackQueue,
-                        icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                        label: const Text(
-                          'Antrean',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          foregroundColor: AppColors.googleDriveGreen,
-                          side: const BorderSide(
-                            color: AppColors.googleDriveGreen,
-                            width: 1.2,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
                       ),
                     ),
                   ],

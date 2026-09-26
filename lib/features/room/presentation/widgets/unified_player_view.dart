@@ -28,6 +28,7 @@ class UnifiedPlayerView extends StatefulWidget {
   final String? title;
   final bool showTopBar;
   final bool isPipMode;
+  final Widget Function(BuildContext context, bool isFullscreen)? overlayBuilder;
 
   const UnifiedPlayerView({
     super.key,
@@ -38,6 +39,7 @@ class UnifiedPlayerView extends StatefulWidget {
     this.title,
     this.showTopBar = true,
     this.isPipMode = false,
+    this.overlayBuilder,
   });
 
   @override
@@ -274,27 +276,58 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
         final bool canControl = widget.syncController.canControl;
         final String? errorMsg = widget.player.errorMessage;
         final bool isFs = widget.player.isFullscreen;
+        final bool isYoutubeActive = hasMedia &&
+            !isScreenShare &&
+            widget.player.mediaType == 'youtube' &&
+            widget.player.ytController != null;
+
+        if (isYoutubeActive) {
+          final ytFs =
+              widget.player.ytController!.value.fullScreenOption.enabled;
+          if (isFs != ytFs) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              final currentYt = widget.player.ytController;
+              if (currentYt == null) return;
+              if (widget.player.isFullscreen &&
+                  !currentYt.value.fullScreenOption.enabled) {
+                currentYt.enterFullScreen(lock: false);
+              } else if (!widget.player.isFullscreen &&
+                  currentYt.value.fullScreenOption.enabled) {
+                currentYt.exitFullScreen(lock: false);
+              }
+            });
+          }
+        }
 
         Widget playerWidget;
         if (!hasMedia || isScreenShare) {
           playerWidget = _buildEmptyPlaceholder();
-        } else if (widget.player.mediaType == 'youtube' &&
-            widget.player.ytController != null) {
+        } else if (isYoutubeActive) {
           playerWidget = YoutubePlayer(
             key: const ValueKey('nobarin_yt_player'),
             controller: widget.player.ytController!,
             aspectRatio: 16 / 9,
             enableFullScreenOnVerticalDrag: false,
             autoFullScreen: false,
-            controlsBuilder: (context, isFullscreen) => widget.isPipMode
-                ? const SizedBox.shrink()
-                : PointerInterceptor(
+            controlsBuilder: (context, isFullscreen) {
+              if (widget.isPipMode) return const SizedBox.shrink();
+              final effectiveFs = isFullscreen || isFs;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  PointerInterceptor(
                     intercepting: true,
                     child: _buildControlsOverlay(
                       context,
-                      isFullscreen: isFullscreen || isFs,
+                      isFullscreen: effectiveFs,
                     ),
                   ),
+                  if (widget.overlayBuilder != null)
+                    widget.overlayBuilder!(context, effectiveFs),
+                ],
+              );
+            },
           );
         } else if (widget.player.mediaType == 'bstation' &&
             widget.player.bstationController != null) {
@@ -340,6 +373,33 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             children: [
               // Video Content
               Center(child: playerWidget),
+
+              // Top-left exit fullscreen button when no media is loaded yet in fullscreen
+              if (isFs && (!hasMedia || isScreenShare) && !widget.isPipMode)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: const CircleBorder(),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          tooltip: 'Keluar Fullscreen',
+                          onPressed: () {
+                            widget.player.exitFullscreen();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
               // Controls Overlay for media (for non-YouTube players; YouTube renders via controlsBuilder)
               if (hasMedia &&
@@ -430,6 +490,16 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                     errorMsg,
                     canControl: canControl,
                   ),
+                ),
+
+              // Custom room overlays (Floating Reactions, Fullscreen Reaction Bar, Fullscreen Comment Drawer)
+              // When YouTube is active, this is rendered inside YoutubePlayer.controlsBuilder so it appears
+              // above the YouTube OverlayPortal on mobile.
+              if (!widget.isPipMode &&
+                  widget.overlayBuilder != null &&
+                  !isYoutubeActive)
+                Positioned.fill(
+                  child: widget.overlayBuilder!(context, isFs),
                 ),
             ],
           ),
@@ -1201,7 +1271,7 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                     ),
                                   )
                                 else
-                                  Flexible(
+                                  Expanded(
                                     child: Text(
                                       '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
                                       style: const TextStyle(
@@ -1219,8 +1289,8 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                if ( duration <= 0 ) const Spacer(),
                                 const SizedBox(width: 6),
-                                const Spacer(),
                                 if (widget.player.isLoaded) ...[
                                   _buildSyncStatusBadge(isCompact: !isFs),
                                   const SizedBox(width: 4),

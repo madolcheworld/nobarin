@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/network/p2p_file_stream_service.dart';
+import '../../../../core/utils/input_validators.dart';
+import '../../../../core/widgets/nobarin_button.dart';
+import '../../../../core/widgets/video_source_card.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
@@ -359,11 +362,14 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       }
     }
 
+    final sanitizedTitle = InputValidators.sanitizeText(_titleController.text);
+    final rawDesc = _descController.text.trim();
+    final sanitizedDesc =
+        rawDesc.isEmpty ? null : InputValidators.sanitizeRoomDescription(rawDesc);
+
     final room = await ref.read(lobbyControllerProvider.notifier).createRoom(
-          title: _titleController.text.trim(),
-          description: _descController.text.trim().isEmpty
-              ? null
-              : _descController.text.trim(),
+          title: sanitizedTitle,
+          description: sanitizedDesc,
           hostId: user.id,
           hostName: user.username,
           isPublic: _isPublic,
@@ -415,258 +421,95 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
-  Widget _buildSourceOptionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBackgroundColor,
-    required Color borderColor,
-    required List<Color> gradientColors,
-    required Color accentColor,
-    required VoidCallback onTap,
-    String? badgeText,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: gradientColors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor, width: 1.2),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: iconBackgroundColor,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: iconBackgroundColor.withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Icon(
-                    icon,
-                    color: iconColor,
-                    size: 24,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        if (badgeText != null) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: accentColor.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              badgeText,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: accentColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 13,
-                    color: accentColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildStep1VideoSelection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. YouTube Option Card
-        _buildSourceOptionCard(
-          title: 'YouTube',
-          subtitle: 'Streaming dan video musik',
-          icon: Icons.smart_display_rounded,
-          iconColor: Colors.white,
-          iconBackgroundColor: AppColors.youtubeRed,
-          borderColor: AppColors.youtubeRed.withValues(alpha: 0.45),
-          gradientColors: [
-            AppColors.youtubeRed.withValues(alpha: 0.16),
-            AppColors.surfaceElevated,
+        VideoSourceGrid(
+          spacing: 12,
+          children: [
+            // 1. YouTube Option Card
+            VideoSourceCard(
+              title: 'YouTube',
+              subtitle: 'Streaming dan video musik',
+              icon: Icons.smart_display_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.youtubeRed,
+              accentColor: AppColors.youtubeRed,
+              badgeText: 'Populer',
+              onTap: _openYouTubeBrowser,
+            ),
+
+            // 2. Bstation Option Card
+            VideoSourceCard(
+              title: 'Bstation / Bilibili',
+              subtitle: 'Anime & serial video',
+              icon: Icons.tv_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.bstationBlue,
+              accentColor: AppColors.bstationBlue,
+              badgeText: 'Anime',
+              onTap: _openBstationBrowser,
+            ),
+
+            // 3. Web Browser (Auto-Detect Video) Option Card
+            VideoSourceCard(
+              title: 'Web Browser',
+              subtitle: 'Buka situs apa saja & deteksi otomatis video',
+              icon: Icons.public_rounded,
+              iconColor: Colors.black,
+              iconBackgroundColor: AppColors.webBrowserTeal,
+              accentColor: AppColors.webBrowserTeal,
+              badgeText: 'Auto-Detect',
+              onTap: _openWebBrowser,
+            ),
+
+            // 4. Google Drive Option Card
+            VideoSourceCard(
+              title: 'Google Drive',
+              subtitle: 'Putar video dari akun Google Drive Anda',
+              icon: Icons.add_to_drive_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.googleDriveGreen,
+              accentColor: AppColors.googleDriveGreen,
+              badgeText: 'Drive',
+              onTap: _openGoogleDriveBrowser,
+            ),
+
+            // 5. Dailymotion Option Card
+            VideoSourceCard(
+              title: 'Dailymotion',
+              subtitle: 'Video berita, musik, & hiburan',
+              icon: Icons.play_circle_filled_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.dailymotionBlue,
+              accentColor: AppColors.dailymotionBlue,
+              badgeText: 'Trending',
+              onTap: _openDailymotionBrowser,
+            ),
+
+            // 6. Local Video File (Direct P2P Streaming) Option Card
+            VideoSourceCard(
+              title: 'File Video Lokal (P2P)',
+              subtitle: 'Stream video dari memori HP/PC tanpa upload',
+              icon: Icons.folder_special_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.p2pPurple,
+              accentColor: AppColors.p2pPurple,
+              badgeText: 'P2P',
+              onTap: _pickLocalVideoFile,
+            ),
           ],
-          accentColor: AppColors.youtubeRed,
-          badgeText: 'Populer',
-          onTap: _openYouTubeBrowser,
         ),
         const SizedBox(height: 12),
 
-        // 2. Bstation Option Card
-        _buildSourceOptionCard(
-          title: 'Bstation / Bilibili',
-          subtitle: 'Anime & serial video',
-          icon: Icons.tv_rounded,
-          iconColor: Colors.white,
-          iconBackgroundColor: AppColors.bstationBlue,
-          borderColor: AppColors.bstationBlue.withValues(alpha: 0.45),
-          gradientColors: [
-            AppColors.bstationBlue.withValues(alpha: 0.16),
-            AppColors.surfaceElevated,
-          ],
-          accentColor: AppColors.bstationBlue,
-          badgeText: 'Anime',
-          onTap: _openBstationBrowser,
-        ),
-        const SizedBox(height: 12),
-
-        // 3. Dailymotion Option Card
-        _buildSourceOptionCard(
-          title: 'Dailymotion',
-          subtitle: 'Video berita, musik, & hiburan',
-          icon: Icons.play_circle_filled_rounded,
-          iconColor: Colors.white,
-          iconBackgroundColor: AppColors.dailymotionBlue,
-          borderColor: AppColors.dailymotionBlue.withValues(alpha: 0.45),
-          gradientColors: [
-            AppColors.dailymotionBlue.withValues(alpha: 0.16),
-            AppColors.surfaceElevated,
-          ],
-          accentColor: AppColors.dailymotionBlue,
-          badgeText: 'Trending',
-          onTap: _openDailymotionBrowser,
-        ),
-        const SizedBox(height: 12),
-
-        // 4. Google Drive Option Card
-        _buildSourceOptionCard(
-          title: 'Google Drive',
-          subtitle: 'Putar video dari akun Google Drive Anda',
-          icon: Icons.add_to_drive_rounded,
-          iconColor: Colors.white,
-          iconBackgroundColor: AppColors.googleDriveGreen,
-          borderColor: AppColors.googleDriveGreen.withValues(alpha: 0.45),
-          gradientColors: [
-            AppColors.googleDriveGreen.withValues(alpha: 0.16),
-            AppColors.surfaceElevated,
-          ],
-          accentColor: AppColors.googleDriveGreen,
-          badgeText: 'Drive',
-          onTap: _openGoogleDriveBrowser,
-        ),
-        const SizedBox(height: 12),
-
-        // 5. Web Browser (Auto-Detect Video) Option Card
-        _buildSourceOptionCard(
-          title: 'Web Browser',
-          subtitle: 'Buka situs apa saja & deteksi otomatis video yang diputar',
-          icon: Icons.public_rounded,
-          iconColor: Colors.black,
-          iconBackgroundColor: AppColors.webBrowserTeal,
-          borderColor: AppColors.webBrowserTeal.withValues(alpha: 0.5),
-          gradientColors: [
-            AppColors.webBrowserTeal.withValues(alpha: 0.16),
-            AppColors.surfaceElevated,
-          ],
-          accentColor: AppColors.webBrowserTeal,
-          badgeText: 'Auto-Detect',
-          onTap: _openWebBrowser,
-        ),
-        const SizedBox(height: 12),
-
-        // 6. Local Video File (Direct P2P Streaming) Option Card
-        _buildSourceOptionCard(
-          title: 'File Video Lokal (P2P)',
-          subtitle: 'Stream video dari memori HP/PC tanpa upload',
-          icon: Icons.folder_special_rounded,
-          iconColor: Colors.white,
-          iconBackgroundColor: AppColors.p2pPurple,
-          borderColor: AppColors.p2pPurple.withValues(alpha: 0.5),
-          gradientColors: [
-            AppColors.p2pPurple.withValues(alpha: 0.18),
-            AppColors.surfaceElevated,
-          ],
-          accentColor: AppColors.p2pPurple,
-          badgeText: 'P2P',
-          onTap: _pickLocalVideoFile,
-        ),
-        const SizedBox(height: 12),
-
-        // 5. Mirror Device / Screen Sharing Option Card
-        _buildSourceOptionCard(
+        // 7. Mirror Device / Screen Sharing Wide Feature Card
+        VideoSourceFeatureCard(
           title: 'Mirror Layar / Bagikan Layar',
           subtitle: 'Siarkan layar HP Anda via WebRTC langsung ke room',
           icon: Icons.mobile_screen_share_rounded,
           iconColor: Colors.white,
           iconBackgroundColor: AppColors.secondaryNeon,
-          borderColor: AppColors.secondaryNeon.withValues(alpha: 0.5),
-          gradientColors: [
-            AppColors.secondaryNeon.withValues(alpha: 0.18),
-            AppColors.surfaceElevated,
-          ],
           accentColor: AppColors.secondaryNeon,
           badgeText: 'Real-time',
           onTap: _selectScreenShareSource,
@@ -677,31 +520,11 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 20),
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 14),
-          OutlinedButton.icon(
+          NobarinSecondaryButton(
+            label: 'Tetap gunakan: ${_selectedVideoTitle ?? "Video Terpilih"}',
+            icon: Icons.check_circle_rounded,
+            accentColor: AppColors.accentGreen,
             onPressed: () => setState(() => _currentStep = 1),
-            icon: const Icon(Icons.check_circle_rounded,
-                size: 19, color: AppColors.accentGreen),
-            label: Text(
-              'Tetap gunakan: ${_selectedVideoTitle ?? "Video Terpilih"}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.primaryNeon.withValues(alpha: 0.16),
-              side: BorderSide(
-                color: AppColors.primaryNeonLight.withValues(alpha: 0.65),
-                width: 1.4,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
           ),
         ],
       ],
@@ -709,38 +532,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   }
 
   Widget _buildChangeVideoButton() {
-    return InkWell(
-      onTap: () => setState(() => _currentStep = 0),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.primaryNeon.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: AppColors.primaryNeonLight.withValues(alpha: 0.55),
-          ),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.swap_horiz_rounded,
-              size: 16,
-              color: AppColors.primaryNeonLight,
-            ),
-            SizedBox(width: 5),
-            Text(
-              'Ganti Video',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryNeonLight,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return NobarinPillButton(
+      label: 'Ganti Video',
+      icon: Icons.swap_horiz_rounded,
+      onPressed: () => setState(() => _currentStep = 0),
     );
   }
 
@@ -1660,6 +1455,14 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 6),
           TextFormField(
             controller: _titleController,
+            maxLength: 60,
+            buildCounter:
+                (
+                  _, {
+                  required currentLength,
+                  required isFocused,
+                  required maxLength,
+                }) => null,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
               hintText: 'Contoh: Nonton Bareng Teman',
@@ -1672,12 +1475,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                 borderSide: const BorderSide(color: AppColors.border),
               ),
             ),
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Nama room tidak boleh kosong';
-              }
-              return null;
-            },
+            validator: (val) => InputValidators.validateRoomTitle(val),
           ),
           const SizedBox(height: 16),
 
@@ -1693,6 +1491,14 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 6),
           TextFormField(
             controller: _descController,
+            maxLength: 300,
+            buildCounter:
+                (
+                  _, {
+                  required currentLength,
+                  required isFocused,
+                  required maxLength,
+                }) => null,
             style: const TextStyle(color: AppColors.textPrimary),
             maxLines: 2,
             decoration: InputDecoration(
@@ -1795,55 +1601,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           const SizedBox(height: 24),
 
           // Submit Button
-          Container(
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: _isLoading
-                  ? const SizedBox.shrink()
-                  : const Icon(
-                      Icons.play_circle_fill_rounded,
-                      size: 22,
-                      color: Colors.white,
-                    ),
-              label: _isLoading
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Buat Room Sekarang',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-            ),
+          NobarinPrimaryButton(
+            label: 'Buat Room Sekarang',
+            icon: Icons.play_circle_fill_rounded,
+            fontSize: 15,
+            isLoading: _isLoading,
+            onPressed: _isLoading ? null : _submit,
           ),
         ],
       ),
@@ -1904,18 +1667,19 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
                     // Header Bar
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
                       child: Row(
                         children: [
                           if (_currentStep == 1) ...[
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_rounded,
-                                  color: AppColors.textPrimary, size: 22),
+                            NobarinModalIconButton(
+                              icon: Icons.arrow_back_rounded,
+                              iconColor: AppColors.textPrimary,
                               onPressed: _isLoading
                                   ? null
                                   : () => setState(() => _currentStep = 0),
                               tooltip: 'Kembali ke pilih video',
                             ),
+                            const SizedBox(width: 12),
                           ] else ...[
                             Container(
                               padding: const EdgeInsets.all(8),
@@ -1957,9 +1721,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                               ],
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded,
-                                color: AppColors.textSecondary, size: 22),
+                          NobarinModalIconButton(
+                            icon: Icons.close_rounded,
                             onPressed: _isLoading
                                 ? null
                                 : () => Navigator.of(context).pop(),

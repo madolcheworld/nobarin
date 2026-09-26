@@ -14,6 +14,7 @@ import '../../chat/controllers/chat_controller.dart';
 import '../../chat/presentation/chat_panel_widget.dart';
 import '../../chat/presentation/floating_reaction_overlay.dart';
 import '../../../../core/network/p2p_file_stream_service.dart';
+import '../../chat/presentation/widgets/fullscreen_comment_overlay.dart';
 import '../../chat/presentation/widgets/fullscreen_reaction_bar.dart';
 import '../../lobby/presentation/lobby_controller.dart';
 import '../../pip/presentation/pip_button.dart';
@@ -64,6 +65,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   int _unreadChatCount = 0;
   String? _lastObservedMessageId;
+  bool _isFullscreenCommentDrawerOpen = false;
 
   late final TabController _tabController;
   late final UnifiedPlayerController _player;
@@ -83,11 +85,26 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     _player = UnifiedPlayerController();
+    _player.onInterceptExitFullscreen = _interceptExitFullscreen;
     _player.addListener(_onPlayerStateChanged);
     PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
     PipService.instance.pipActionNotifier.addListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(true);
     _fetchAndInitializeRoom();
+  }
+
+  bool _interceptExitFullscreen() {
+    if (_isFullscreenCommentDrawerOpen) {
+      if (mounted) {
+        setState(() {
+          _isFullscreenCommentDrawerOpen = false;
+        });
+      } else {
+        _isFullscreenCommentDrawerOpen = false;
+      }
+      return true;
+    }
+    return false;
   }
 
   void _onTabChanged() {
@@ -104,10 +121,15 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     final latestId = msgs.isNotEmpty ? msgs.last.id : null;
     if (latestId != _lastObservedMessageId) {
       _lastObservedMessageId = latestId;
-      if (_tabController.index != 0 && msgs.isNotEmpty) {
+      final bool isChatHidden = _player.isFullscreen
+          ? !_isFullscreenCommentDrawerOpen
+          : _tabController.index != 0;
+      if (isChatHidden && msgs.isNotEmpty) {
         final lastMsg = msgs.last;
         final currentUserId = _chatController!.currentUser.id;
-        if (lastMsg.userId != currentUserId && !lastMsg.isReaction) {
+        if (lastMsg.userId != currentUserId &&
+            !lastMsg.isReaction &&
+            !lastMsg.isSystem) {
           if (mounted) {
             setState(() {
               _unreadChatCount++;
@@ -118,9 +140,41 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     }
   }
 
+  bool _lastPlayerFullscreen = false;
+  bool _lastPlayerPlaying = false;
+  String _lastPlayerMediaType = '';
+  String _lastPlayerMediaUrl = '';
+  String? _lastPlayerErrorMessage;
+
   void _onPlayerStateChanged() {
-    PipService.instance.updatePlaybackState(_player.isPlaying);
-    if (mounted) setState(() {});
+    _player.onInterceptExitFullscreen ??= _interceptExitFullscreen;
+    final isPlaying = _player.isPlaying;
+    final isFs = _player.isFullscreen;
+    final mediaType = _player.mediaType;
+    final mediaUrl = _player.mediaUrl;
+    final errorMsg = _player.errorMessage;
+
+    if (isPlaying != _lastPlayerPlaying) {
+      _lastPlayerPlaying = isPlaying;
+      PipService.instance.updatePlaybackState(isPlaying);
+    }
+
+    if (!isFs && _isFullscreenCommentDrawerOpen) {
+      _isFullscreenCommentDrawerOpen = false;
+    }
+
+    final fsChanged = isFs != _lastPlayerFullscreen;
+    final mediaChanged =
+        mediaType != _lastPlayerMediaType || mediaUrl != _lastPlayerMediaUrl;
+    final errorChanged = errorMsg != _lastPlayerErrorMessage;
+
+    if (fsChanged || mediaChanged || errorChanged) {
+      _lastPlayerFullscreen = isFs;
+      _lastPlayerMediaType = mediaType;
+      _lastPlayerMediaUrl = mediaUrl;
+      _lastPlayerErrorMessage = errorMsg;
+      if (mounted) setState(() {});
+    }
   }
 
   void _onPipActionReceived() {
@@ -946,18 +1000,27 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
     // Fullscreen dedicated view
     if (isFullscreen) {
+      final isScreenSharing =
+          _screenShareController?.isScreenSharingActive == true;
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) async {
           if (didPop) return;
+          if (_isFullscreenCommentDrawerOpen) {
+            setState(() {
+              _isFullscreenCommentDrawerOpen = false;
+            });
+            return;
+          }
           await _player.exitFullscreen();
         },
         child: Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: Colors.black,
           body: Stack(
             fit: StackFit.expand,
             children: [
-              if (_screenShareController?.isScreenSharingActive == true)
+              if (isScreenSharing) ...[
                 ScreenShareView(
                   key: _screenShareKey,
                   controller: _screenShareController!,
@@ -966,8 +1029,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                     await _player.exitFullscreen();
                   },
                   roomTitle: currentRoom.title,
-                )
-              else
+                ),
+                if (_chatController != null)
+                  Positioned.fill(
+                    child: _buildVideoOverlays(
+                      context,
+                      isFullscreen: true,
+                      currentRoom: currentRoom,
+                    ),
+                  ),
+              ] else
                 UnifiedPlayerView(
                   key: _playerKey,
                   player: _player,
@@ -976,17 +1047,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   onExit: _handleExitRoom,
                   title: currentRoom.title,
                   showTopBar: true,
-                ),
-              if (_chatController != null) ...[
-                Positioned.fill(
-                  child: FloatingReactionOverlay(
-                    chatController: _chatController!,
+                  overlayBuilder: (ctx, isFs) => _buildVideoOverlays(
+                    ctx,
+                    isFullscreen: isFs,
+                    currentRoom: currentRoom,
                   ),
                 ),
-                FullscreenReactionBar(
-                  chatController: _chatController!,
-                ),
-              ],
             ],
           ),
         ),
@@ -1182,6 +1248,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
               child: LayoutBuilder(
           builder: (context, constraints) {
             final isDesktop = constraints.maxWidth >= 850;
+            final isScreenSharing =
+                _screenShareController?.isScreenSharingActive == true;
 
             if (isDesktop) {
               // Desktop / Landscape layout: Large video on left, Sidebar on right
@@ -1195,15 +1263,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         Expanded(
                           child: Stack(
                             children: [
-                              if (_screenShareController?.isScreenSharingActive == true)
+                              if (isScreenSharing) ...[
                                 ScreenShareView(
                                   key: _screenShareKey,
                                   controller: _screenShareController!,
                                   isHost: _roomController?.isHost ?? false,
                                   onExit: _handleExitRoom,
                                   roomTitle: currentRoom.title,
-                                )
-                              else
+                                ),
+                                if (_chatController != null)
+                                  Positioned.fill(
+                                    child: FloatingReactionOverlay(
+                                      chatController: _chatController!,
+                                    ),
+                                  ),
+                              ] else
                                 UnifiedPlayerView(
                                   key: _playerKey,
                                   player: _player,
@@ -1212,11 +1286,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                                   onExit: _handleExitRoom,
                                   title: currentRoom.title,
                                   showTopBar: false,
-                                ),
-                              if (_chatController != null)
-                                Positioned.fill(
-                                  child: FloatingReactionOverlay(
-                                    chatController: _chatController!,
+                                  overlayBuilder: (ctx, isFs) =>
+                                      _buildVideoOverlays(
+                                    ctx,
+                                    isFullscreen: isFs,
+                                    currentRoom: currentRoom,
                                   ),
                                 ),
                             ],
@@ -1258,15 +1332,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 // Top Video or Screen Share with scoped Floating Reaction Overlay
                 Stack(
                   children: [
-                    if (_screenShareController?.isScreenSharingActive == true)
+                    if (isScreenSharing) ...[
                       ScreenShareView(
                         key: _screenShareKey,
                         controller: _screenShareController!,
                         isHost: _roomController?.isHost ?? false,
                         onExit: _handleExitRoom,
                         roomTitle: currentRoom.title,
-                      )
-                    else
+                      ),
+                      if (_chatController != null)
+                        Positioned.fill(
+                          child: FloatingReactionOverlay(
+                            chatController: _chatController!,
+                          ),
+                        ),
+                    ] else
                       UnifiedPlayerView(
                         key: _playerKey,
                         player: _player,
@@ -1275,11 +1355,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                         onExit: _handleExitRoom,
                         title: currentRoom.title,
                         showTopBar: false,
-                      ),
-                    if (_chatController != null)
-                      Positioned.fill(
-                        child: FloatingReactionOverlay(
-                          chatController: _chatController!,
+                        overlayBuilder: (ctx, isFs) => _buildVideoOverlays(
+                          ctx,
+                          isFullscreen: isFs,
+                          currentRoom: currentRoom,
                         ),
                       ),
                   ],
@@ -1315,6 +1394,64 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   ),
 ),
 );
+  }
+
+  Widget _buildVideoOverlays(
+    BuildContext context, {
+    required bool isFullscreen,
+    required RoomModel currentRoom,
+  }) {
+    if (_chatController == null) {
+      return const SizedBox.shrink();
+    }
+    if (!isFullscreen) {
+      return FloatingReactionOverlay(
+        chatController: _chatController!,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: FloatingReactionOverlay(
+            chatController: _chatController!,
+          ),
+        ),
+        FullscreenReactionBar(
+          chatController: _chatController!,
+          isCommentDrawerOpen: _isFullscreenCommentDrawerOpen,
+          unreadCommentCount: _unreadChatCount,
+          onToggleComments: () {
+            setState(() {
+              _isFullscreenCommentDrawerOpen = !_isFullscreenCommentDrawerOpen;
+              if (_isFullscreenCommentDrawerOpen) {
+                _unreadChatCount = 0;
+              }
+            });
+          },
+        ),
+        Positioned.fill(
+          child: FullscreenCommentOverlay(
+            chatController: _chatController!,
+            isDrawerOpen: _isFullscreenCommentDrawerOpen,
+            onOpenDrawer: () {
+              setState(() {
+                _isFullscreenCommentDrawerOpen = true;
+                _unreadChatCount = 0;
+              });
+            },
+            onCloseDrawer: () {
+              setState(() {
+                _isFullscreenCommentDrawerOpen = false;
+              });
+            },
+            hostId: currentRoom.hostId,
+            hostName: currentRoom.hostName,
+            coHostUserIds: _roomController?.coHostUserIds ?? {},
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildSocialHub({

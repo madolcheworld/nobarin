@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/utils/app_haptics.dart';
+import '../../../core/utils/input_validators.dart';
 import '../../auth/domain/user_profile.dart';
 import '../models/chat_message.dart';
 
@@ -68,6 +69,17 @@ class ChatController extends ChangeNotifier {
   Stream<FloatingReaction> get reactionsStream =>
       _reactionsStreamController.stream;
 
+  final StreamController<ChatMessage> _incomingMessageStreamController =
+      StreamController<ChatMessage>.broadcast();
+  Stream<ChatMessage> get incomingMessageStream =>
+      _incomingMessageStreamController.stream;
+
+  ChatMessage? _pinnedMessage;
+  ChatMessage? get pinnedMessage =>
+      _pinnedMessage != null && !isUserBlocked(_pinnedMessage!.userId)
+          ? _pinnedMessage
+          : null;
+
   bool _showFloatingReactions = true;
   bool get showFloatingReactions => _showFloatingReactions;
 
@@ -88,6 +100,9 @@ class ChatController extends ChangeNotifier {
   DateTime? _lastReactionTime;
   int _localReactionCombo = 1;
   Timer? _reactionBroadcastDebounceTimer;
+
+  DateTime? _lastMessageSentAt;
+  int _rapidMessageSpamCount = 0;
 
   List<String> get typingUsernames => _typingUsers.values.toList();
   bool get hasTypingUsers => _typingUsers.isNotEmpty;
@@ -170,6 +185,9 @@ class ChatController extends ChangeNotifier {
 
           _messages.add(message);
           _pruneOldMessages();
+          if (message.isText && !isUserBlocked(message.userId) && !_isDisposed) {
+            _incomingMessageStreamController.add(message);
+          }
           notifyListeners();
         },
       );
@@ -187,6 +205,14 @@ class ChatController extends ChangeNotifier {
         callback: (payload) {
           if (_isDisposed) return;
           handleMessageDeletedBroadcast(payload);
+        },
+      );
+
+      _chatChannel!.onBroadcast(
+        event: 'PIN_MESSAGE',
+        callback: (payload) {
+          if (_isDisposed) return;
+          handlePinMessageBroadcast(payload);
         },
       );
 
@@ -354,6 +380,9 @@ class ChatController extends ChangeNotifier {
   @visibleForTesting
   void addMessage(ChatMessage message) {
     _messages.add(message);
+    if (message.isText && !isUserBlocked(message.userId) && !_isDisposed) {
+      _incomingMessageStreamController.add(message);
+    }
     notifyListeners();
   }
 
@@ -417,9 +446,75 @@ class ChatController extends ChangeNotifier {
     final msgId = data['message_id'] as String?;
     if (msgId == null) return;
     final index = _messages.indexWhere((m) => m.id == msgId);
+    bool changed = false;
     if (index != -1) {
       _messages.removeAt(index);
+      changed = true;
+    }
+    if (_pinnedMessage?.id == msgId) {
+      _pinnedMessage = null;
+      changed = true;
+    }
+    if (changed) {
       notifyListeners();
+    }
+  }
+
+  @visibleForTesting
+  void handlePinMessageBroadcast(Map<String, dynamic> raw) {
+    final data = (raw['payload'] is Map)
+        ? Map<String, dynamic>.from(raw['payload'] as Map)
+        : raw;
+    final action = data['action'] as String?;
+    if (action == 'pin' && data['message'] is Map) {
+      _pinnedMessage = ChatMessage.fromJson(
+        Map<String, dynamic>.from(data['message'] as Map),
+      );
+      notifyListeners();
+    } else if (action == 'unpin') {
+      _pinnedMessage = null;
+      notifyListeners();
+    }
+  }
+
+  /// Pins a message to the top of the chat panel and broadcasts to participants
+  Future<void> pinMessage(ChatMessage message) async {
+    if (message.isSystem || message.isReaction) return;
+    _pinnedMessage = message;
+    notifyListeners();
+
+    if (_chatChannel != null && !_isDisposed) {
+      try {
+        await _chatChannel!.sendBroadcastMessage(
+          event: 'PIN_MESSAGE',
+          payload: {
+            'action': 'pin',
+            'message': message.toJson(),
+          },
+        );
+      } catch (e) {
+        debugPrint('[ChatController] Error broadcasting pin message: $e');
+      }
+    }
+  }
+
+  /// Unpins the currently pinned message and broadcasts to participants
+  Future<void> unpinMessage() async {
+    if (_pinnedMessage == null) return;
+    _pinnedMessage = null;
+    notifyListeners();
+
+    if (_chatChannel != null && !_isDisposed) {
+      try {
+        await _chatChannel!.sendBroadcastMessage(
+          event: 'PIN_MESSAGE',
+          payload: {
+            'action': 'unpin',
+          },
+        );
+      } catch (e) {
+        debugPrint('[ChatController] Error broadcasting unpin message: $e');
+      }
     }
   }
 
@@ -436,6 +531,9 @@ class ChatController extends ChangeNotifier {
     final index = _messages.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
     _messages.removeAt(index);
+    if (_pinnedMessage?.id == messageId) {
+      _pinnedMessage = null;
+    }
     notifyListeners();
 
     if (_chatChannel != null) {
@@ -460,6 +558,13 @@ class ChatController extends ChangeNotifier {
         debugPrint('[ChatController] Error deleting message from DB: $dbErr');
       }
     }
+  }
+
+  void _stripTransientDbFields(Map<String, dynamic> payload) {
+    payload.remove('reactions');
+    payload.remove('reply_to_id');
+    payload.remove('reply_to_username');
+    payload.remove('reply_to_content');
   }
 
   /// Retries sending a previously failed message
@@ -487,7 +592,7 @@ class ChatController extends ChangeNotifier {
 
         if (supabase != null) {
           final payload = msg.toJson();
-          payload.remove('reactions');
+          _stripTransientDbFields(payload);
           if (supabase!.auth.currentUser == null ||
               supabase!.auth.currentUser!.id != currentUser.id) {
             payload.remove('user_id');
@@ -519,18 +624,28 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Sends a chat message with length validation and sanitization
-  Future<void> sendMessage(String text) async {
-    setTyping(false);
-    var clean = text.trim();
-    if (clean.isEmpty) return;
-
-    // Enforce 500 characters max
-    if (clean.length > 500) {
-      clean = clean.substring(0, 500).trim();
+  /// Sends a chat message with length validation, sanitization, and optional reply quote
+  Future<void> sendMessage(
+    String text, {
+    ChatMessage? replyTo,
+  }) async {
+    // Rate-limiting / Anti-flood protection: max 4 rapid messages within 400ms burst
+    final now = DateTime.now();
+    if (_lastMessageSentAt != null &&
+        now.difference(_lastMessageSentAt!).inMilliseconds < 400) {
+      _rapidMessageSpamCount++;
+      if (_rapidMessageSpamCount > 4) {
+        debugPrint('[ChatController] Rapid message spam burst throttled');
+        return;
+      }
+    } else {
+      _rapidMessageSpamCount = 0;
     }
-    // Collapse excessive consecutive newlines (max 2)
-    clean = clean.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    _lastMessageSentAt = now;
+
+    setTyping(false);
+    final clean = InputValidators.sanitizeChatMessage(text);
+    if (clean.isEmpty) return;
 
     final msg = ChatMessage(
       id: const Uuid().v4(),
@@ -542,10 +657,16 @@ class ChatController extends ChangeNotifier {
       type: 'text',
       createdAt: DateTime.now(),
       status: MessageStatus.sending,
+      replyToId: replyTo?.id,
+      replyToUsername: replyTo?.username,
+      replyToContent: replyTo?.content,
     );
 
     _messages.add(msg);
     _pruneOldMessages();
+    if (!_isDisposed) {
+      _incomingMessageStreamController.add(msg);
+    }
     notifyListeners();
 
     if (_chatChannel != null) {
@@ -564,7 +685,7 @@ class ChatController extends ChangeNotifier {
 
         if (supabase != null) {
           final payload = msg.toJson();
-          payload.remove('reactions');
+          _stripTransientDbFields(payload);
           if (supabase!.auth.currentUser == null ||
               supabase!.auth.currentUser!.id != currentUser.id) {
             payload.remove('user_id');
@@ -609,7 +730,7 @@ class ChatController extends ChangeNotifier {
     _lastReactionEmoji = emoji;
     _lastReactionTime = now;
 
-    final combo = _localReactionCombo;
+    final combo = _localReactionCombo.clamp(1, 99);
 
     // Trigger tactile haptics only for the local user tapping the reaction
     if (combo >= 8) {
@@ -815,6 +936,7 @@ class ChatController extends ChangeNotifier {
     _typingTimers.clear();
     _typingUsers.clear();
     _reactionsStreamController.close();
+    _incomingMessageStreamController.close();
     if (_chatChannel != null && supabase != null) {
       supabase!.removeChannel(_chatChannel!);
     }

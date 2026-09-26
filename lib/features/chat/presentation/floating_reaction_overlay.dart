@@ -89,25 +89,27 @@ class _FloatingReactionOverlayState extends State<FloatingReactionOverlay> {
       return const SizedBox.shrink();
     }
 
-    return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final height = constraints.maxHeight;
+    return RepaintBoundary(
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final height = constraints.maxHeight;
 
-          return Stack(
-            clipBehavior: Clip.none,
-            children: _items.map((item) {
-              return _PhysicsReactionWidget(
-                key: ValueKey(item.id),
-                item: item,
-                containerWidth: width,
-                containerHeight: height,
-                onComplete: () => _removeItem(item.id),
-              );
-            }).toList(),
-          );
-        },
+            return Stack(
+              clipBehavior: Clip.none,
+              children: _items.map((item) {
+                return _PhysicsReactionWidget(
+                  key: ValueKey(item.id),
+                  item: item,
+                  containerWidth: width,
+                  containerHeight: height,
+                  onComplete: () => _removeItem(item.id),
+                );
+              }).toList(),
+            );
+          },
+        ),
       ),
     );
   }
@@ -228,14 +230,15 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
         return Positioned(
           left: currentX,
           bottom: 24 + yOffset,
-          child: Opacity(
-            opacity: opacity,
-            child: Transform.rotate(
-              angle: rotation,
-              child: Transform.scale(
-                scale: scale,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          child: RepaintBoundary(
+            child: Opacity(
+              opacity: opacity,
+              child: Transform.rotate(
+                angle: rotation,
+                child: Transform.scale(
+                  scale: scale,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                   children: [
                     // Combo Badge
                     if (item.comboCount > 1)
@@ -260,7 +263,8 @@ class _PhysicsReactionWidgetState extends State<_PhysicsReactionWidget>
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

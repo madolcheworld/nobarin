@@ -70,8 +70,13 @@ class WebBrowserPlayerController extends ChangeNotifier {
   /// Strips internal `webbrowser://` prefix if present and returns a valid HTTP(S) URL.
   static String normalizeWebUrl(String rawUrl) {
     var trimmed = rawUrl.trim();
-    if (trimmed.startsWith('webbrowser://')) {
-      trimmed = trimmed.substring('webbrowser://'.length);
+    while (trimmed.startsWith('webbrowser://')) {
+      trimmed = trimmed.substring('webbrowser://'.length).trim();
+    }
+    if (trimmed.startsWith('https:/') && !trimmed.startsWith('https://')) {
+      trimmed = 'https://${trimmed.substring('https:/'.length)}';
+    } else if (trimmed.startsWith('http:/') && !trimmed.startsWith('http://')) {
+      trimmed = 'http://${trimmed.substring('http:/'.length)}';
     }
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
       trimmed = 'https://$trimmed';
@@ -208,7 +213,67 @@ class WebBrowserPlayerController extends ChangeNotifier {
         lowerHost.contains('playcdn.') ||
         lowerHost.contains('hydrax.');
 
-    if (requiresIframeWrapper) {
+    if (lowerPath.endsWith('.m3u8')) {
+      debugPrint('[WebBrowserPlayer] Loading .m3u8 via Hls.js wrapper: $targetUri');
+      final safeUrlJs = jsonEncode(targetUri.toString());
+      final hlsHtml = '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
+video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; object-fit: contain; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+</head>
+<body>
+<video id="video" class="__nobarin-active-video" playsinline autoplay></video>
+<script>
+(function() {
+  var video = document.getElementById('video');
+  var src = $safeUrlJs;
+  if (window.Hls && Hls.isSupported()) {
+    var hls = new Hls({ enableWorker: true });
+    window.hls = hls;
+    window.__nobarHlsInstance = hls;
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+      video.play().catch(function() {
+        video.muted = true;
+        video.play().catch(function(){});
+      });
+      if (window.NobarinWebBridge && Array.isArray(hls.levels)) {
+        var qList = [];
+        for (var i = 0; i < hls.levels.length; i++) {
+          var h = hls.levels[i].height || 0;
+          if (h >= 144) qList.push({ id: String(h), height: h, label: h + 'p' });
+        }
+        if (qList.length > 0) {
+          window.NobarinWebBridge.postMessage(JSON.stringify({
+            event: 'qualities',
+            qualities: qList
+          }));
+        }
+      }
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = src;
+    video.addEventListener('loadedmetadata', function() {
+      video.play().catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
+''';
+      await controller.loadHtmlString(
+        hlsHtml,
+        baseUrl: '${targetUri.scheme}://${targetUri.host}/',
+      );
+    } else if (requiresIframeWrapper) {
       final safeSrc = const HtmlEscape().convert(targetUri.toString());
       final wrapperHtml = '''
 <!DOCTYPE html>
@@ -513,10 +578,11 @@ iframe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: 
               video.addEventListener('loadedmetadata', reportResolution);
               video.addEventListener('resize', reportResolution);
               reportResolution();
-              detectWebPlayerQualities();
             }
+            detectWebPlayerQualities();
             return;
           }
+          detectWebPlayerQualities();
 
           // Fallback: if no direct <video> in top document, check for prominent video <iframe>
           var iframes = document.querySelectorAll('iframe');
@@ -549,44 +615,85 @@ iframe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: 
           }
         }
 
-        // Detect qualities from common web players (JWPlayer, Plyr, HLS.js, DOM menus)
+        // Detect qualities from common web players (Hls.js, JWPlayer, Plyr, DOM menus)
         function detectWebPlayerQualities() {
           try {
             var detected = [];
             function addQ(idStr, hNum, labelStr) {
               if (!idStr || !hNum || isNaN(hNum) || hNum < 144) return;
               for (var i = 0; i < detected.length; i++) {
-                if (detected[i].id === String(idStr)) return;
+                if (detected[i].id === String(idStr) || detected[i].height === hNum) return;
               }
               detected.push({ id: String(idStr), height: hNum, label: labelStr || (hNum + 'p') });
             }
 
-            // JWPlayer API
-            if (typeof window.jwplayer === 'function') {
-              var jw = window.jwplayer();
-              if (jw && typeof jw.getQualityLevels === 'function') {
-                var levels = jw.getQualityLevels();
-                if (Array.isArray(levels)) {
-                  for (var j = 0; j < levels.length; j++) {
-                    var lv = levels[j];
-                    var h = lv.height || parseInt(String(lv.label || '').replace(/[^0-9]/g, ''), 10);
-                    if (h >= 144) addQ(String(j), h, lv.label || (h + 'p'));
+            function inspectWinForQualities(win) {
+              try {
+                // 1. Hook Hls.prototype.loadSource & trigger if Hls constructor exists
+                if (win.Hls && win.Hls.prototype && !win.Hls.prototype.__nobarHooked) {
+                  win.Hls.prototype.__nobarHooked = true;
+                  var origLoad = win.Hls.prototype.loadSource;
+                  if (typeof origLoad === 'function') {
+                    win.Hls.prototype.loadSource = function(url) {
+                      win.__nobarHlsInstance = this;
+                      return origLoad.apply(this, arguments);
+                    };
+                  }
+                  var origTrigger = win.Hls.prototype.trigger;
+                  if (typeof origTrigger === 'function') {
+                    win.Hls.prototype.trigger = function() {
+                      if (this && Array.isArray(this.levels) && this.levels.length > 0) {
+                        win.__nobarHlsInstance = this;
+                      }
+                      return origTrigger.apply(this, arguments);
+                    };
                   }
                 }
-              }
+                var hls = win.__nobarHlsInstance || win.hls || (win.player && win.player.hls);
+                if (hls && Array.isArray(hls.levels)) {
+                  for (var l = 0; l < hls.levels.length; l++) {
+                    var hLv = hls.levels[l];
+                    var hH = hLv.height || 0;
+                    if (hH >= 144) addQ(String(hH), hH, hH + 'p');
+                  }
+                }
+
+                // 2. JWPlayer API
+                if (typeof win.jwplayer === 'function') {
+                  var jw = win.jwplayer();
+                  if (jw && typeof jw.getQualityLevels === 'function') {
+                    var levels = jw.getQualityLevels();
+                    if (Array.isArray(levels)) {
+                      for (var j = 0; j < levels.length; j++) {
+                        var lv = levels[j];
+                        var h = lv.height || parseInt(String(lv.label || '').replace(/[^0-9]/g, ''), 10);
+                        if (h >= 144) addQ(String(j), h, lv.label || (h + 'p'));
+                      }
+                    }
+                  }
+                }
+
+                // 3. DOM quality menu items & HTML5 <video><source size/res> tags
+                if (win.document) {
+                  var items = win.document.querySelectorAll('[class*="quality"] li, [class*="quality-item"], [data-quality], [data-resolution], video source[size], video source[res], video source[data-res]');
+                  items.forEach(function(el) {
+                    var txt = (el.getAttribute('size') || el.getAttribute('res') || el.getAttribute('data-res') || el.getAttribute('data-quality') || el.getAttribute('data-resolution') || el.getAttribute('label') || el.textContent || '').trim();
+                    var m = txt.match(/(\\d{3,4})[pP]?/);
+                    if (m) {
+                      var h = parseInt(m[1], 10);
+                      if (h >= 144 && h <= 4320) addQ(String(h), h, h + 'p');
+                    }
+                  });
+                }
+              } catch (_) {}
             }
 
-            // DOM quality menu items
-            if (detected.length === 0) {
-              var items = document.querySelectorAll('[class*="quality"] li, [class*="quality-item"], [data-quality], [data-resolution]');
-              items.forEach(function(el) {
-                var txt = (el.textContent || el.getAttribute('data-quality') || el.getAttribute('data-resolution') || '').trim();
-                var m = txt.match(/(\\d{3,4})[pP]?/);
-                if (m) {
-                  var h = parseInt(m[1], 10);
-                  if (h >= 144 && h <= 4320) addQ(String(h), h, h + 'p');
-                }
-              });
+            inspectWinForQualities(window);
+            var iframes = document.querySelectorAll('iframe');
+            for (var f = 0; f < iframes.length; f++) {
+              try {
+                if (iframes[f].contentWindow) inspectWinForQualities(iframes[f].contentWindow);
+              } catch (_) {}
             }
 
             if (detected.length > 0 && window.NobarinWebBridge) {
@@ -700,6 +807,9 @@ iframe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: 
             if (normH != null && normH > 0 && normH != _detectedHeight) {
               _detectedHeight = normH;
               _detectedWidth = w;
+              debugPrint(
+                '[WebBrowserPlayer] Resolution changed: ${w}x$h (norm=${normH}p)',
+              );
               notifyListeners();
             }
             break;
@@ -834,7 +944,11 @@ iframe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: 
       if (b.isAuto) return 1;
       return (b.height ?? 0).compareTo(a.height ?? 0);
     });
+    final prevIds = _availableQualities.map((q) => q.id).join(',');
+    final nextIds = detected.map((q) => q.id).join(',');
+    if (prevIds == nextIds) return;
     _availableQualities = detected;
+    debugPrint('[WebBrowserPlayer] Detected qualities: $nextIds');
     notifyListeners();
     onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
   }
@@ -847,35 +961,107 @@ iframe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: 
         label: '${qualityId}p',
       ),
     );
+    debugPrint('[WebBrowserPlayer] setQuality($qualityId)');
     notifyListeners();
     onQualitySelectedChanged?.call(_selectedQuality!);
 
     if (_webViewController != null) {
       try {
+        final targetHeight = _selectedQuality?.height ?? int.tryParse(qualityId) ?? 0;
         await _webViewController!.runJavaScript('''
-          (function(targetId) {
-            try {
-              if (typeof window.jwplayer === 'function') {
-                var jw = window.jwplayer();
-                if (jw && typeof jw.setCurrentQuality === 'function') {
-                  var idx = targetId === 'auto' ? 0 : parseInt(targetId, 10);
-                  if (!isNaN(idx)) {
-                    jw.setCurrentQuality(idx);
-                    return;
+          (function(targetId, targetHeightNum) {
+            function applyQualityInWin(win) {
+              try {
+                // 1. Hls.js instance if present
+                var hls = win.__nobarHlsInstance || win.hls || (win.player && win.player.hls);
+                if (hls && Array.isArray(hls.levels)) {
+                  if (targetId === 'auto') {
+                    hls.currentLevel = -1;
+                    hls.nextLevel = -1;
+                    hls.loadLevel = -1;
+                    return true;
+                  }
+                  for (var l = 0; l < hls.levels.length; l++) {
+                    if (String(l) === targetId ||
+                        hls.levels[l].height === targetHeightNum ||
+                        String(hls.levels[l].height) === targetId) {
+                      hls.currentLevel = l;
+                      hls.nextLevel = l;
+                      hls.loadLevel = l;
+                      return true;
+                    }
                   }
                 }
-              }
-              var items = document.querySelectorAll('[class*="quality"] li, [class*="quality-item"], [data-quality], [data-resolution]');
-              for (var i = 0; i < items.length; i++) {
-                var el = items[i];
-                var txt = (el.textContent || el.getAttribute('data-quality') || el.getAttribute('data-resolution') || '').toLowerCase();
-                if ((targetId === 'auto' && txt.indexOf('auto') !== -1) || txt.indexOf(targetId) !== -1) {
-                  el.click();
+
+                // 2. JWPlayer API (match by level index OR by height/label)
+                if (typeof win.jwplayer === 'function') {
+                  var jw = win.jwplayer();
+                  if (jw && typeof jw.setCurrentQuality === 'function') {
+                    if (targetId === 'auto') {
+                      jw.setCurrentQuality(0);
+                      return true;
+                    }
+                    var qList = typeof jw.getQualityLevels === 'function' ? jw.getQualityLevels() : null;
+                    if (Array.isArray(qList)) {
+                      for (var j = 0; j < qList.length; j++) {
+                        var ql = qList[j];
+                        var qH = ql.height || 0;
+                        var qLbl = String(ql.label || '').toLowerCase();
+                        if (String(j) === targetId ||
+                            (targetHeightNum > 0 && qH === targetHeightNum) ||
+                            qLbl.indexOf(targetId.toLowerCase()) !== -1 ||
+                            (targetHeightNum > 0 && qLbl.indexOf(String(targetHeightNum)) !== -1)) {
+                          jw.setCurrentQuality(j);
+                          return true;
+                        }
+                      }
+                    }
+                    var idx = parseInt(targetId, 10);
+                    if (!isNaN(idx) && idx >= 0 && (!qList || idx < qList.length)) {
+                      jw.setCurrentQuality(idx);
+                      return true;
+                    }
+                  }
+                }
+
+                // 3. Plyr / ArtPlayer / generic player instance
+                if (win.player && typeof win.player === 'object') {
+                  if ('quality' in win.player && targetHeightNum > 0) {
+                    win.player.quality = targetHeightNum;
+                    return true;
+                  }
+                }
+
+                // 4. DOM quality selector items
+                var doc = win.document;
+                if (doc) {
+                  var items = doc.querySelectorAll('[class*="quality"] li, [class*="quality-item"], [data-quality], [data-resolution], .vjs-menu-item');
+                  for (var i = 0; i < items.length; i++) {
+                    var el = items[i];
+                    var txt = (el.textContent || el.getAttribute('data-quality') || el.getAttribute('data-resolution') || '').toLowerCase().trim();
+                    if ((targetId === 'auto' && (txt.indexOf('auto') !== -1 || txt.indexOf('otomatis') !== -1)) ||
+                        txt === targetId.toLowerCase() ||
+                        txt.indexOf(targetId.toLowerCase()) !== -1 ||
+                        (targetHeightNum > 0 && txt.indexOf(String(targetHeightNum)) !== -1)) {
+                      el.click();
+                      return true;
+                    }
+                  }
+                }
+              } catch (_) {}
+              return false;
+            }
+
+            if (applyQualityInWin(window)) return;
+            var iframes = document.querySelectorAll('iframe');
+            for (var f = 0; f < iframes.length; f++) {
+              try {
+                if (iframes[f].contentWindow && applyQualityInWin(iframes[f].contentWindow)) {
                   return;
                 }
-              }
-            } catch (_) {}
-          })('$qualityId');
+              } catch (_) {}
+            }
+          })('$qualityId', $targetHeight);
         ''');
       } catch (_) {}
     }

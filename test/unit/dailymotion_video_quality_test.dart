@@ -82,6 +82,23 @@ void main() {
       expect(keys, equals(['380', '720']));
     });
 
+    test('3b. extractQualitiesFromMetadataJson extracts resolution keys from stream_formats when qualities only has auto', () {
+      final keys = DailymotionPlayerController.extractQualitiesFromMetadataJson({
+        'qualities': {
+          'auto': [
+            {'type': 'application/x-mpegURL', 'url': 'https://cdndirector.dailymotion.com/master.m3u8'}
+          ]
+        },
+        'stream_formats': {
+          '380': 'fMP4',
+          '480': 'fMP4',
+          '720': 'fMP4'
+        }
+      });
+
+      expect(keys, equals(['380', '480', '720']));
+    });
+
     test('4. setQuality switches quality, notifies listeners, and calls callbacks', () async {
       // First populate qualities
       controller.handleBridgeMessageForTesting(jsonEncode({
@@ -165,19 +182,69 @@ void main() {
       expect(callbackQuality?.id, equals('720'));
     });
 
-    test('8. Bridge message "qualities" with map objects handles attributes cleanly', () {
+    test('8. Bridge message "qualities" with map objects handles attributes and preserves streamUrl cleanly', () {
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
         'qualities': [
-          {'id': '1080p', 'quality': '1080'},
-          {'id': '720p', 'quality': '720'},
+          {
+            'id': '1080',
+            'quality': '1080',
+            'streamUrl': 'https://proxy.dailymotion.com/1080.m3u8',
+          },
+          {
+            'id': '720',
+            'quality': '720',
+            'streamUrl': 'https://proxy.dailymotion.com/720.m3u8',
+          },
         ],
       }));
 
       expect(controller.availableQualities.length, equals(3)); // Auto + 1080 + 720
       expect(controller.availableQualities.first.isAuto, isTrue);
       expect(controller.availableQualities[1].height, equals(1080));
+      expect(
+        controller.availableQualities[1].streamUrl,
+        equals('https://proxy.dailymotion.com/1080.m3u8'),
+      );
       expect(controller.availableQualities[2].height, equals(720));
+      expect(
+        controller.availableQualities[2].streamUrl,
+        equals('https://proxy.dailymotion.com/720.m3u8'),
+      );
+
+      // Subsequent bridge update with plain strings preserves previously resolved streamUrls
+      controller.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'qualities',
+        'qualities': ['1080', '720'],
+      }));
+      expect(
+        controller.availableQualities[1].streamUrl,
+        equals('https://proxy.dailymotion.com/1080.m3u8'),
+      );
+      expect(
+        controller.availableQualities[2].streamUrl,
+        equals('https://proxy.dailymotion.com/720.m3u8'),
+      );
+    });
+
+    test('9. resolveTargetUriForTesting includes api=postMessage and optional quality parameter', () {
+      final defaultUri = controller.resolveTargetUriForTesting(
+        'https://www.dailymotion.com/video/x84sh87',
+        autoPlay: true,
+        startSeconds: 42.0,
+      );
+      expect(defaultUri.toString(), contains('video=x84sh87'));
+      expect(defaultUri.toString(), contains('api=postMessage'));
+      expect(defaultUri.toString(), contains('startTime=42'));
+      expect(defaultUri.toString(), isNot(contains('quality=')));
+
+      final q720Uri = controller.resolveTargetUriForTesting(
+        'https://www.dailymotion.com/video/x84sh87',
+        autoPlay: true,
+        startSeconds: 42.0,
+        quality: '720',
+      );
+      expect(q720Uri.toString(), contains('quality=720'));
     });
   });
 

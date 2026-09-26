@@ -286,5 +286,27 @@ void main() {
       expect(queueController.items.first.title, 'Video 2');
       expect(player.mediaUrl, 'https://example.com/video1.mp4');
     });
+
+    test('enforces maxQueueItems capacity limit (50 items)', () async {
+      for (int i = 0; i < QueueController.maxQueueItems; i++) {
+        await queueController.addToQueue(
+          mediaType: 'direct_url',
+          mediaUrl: 'https://example.com/v$i.mp4',
+          title: 'Video $i',
+        );
+      }
+      expect(queueController.count, QueueController.maxQueueItems);
+      expect(queueController.isQueueFull, isTrue);
+
+      // Attempt to add 51st item
+      await queueController.addToQueue(
+        mediaType: 'direct_url',
+        mediaUrl: 'https://example.com/overflow.mp4',
+        title: 'Overflow Video',
+      );
+
+      expect(queueController.count, QueueController.maxQueueItems);
+      expect(queueController.errorMessage, contains('Antrean penuh'));
+    });
   });
 }

@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/video_title_resolver.dart';
+import '../../../core/widgets/nobarin_button.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/queue_controller.dart';
 import '../../room/controllers/sync_controller.dart';
@@ -971,115 +972,28 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
 
             // Action Buttons per Mode
             if (widget.mode == YouTubeBrowserMode.queueOnly) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: '+ Pilih & Tambah ke Antrean',
+                icon: Icons.playlist_add_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyAddToQueue,
-                  icon: const Icon(Icons.playlist_add_rounded,
-                      size: 22, color: Colors.white),
-                  label: const Text(
-                    '+ Pilih & Tambah ke Antrean',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyAddToQueue,
               ),
             ] else if (widget.mode == YouTubeBrowserMode.createRoom) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: 'Pilih Video Ini & Buat Room',
+                icon: Icons.check_circle_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyWatchNow,
-                  icon: const Icon(Icons.check_circle_rounded,
-                      size: 21, color: Colors.white),
-                  label: const Text(
-                    'Pilih Video Ini & Buat Room',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyWatchNow,
               ),
             ] else if (widget.mode == YouTubeBrowserMode.watchNow) ...[
-              Container(
+              NobarinPrimaryButton(
+                label: 'Pilih & Putar Video Ini',
+                icon: Icons.play_circle_fill_rounded,
                 height: 48,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _applyWatchNow,
-                  icon: const Icon(Icons.play_circle_fill_rounded,
-                      size: 22, color: Colors.white),
-                  label: const Text(
-                    'Pilih & Putar Video Ini',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                fontSize: 15,
+                onPressed: _applyWatchNow,
               ),
             ] else ...[
               // General mode
@@ -1087,62 +1001,23 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Container(
+                    child: NobarinPrimaryButton(
+                      label: 'Pilih & Tonton Sekarang',
+                      icon: Icons.play_arrow_rounded,
                       height: 46,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: _applyWatchNow,
-                        icon: const Icon(Icons.play_arrow_rounded,
-                            size: 21, color: Colors.white),
-                        label: const Text(
-                          'Pilih & Tonton Sekarang',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
+                      fontSize: 14.5,
+                      onPressed: _applyWatchNow,
                     ),
                   ),
                   if (widget.queueController != null) ...[
                     const SizedBox(width: 8),
                     Expanded(
                       flex: 2,
-                      child: SizedBox(
+                      child: NobarinSecondaryButton(
+                        label: '+ Antrean',
+                        icon: Icons.playlist_add_rounded,
                         height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed: _applyAddToQueue,
-                          icon: const Icon(Icons.playlist_add_rounded, size: 19),
-                          label: const Text(
-                            '+ Antrean',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primaryNeonLight,
-                            side: const BorderSide(
-                              color: AppColors.primaryNeonLight,
-                              width: 1.4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
+                        onPressed: _applyAddToQueue,
                       ),
                     ),
                   ],
@@ -1217,39 +1092,25 @@ class _YouTubeBrowserSheetState extends State<YouTubeBrowserSheet> {
                       : _handleManualFallbackSubmit(),
                 ),
                 const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: widget.mode == YouTubeBrowserMode.queueOnly
-                      ? _handleManualFallbackQueue
-                      : _handleManualFallbackSubmit,
-                  icon: Icon(
-                    widget.mode == YouTubeBrowserMode.queueOnly
-                        ? Icons.playlist_add_rounded
-                        : (widget.mode == YouTubeBrowserMode.createRoom
-                            ? Icons.meeting_room_rounded
-                            : Icons.play_arrow_rounded),
-                    size: 20,
-                  ),
-                  label: Text(
-                    widget.mode == YouTubeBrowserMode.queueOnly
+                SizedBox(
+                  width: double.infinity,
+                  child: NobarinPrimaryButton(
+                    label: widget.mode == YouTubeBrowserMode.queueOnly
                         ? '+ Tambahkan ke Antrean'
                         : (widget.mode == YouTubeBrowserMode.createRoom
                             ? 'Buka Room dengan Video Ini'
                             : (widget.mode == YouTubeBrowserMode.watchNow
                                 ? 'Putar Sekarang di Room'
                                 : 'Tonton Video Ini')),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    backgroundColor: AppColors.primaryNeonDark,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    icon: widget.mode == YouTubeBrowserMode.queueOnly
+                        ? Icons.playlist_add_rounded
+                        : (widget.mode == YouTubeBrowserMode.createRoom
+                            ? Icons.meeting_room_rounded
+                            : Icons.play_arrow_rounded),
+                    fontSize: 15,
+                    onPressed: widget.mode == YouTubeBrowserMode.queueOnly
+                        ? _handleManualFallbackQueue
+                        : _handleManualFallbackSubmit,
                   ),
                 ),
               ],

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/utils/input_validators.dart';
 import '../../room/models/room_model.dart';
 
 class LobbyRepository {
@@ -387,20 +388,28 @@ class LobbyRepository {
           type: initialMediaType,
         );
 
+    // Sanitize title and description to prevent metadata injection
+    final cleanTitle = InputValidators.sanitizeText(title).isNotEmpty
+        ? InputValidators.sanitizeText(title)
+        : 'Nonton Bareng';
+    final cleanDesc = (description != null && description.isNotEmpty)
+        ? InputValidators.sanitizeRoomDescription(description)
+        : null;
+
     // Embed host metadata and thumbnail in description as a resilient fallback
     final thumbMeta = (resolvedThumb != null && resolvedThumb.isNotEmpty)
         ? ' [THUMB:$resolvedThumb]'
         : '';
     final metaHeader = '[HOST:name=$hostName;id=$hostId]$thumbMeta';
-    final dbDescription = (description != null && description.isNotEmpty)
-        ? '$metaHeader $description'
+    final dbDescription = (cleanDesc != null && cleanDesc.isNotEmpty)
+        ? '$metaHeader $cleanDesc'
         : metaHeader;
 
     final newRoom = RoomModel(
       id: roomId,
       code: code,
-      title: title,
-      description: description,
+      title: cleanTitle,
+      description: cleanDesc,
       hostId: hostId,
       hostName: hostName,
       isPublic: isPublic,

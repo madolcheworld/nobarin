@@ -19,13 +19,26 @@ class DailymotionPlayerWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
-      return _buildWebFallback(context);
-    }
-
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
+        if (kIsWeb) {
+          final webPlayer = controller.buildWebWidget();
+          if (webPlayer != null) {
+            return AspectRatio(
+              aspectRatio: aspectRatio,
+              child: Container(
+                color: Colors.black,
+                child: webPlayer,
+              ),
+            );
+          }
+          if (controller.url.isEmpty) {
+            return _buildWebFallback(context);
+          }
+          return _buildLoading(context);
+        }
+
         final webCtrl = controller.webViewController;
         if (webCtrl != null) {
           return AspectRatio(
@@ -41,51 +54,55 @@ class DailymotionPlayerWidget extends StatelessWidget {
         }
 
         // Fallback / Loading state on mobile
-        return AspectRatio(
-          aspectRatio: aspectRatio,
-          child: Container(
-            color: Colors.black,
-            alignment: Alignment.center,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: AppColors.dailymotionBlue.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.play_circle_filled_rounded,
-                    color: AppColors.dailymotionBlue,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Memuat Pemutar Dailymotion...',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Video Dailymotion disinkronkan untuk seluruh peserta',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+        return _buildLoading(context);
       },
+    );
+  }
+
+  Widget _buildLoading(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: aspectRatio,
+      child: Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.dailymotionBlue.withValues(alpha: 0.15),
+                border: Border.all(
+                  color: AppColors.dailymotionBlue.withValues(alpha: 0.35),
+                ),
+              ),
+              child: const Icon(
+                Icons.play_circle_filled_rounded,
+                color: AppColors.dailymotionBlue,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Memuat Pemutar Dailymotion...',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Video Dailymotion disinkronkan untuk seluruh peserta',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -118,7 +135,7 @@ class DailymotionPlayerWidget extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Pemutar Dailymotion Khusus Mobile',
+                'Pemutar Dailymotion',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textPrimary,
@@ -128,7 +145,7 @@ class DailymotionPlayerWidget extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Karena batasan integrasi browser, sinkronisasi langsung Dailymotion didukung di aplikasi Android & iOS.',
+                'Menunggu pemutaran video Dailymotion...',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textSecondary,

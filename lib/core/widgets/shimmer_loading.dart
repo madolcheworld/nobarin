@@ -35,32 +35,34 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return ShaderMask(
-          blendMode: BlendMode.srcATop,
-          shaderCallback: (bounds) {
-            final double progress = _controller.value;
-            return LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              stops: [
-                (progress - 0.3).clamp(0.0, 1.0),
-                progress.clamp(0.0, 1.0),
-                (progress + 0.3).clamp(0.0, 1.0),
-              ],
-              colors: const [
-                AppColors.shimmerBase,
-                AppColors.shimmerHighlight,
-                AppColors.shimmerBase,
-              ],
-            ).createShader(bounds);
-          },
-          child: child,
-        );
-      },
-      child: widget.child,
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return ShaderMask(
+            blendMode: BlendMode.srcATop,
+            shaderCallback: (bounds) {
+              final double progress = _controller.value;
+              return LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [
+                  (progress - 0.3).clamp(0.0, 1.0),
+                  progress.clamp(0.0, 1.0),
+                  (progress + 0.3).clamp(0.0, 1.0),
+                ],
+                colors: const [
+                  AppColors.shimmerBase,
+                  AppColors.shimmerHighlight,
+                  AppColors.shimmerBase,
+                ],
+              ).createShader(bounds);
+            },
+            child: child,
+          );
+        },
+        child: widget.child,
+      ),
     );
   }
 }

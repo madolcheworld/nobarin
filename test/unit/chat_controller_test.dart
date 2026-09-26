@@ -310,5 +310,88 @@ void main() {
       expect(chatController.messages.length, 1);
       expect(chatController.messages.first.content, 'Halo dunia!');
     });
+
+    test('sendMessage with replyTo populates reply metadata and serializes properly', () async {
+      final parentMsg = ChatMessage.text(
+        id: 'parent-1',
+        roomId: 'room-123',
+        userId: 'user-bob',
+        username: 'Bob',
+        avatarUrl: '🦊',
+        content: 'Adegan ini keren banget!',
+      );
+      chatController.addMessage(parentMsg);
+
+      ChatMessage? streamedMsg;
+      final sub = chatController.incomingMessageStream.listen((msg) {
+        streamedMsg = msg;
+      });
+
+      await chatController.sendMessage(
+        'Setuju banget!',
+        replyTo: parentMsg,
+      );
+
+      final replyMsg = chatController.messages.last;
+      expect(replyMsg.isReply, isTrue);
+      expect(replyMsg.replyToId, 'parent-1');
+      expect(replyMsg.replyToUsername, 'Bob');
+      expect(replyMsg.replyToContent, 'Adegan ini keren banget!');
+      expect(streamedMsg?.id, replyMsg.id);
+
+      final json = replyMsg.toJson();
+      final decoded = ChatMessage.fromJson(json);
+      expect(decoded.isReply, isTrue);
+      expect(decoded.replyToId, 'parent-1');
+      expect(decoded.replyToUsername, 'Bob');
+      expect(decoded.replyToContent, 'Adegan ini keren banget!');
+
+      await sub.cancel();
+    });
+
+    test('pinMessage, unpinMessage, and handlePinMessageBroadcast manage pinned comment state', () async {
+      final msg = ChatMessage.text(
+        id: 'pin-1',
+        roomId: 'room-123',
+        userId: 'user-host',
+        username: 'HostUser',
+        avatarUrl: '👑',
+        content: 'Selamat datang di nobar malam ini!',
+      );
+      chatController.addMessage(msg);
+
+      expect(chatController.pinnedMessage, isNull);
+
+      await chatController.pinMessage(msg);
+      expect(chatController.pinnedMessage, isNotNull);
+      expect(chatController.pinnedMessage!.id, 'pin-1');
+
+      await chatController.unpinMessage();
+      expect(chatController.pinnedMessage, isNull);
+
+      // Broadcast pin
+      chatController.handlePinMessageBroadcast({
+        'action': 'pin',
+        'message': msg.toJson(),
+      });
+      expect(chatController.pinnedMessage?.id, 'pin-1');
+
+      // Deleting the pinned message automatically clears pinnedMessage
+      await chatController.deleteMessage('pin-1');
+      expect(chatController.pinnedMessage, isNull);
+    });
+
+    test('sendMessage rejects messages with only zero-width or invisible spaces', () async {
+      await chatController.sendMessage('\u200B\u200C\uFEFF  \u00A0');
+      expect(chatController.messages.isEmpty, isTrue);
+    });
+
+    test('sendMessage throttles rapid message spam burst', () async {
+      for (int i = 0; i < 10; i++) {
+        await chatController.sendMessage('Spam message $i');
+      }
+      // Out of 10 rapid calls within 0ms delta, only the first 5 messages get sent
+      expect(chatController.messages.length, lessThanOrEqualTo(5));
+    });
   });
 }

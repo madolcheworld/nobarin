@@ -352,8 +352,35 @@ class GoogleDrivePlayerController extends ChangeNotifier {
             if (v) { v.playbackRate = rate; }
           } else if (cmd === 'setQuality') {
             var qCode = String(arg1 || 'default');
-            sendToIframes('setPlaybackQuality', [qCode]);
-            sendToIframes('setPlaybackQualityRange', [qCode, qCode]);
+            for (var k = 0; k < iframes.length; k++) {
+              try {
+                var cd = iframes[k].contentDocument || (iframes[k].contentWindow && iframes[k].contentWindow.document);
+                if (cd) {
+                  var mp = cd.getElementById('movie_player') || cd.querySelector('.html5-video-player');
+                  if (mp) {
+                    if (qCode === 'auto' || qCode === 'default') {
+                      if (typeof mp.setPlaybackQualityRange === 'function') mp.setPlaybackQualityRange('tiny', 'highres');
+                      if (typeof mp.setPlaybackQuality === 'function') mp.setPlaybackQuality('default');
+                    } else {
+                      if (typeof mp.setPlaybackQualityRange === 'function') mp.setPlaybackQualityRange(qCode, qCode);
+                      if (typeof mp.setPlaybackQuality === 'function') mp.setPlaybackQuality(qCode);
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+            if (qCode === 'auto' || qCode === 'default') {
+              sendToIframes('setPlaybackQualityRange', ['tiny', 'highres']);
+              sendToIframes('setPlaybackQuality', ['default']);
+            } else {
+              sendToIframes('setPlaybackQualityRange', [qCode, qCode]);
+              sendToIframes('setPlaybackQuality', [qCode]);
+              var slider = document.querySelector('input.EdShgc-YCNiv');
+              var curSec = slider ? (parseFloat(slider.value) || 0) / 1000.0 : (v ? v.currentTime : 0);
+              if (curSec > 0) {
+                sendToIframes('seekTo', [curSec, true]);
+              }
+            }
           }
         };
 
@@ -531,12 +558,21 @@ class GoogleDrivePlayerController extends ChangeNotifier {
         }
 
         function configureYoutubeIframe() {
-          var ytIframe = document.querySelector('iframe#ucc-2, iframe[src*="youtube"]');
+          var ytIframe = document.querySelector('iframe#ucc-2, iframe[src*="youtube"], iframe[src*="drive.google.com"]');
           if (!ytIframe || !ytIframe.src) return false;
           if (!ytIframe.src.includes('controls=0')) {
-            ytIframe.src = ytIframe.src + '&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3';
+            ytIframe.src = ytIframe.src + '&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&enablejsapi=1';
             return false;
           }
+          try {
+            if (ytIframe.contentWindow) {
+              ytIframe.contentWindow.postMessage(JSON.stringify({
+                event: 'listening',
+                id: 1,
+                channel: 'widget'
+              }), '*');
+            }
+          } catch (_) {}
           return true;
         }
 
@@ -647,6 +683,9 @@ class GoogleDrivePlayerController extends ChangeNotifier {
           if (normH != null && normH > 0 && normH != _detectedHeight) {
             _detectedHeight = normH;
             _detectedWidth = rawW;
+            debugPrint(
+              '[GoogleDrivePlayer] Resolution changed: ${rawW}x$rawH (norm=${normH}p)',
+            );
             notifyListeners();
           }
           break;
@@ -663,8 +702,13 @@ class GoogleDrivePlayerController extends ChangeNotifier {
           if (curQ != null && curQ.isNotEmpty) {
             final parsed = VideoQuality.youtube(curQ);
             if (parsed.height != null && parsed.height! > 0) {
-              _detectedHeight = parsed.height;
-              notifyListeners();
+              if (_detectedHeight != parsed.height) {
+                _detectedHeight = parsed.height;
+                debugPrint(
+                  '[GoogleDrivePlayer] Playback quality changed to: $curQ (${parsed.height}p)',
+                );
+                notifyListeners();
+              }
             }
           }
           break;
@@ -731,7 +775,14 @@ class GoogleDrivePlayerController extends ChangeNotifier {
       return (b.height ?? 0).compareTo(a.height ?? 0);
     });
 
+    final oldSig = _availableQualities.map((q) => q.id).join('|');
+    final newSig = qualities.map((q) => q.id).join('|');
+    if (oldSig == newSig) return;
+
     _availableQualities = qualities;
+    debugPrint(
+      '[GoogleDrivePlayer] Detected qualities: ${_availableQualities.map((q) => q.id).join(', ')}',
+    );
     notifyListeners();
     onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
   }
@@ -742,6 +793,7 @@ class GoogleDrivePlayerController extends ChangeNotifier {
 
   /// Sets video quality for Google Drive embedded player
   Future<void> setQuality(String qualityId) async {
+    debugPrint('[GoogleDrivePlayer] setQuality($qualityId)');
     _selectedQuality = _availableQualities.firstWhere(
       (q) => q.id == qualityId,
       orElse: () {

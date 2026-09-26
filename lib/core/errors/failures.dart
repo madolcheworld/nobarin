@@ -74,3 +74,11 @@ class ServerFailure extends AppFailure {
     super.cause,
   ]);
 }
+
+/// Failure due to invalid user input or corrupt remote payload
+class ValidationFailure extends AppFailure {
+  const ValidationFailure([
+    super.message = 'Input data tidak valid atau berada di luar batas yang ditentukan.',
+    super.cause,
+  ]);
+}

@@ -42,31 +42,113 @@ class HlsManifestParser {
       return const [];
     }
 
+    bool initialFetchSucceeded = false;
     try {
       final response = await AppHttpClient.get(
         uri,
-        timeout: const Duration(seconds: 6),
+        timeout: const Duration(seconds: 10),
         maxRetries: 1,
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        initialFetchSucceeded = response.body.contains('#EXTM3U');
         final parsed = parseMasterPlaylist(response.body, baseUri: uri);
-        if (parsed.isNotEmpty) return parsed;
+        if (parsed.isNotEmpty) {
+          debugPrint(
+            '[HlsManifestParser] Parsed ${parsed.length} qualities: ${parsed.map((q) => q.id).join(', ')}',
+          );
+          return parsed;
+        }
       }
     } catch (e) {
       debugPrint('[HlsManifestParser] Failed to fetch HLS manifest: $e');
     }
 
     // Fallback: jika URL merupakan varian resolusi langsung seperti .../480.m3u8?x=1
-    // atau .../720.m3u8?x=1 (umum pada CDN streaming seperti playcdn), sediakan opsi
-    // sibling kualitas (1080p, 720p, 480p, 360p).
+    // atau .../720.m3u8?x=1 (umum pada CDN streaming seperti playcdn), cek apakah ada
+    // master.m3u8 atau verifikasi sibling kualitas (1080p, 720p, 480p, 360p) yang aktif.
     final siblingMatch = RegExp(
-      r'^(https?://[^?#]+/)(360|480|720|1080)\.m3u8(\?.*)?$',
+      r'^(https?://[^?#]+/)(360|480|720|1080)(p?)\.m3u8(\?.*)?$',
       caseSensitive: false,
     ).firstMatch(url.trim());
     if (siblingMatch != null) {
       final prefix = siblingMatch.group(1)!;
-      final suffix = siblingMatch.group(3) ?? '';
+      final currentHeight = int.tryParse(siblingMatch.group(2)!);
+      final pSuffix = siblingMatch.group(3) ?? '';
+      final suffix = siblingMatch.group(4) ?? '';
+
+      // 1. Coba cek apakah terdapat master.m3u8 di direktori yang sama
+      for (final masterName in const ['master.m3u8', 'index.m3u8', 'playlist.m3u8']) {
+        final masterUri = Uri.tryParse('$prefix$masterName$suffix');
+        if (masterUri == null) continue;
+        try {
+          final masterResp = await AppHttpClient.get(
+            masterUri,
+            timeout: const Duration(seconds: 3),
+            maxRetries: 0,
+          );
+          if (masterResp.statusCode >= 200 && masterResp.statusCode < 300) {
+            final masterParsed = parseMasterPlaylist(
+              masterResp.body,
+              baseUri: masterUri,
+            );
+            if (masterParsed.length > 1) return masterParsed;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Verifikasi sibling URL secara paralel agar tidak menampilkan resolusi 403/404
       const heights = [1080, 720, 480, 360];
+      if (initialFetchSucceeded) {
+        final verifiedHeights = <int>[];
+        final results = await Future.wait(
+          heights.map((h) async {
+            if (h == currentHeight) return h;
+            final candidateUri = Uri.tryParse('$prefix$h$pSuffix.m3u8$suffix');
+            if (candidateUri == null) return null;
+            try {
+              final resp = await AppHttpClient.get(
+                candidateUri,
+                timeout: const Duration(seconds: 3),
+                maxRetries: 0,
+              );
+              if (resp.statusCode >= 200 &&
+                  resp.statusCode < 300 &&
+                  resp.body.contains('#EXTM3U')) {
+                return h;
+              }
+            } catch (_) {}
+            return null;
+          }),
+        );
+        for (final h in results) {
+          if (h != null) verifiedHeights.add(h);
+        }
+
+        if (verifiedHeights.length > 1) {
+          return [
+            const VideoQuality.auto(
+              label: 'Auto (Otomatis)',
+              mode: QualityControlMode.directTrack,
+            ),
+            for (final h in verifiedHeights)
+              VideoQuality(
+                id: '$h',
+                label: '${h}p',
+                height: h,
+                streamUrl: '$prefix$h$pSuffix.m3u8$suffix',
+                mode: QualityControlMode.directTrack,
+              ),
+          ];
+        } else if (currentHeight != null) {
+          return [
+            VideoQuality.fixed(
+              label: '${currentHeight}p (Kualitas Asli)',
+              height: currentHeight,
+            ),
+          ];
+        }
+      }
+
       return [
         const VideoQuality.auto(
           label: 'Auto (Otomatis)',
@@ -77,7 +159,7 @@ class HlsManifestParser {
             id: '$h',
             label: '${h}p',
             height: h,
-            streamUrl: '$prefix$h.m3u8$suffix',
+            streamUrl: '$prefix$h$pSuffix.m3u8$suffix',
             mode: QualityControlMode.directTrack,
           ),
       ];

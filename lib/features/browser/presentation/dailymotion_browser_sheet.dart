@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/video_title_resolver.dart';
+import '../../../core/widgets/nobarin_button.dart';
 import '../../chat/controllers/chat_controller.dart';
 import '../../room/controllers/dailymotion_player_controller.dart';
 import '../../room/controllers/queue_controller.dart';
@@ -905,80 +906,22 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
 
   Widget _buildActionButtons() {
     if (widget.mode == DailymotionBrowserMode.createRoom) {
-      return Container(
+      return NobarinPrimaryButton(
+        label: 'Pilih Video Ini & Buat Room',
+        icon: Icons.check_circle_rounded,
         height: 48,
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryNeon.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          onPressed: () => _handleVideoSelection('createRoom'),
-          icon: const Icon(Icons.check_circle_rounded,
-              size: 21, color: Colors.white),
-          label: const Text(
-            'Pilih Video Ini & Buat Room',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
+        fontSize: 15,
+        onPressed: () => _handleVideoSelection('createRoom'),
       );
     }
 
     if (widget.mode == DailymotionBrowserMode.queueOnly) {
-      return Container(
+      return NobarinPrimaryButton(
+        label: '+ Pilih & Tambah ke Antrean',
+        icon: Icons.playlist_add_rounded,
         height: 48,
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryNeon.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          onPressed: () => _handleVideoSelection('queue'),
-          icon: const Icon(Icons.playlist_add_rounded,
-              size: 22, color: Colors.white),
-          label: const Text(
-            '+ Pilih & Tambah ke Antrean',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
+        fontSize: 15,
+        onPressed: () => _handleVideoSelection('queue'),
       );
     }
 
@@ -987,71 +930,25 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
       children: [
         Expanded(
           flex: 3,
-          child: Container(
+          child: NobarinPrimaryButton(
+            label: widget.queueController != null
+                ? 'Pilih & Putar'
+                : 'Pilih & Putar Video Ini',
+            icon: Icons.play_circle_fill_rounded,
             height: 48,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryNeon.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () => _handleVideoSelection('watchNow'),
-              icon: const Icon(Icons.play_circle_fill_rounded,
-                  size: 22, color: Colors.white),
-              label: Text(
-                widget.queueController != null
-                    ? 'Pilih & Putar'
-                    : 'Pilih & Putar Video Ini',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            fontSize: 15,
+            onPressed: () => _handleVideoSelection('watchNow'),
           ),
         ),
         if (widget.queueController != null) ...[
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: SizedBox(
+            child: NobarinSecondaryButton(
+              label: '+ Antrean',
+              icon: Icons.playlist_add_rounded,
               height: 48,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primaryNeonLight,
-                  side: const BorderSide(
-                    color: AppColors.primaryNeonLight,
-                    width: 1.4,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () => _handleVideoSelection('queue'),
-                icon: const Icon(Icons.playlist_add_rounded, size: 19),
-                label: const Text(
-                  '+ Antrean',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              onPressed: () => _handleVideoSelection('queue'),
             ),
           ),
         ],
@@ -1190,49 +1087,21 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
               if (widget.mode == DailymotionBrowserMode.queueOnly)
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: NobarinPrimaryButton(
+                    label: '+ Tambahkan ke Antrean',
+                    icon: Icons.playlist_add_rounded,
+                    fontSize: 15,
                     onPressed: _handleManualFallbackQueue,
-                    icon: const Icon(Icons.playlist_add_rounded, size: 20),
-                    label: const Text(
-                      '+ Tambahkan ke Antrean',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppColors.primaryNeonDark,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                   ),
                 )
               else if (widget.mode == DailymotionBrowserMode.createRoom)
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: NobarinPrimaryButton(
+                    label: 'Buka Room dengan Video Ini',
+                    icon: Icons.meeting_room_rounded,
+                    fontSize: 15,
                     onPressed: _handleManualFallbackSubmit,
-                    icon: const Icon(Icons.meeting_room_rounded, size: 20),
-                    label: const Text(
-                      'Buka Room dengan Video Ini',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppColors.primaryNeonDark,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                   ),
                 )
               else
@@ -1240,51 +1109,23 @@ class _DailymotionBrowserSheetState extends State<DailymotionBrowserSheet> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: ElevatedButton.icon(
+                      child: NobarinPrimaryButton(
+                        label: widget.mode == DailymotionBrowserMode.watchNow
+                            ? 'Putar Sekarang di Room'
+                            : 'Tonton Video Ini',
+                        icon: Icons.play_arrow_rounded,
+                        fontSize: 15,
                         onPressed: _handleManualFallbackSubmit,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                        label: Text(
-                          widget.mode == DailymotionBrowserMode.watchNow
-                              ? 'Putar Sekarang di Room'
-                              : 'Tonton Video Ini',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: AppColors.primaryNeonDark,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
                       ),
                     ),
                     if (widget.queueController != null) ...[
                       const SizedBox(width: 10),
                       Expanded(
                         flex: 2,
-                        child: OutlinedButton.icon(
+                        child: NobarinSecondaryButton(
+                          label: 'Antrean',
+                          icon: Icons.playlist_add_rounded,
                           onPressed: _handleManualFallbackQueue,
-                          icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                          label: const Text(
-                            'Antrean',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            foregroundColor: AppColors.primaryNeonLight,
-                            side: const BorderSide(
-                              color: AppColors.primaryNeonLight,
-                              width: 1.4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
                         ),
                       ),
                     ],

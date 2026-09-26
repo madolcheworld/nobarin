@@ -392,13 +392,13 @@ class RoomControlsBar extends StatelessWidget {
       child: ListenableBuilder(
         listenable: Listenable.merge([
           syncController,
-          player,
+          player.hasMediaNotifier,
           ?queueController,
           ?screenShareController,
           ?voiceController,
         ]),
         builder: (context, _) {
-          final bool hasMedia = player.mediaUrl.isNotEmpty;
+          final bool hasMedia = player.hasMediaNotifier.value || player.mediaUrl.isNotEmpty;
 
           return SizedBox(
             height: 44,

@@ -36,6 +36,10 @@ extension type _HlsJS._(JSObject _) implements JSObject {
   external JSArray<JSObject> get levels;
   external int get currentLevel;
   external set currentLevel(int level);
+  external int get nextLevel;
+  external set nextLevel(int level);
+  external int get loadLevel;
+  external set loadLevel(int level);
   external void on(String event, JSFunction callback);
 }
 
@@ -393,16 +397,37 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
       try {
         if (qualityId == 'auto' || qualityId == '-1') {
           _hlsInstance!.currentLevel = -1;
+          _hlsInstance!.nextLevel = -1;
+          _hlsInstance!.loadLevel = -1;
           _selectedQuality = _availableQualities.firstWhere(
             (q) => q.isAuto,
             orElse: () => const VideoQuality.auto(),
           );
         } else {
-          final idx = int.tryParse(qualityId);
-          if (idx != null) {
-            _hlsInstance!.currentLevel = idx;
+          final parsedNum = int.tryParse(qualityId);
+          final levels = _hlsInstance!.levels.toDart;
+          int? targetIdx;
+          if (parsedNum != null && parsedNum >= 0 && parsedNum < levels.length) {
+            targetIdx = parsedNum;
+          } else if (parsedNum != null) {
+            for (var i = 0; i < levels.length; i++) {
+              final lvl = _HlsLevel._(levels[i]);
+              final normH = VideoQuality.normalizeResolutionHeight(
+                width: lvl.width,
+                height: lvl.height,
+              );
+              if (lvl.height == parsedNum || normH == parsedNum) {
+                targetIdx = i;
+                break;
+              }
+            }
+          }
+          if (targetIdx != null) {
+            _hlsInstance!.currentLevel = targetIdx;
+            _hlsInstance!.nextLevel = targetIdx;
+            _hlsInstance!.loadLevel = targetIdx;
             _selectedQuality = _availableQualities.firstWhere(
-              (q) => q.id == qualityId,
+              (q) => q.id == qualityId || q.id == '$targetIdx' || q.height == parsedNum,
               orElse: () => VideoQuality(
                 id: qualityId,
                 label: '${qualityId}p',
