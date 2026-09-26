@@ -81,4 +81,14 @@ class ApiConstants {
     '🎉',
     '😱',
   ];
+
+  // Legal & Compliance URLs
+  static const String privacyPolicyUrl = String.fromEnvironment(
+    'PRIVACY_POLICY_URL',
+    defaultValue: 'https://nobarin.app/privacy-policy',
+  );
+  static const String accountDeletionUrl = String.fromEnvironment(
+    'ACCOUNT_DELETION_URL',
+    defaultValue: 'https://nobarin.app/delete-account',
+  );
 }

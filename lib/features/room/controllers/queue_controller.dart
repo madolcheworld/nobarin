@@ -132,8 +132,11 @@ class QueueController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void _handleRemoteSync(Map<String, dynamic> payload) {
+  void _handleRemoteSync(Map<String, dynamic> raw) {
     try {
+      final payload = (raw['payload'] is Map)
+          ? Map<String, dynamic>.from(raw['payload'] as Map)
+          : raw;
       final senderId = payload['sender_id'] as String?;
       if (senderId == currentUser.id) return;
 
@@ -198,7 +201,15 @@ class QueueController extends ChangeNotifier {
     // Persist to database if available
     if (supabase != null) {
       try {
-        await supabase!.from('room_queue').insert(newItem.toJson());
+        final payload = newItem.toJson();
+        if (supabase!.auth.currentUser == null ||
+            supabase!.auth.currentUser!.id != currentUser.id) {
+          payload.remove('added_by_user_id');
+        }
+        await supabase!
+            .from('room_queue')
+            .insert(payload)
+            .timeout(const Duration(seconds: 4));
       } catch (e) {
         debugPrint('[QueueController] Database insert queue error (non-fatal): $e');
       }
@@ -225,7 +236,11 @@ class QueueController extends ChangeNotifier {
 
     if (supabase != null) {
       try {
-        await supabase!.from('room_queue').delete().eq('id', itemId);
+        await supabase!
+            .from('room_queue')
+            .delete()
+            .eq('id', itemId)
+            .timeout(const Duration(seconds: 4));
       } catch (e) {
         debugPrint('[QueueController] Database delete queue error (non-fatal): $e');
       }
@@ -250,12 +265,14 @@ class QueueController extends ChangeNotifier {
 
     if (supabase != null) {
       try {
-        for (final q in _items) {
-          await supabase!
+        final updates = _items.map(
+          (q) => supabase!
               .from('room_queue')
               .update({'order_index': q.orderIndex})
-              .eq('id', q.id);
-        }
+              .eq('id', q.id)
+              .timeout(const Duration(seconds: 4)),
+        );
+        await Future.wait(updates);
       } catch (e) {
         debugPrint('[QueueController] Database reorder error (non-fatal): $e');
       }

@@ -17,7 +17,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('BstationPlayerController - Video Quality Unit Tests', () {
+  group('BstationPlayerController - Dynamic Video Quality Unit Tests', () {
     late BstationPlayerController controller;
 
     setUp(() {
@@ -28,38 +28,28 @@ void main() {
       controller.dispose();
     });
 
-    test('1. Default available qualities and initial auto state', () {
+    test('1. Initial state has only Auto without hardcoded resolution options', () {
       expect(controller.availableQualities, isNotEmpty);
-      expect(controller.availableQualities.length, equals(4));
+      expect(controller.availableQualities.length, equals(1));
 
-      // 1st is Auto
       final autoQ = controller.availableQualities[0];
       expect(autoQ.isAuto, isTrue);
       expect(autoQ.id, equals('auto'));
       expect(autoQ.shortLabel, equals('Auto'));
       expect(autoQ.mode, equals(QualityControlMode.webviewBridge));
-
-      // 2nd is 720p
-      final q720 = controller.availableQualities[1];
-      expect(q720.id, equals('720'));
-      expect(q720.height, equals(720));
-      expect(q720.shortLabel, equals('720p'));
-      expect(q720.badgeDescription, equals('HD Resolusi Tinggi'));
-
-      // 3rd is 480p
-      final q480 = controller.availableQualities[2];
-      expect(q480.id, equals('480'));
-      expect(q480.height, equals(480));
-      expect(q480.shortLabel, equals('480p'));
-
-      // 4th is 360p
-      final q360 = controller.availableQualities[3];
-      expect(q360.id, equals('360'));
-      expect(q360.height, equals(360));
-      expect(q360.shortLabel, equals('360p'));
+      expect(controller.selectedQuality?.isAuto, isTrue);
     });
 
-    test('2. setQuality switches quality, notifies listeners, and calls callbacks', () async {
+    test('2. setQuality switches quality across dynamically detected qualities', () async {
+      controller.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'qualities',
+        'qualities': [
+          {'id': '64', 'height': 720, 'label': '720p HD'},
+          {'id': '32', 'height': 480, 'label': '480p Standar'},
+          {'id': '16', 'height': 360, 'label': '360p Hemat'},
+        ],
+      }));
+
       VideoQuality? selectedCallbackQuality;
       var notifyCount = 0;
 
@@ -70,24 +60,18 @@ void main() {
         notifyCount++;
       });
 
-      // Switch to 720p
-      await controller.setQuality('720');
-      expect(controller.selectedQuality?.id, equals('720'));
+      // Switch to 720p (by Bstation qn ID '64')
+      await controller.setQuality('64');
+      expect(controller.selectedQuality?.id, equals('64'));
       expect(controller.selectedQuality?.height, equals(720));
-      expect(selectedCallbackQuality?.id, equals('720'));
+      expect(selectedCallbackQuality?.id, equals('64'));
       expect(notifyCount, greaterThan(0));
 
       // Switch to 480p
-      await controller.setQuality('480');
-      expect(controller.selectedQuality?.id, equals('480'));
+      await controller.setQuality('32');
+      expect(controller.selectedQuality?.id, equals('32'));
       expect(controller.selectedQuality?.height, equals(480));
-      expect(selectedCallbackQuality?.id, equals('480'));
-
-      // Switch to 360p
-      await controller.setQuality('360');
-      expect(controller.selectedQuality?.id, equals('360'));
-      expect(controller.selectedQuality?.height, equals(360));
-      expect(selectedCallbackQuality?.id, equals('360'));
+      expect(selectedCallbackQuality?.id, equals('32'));
 
       // Switch back to auto
       await controller.setQuality('auto');
@@ -102,7 +86,7 @@ void main() {
       expect(controller.selectedQuality?.mode, equals(QualityControlMode.webviewBridge));
     });
 
-    test('4. Bridge message "resolution" updates detected height & width', () {
+    test('4. Bridge message "resolution" updates detected height & width without fabricating tiers', () {
       var notified = false;
       controller.addListener(() => notified = true);
 
@@ -114,10 +98,20 @@ void main() {
 
       expect(controller.detectedHeight, equals(720));
       expect(controller.detectedWidth, equals(1280));
+      // Must NOT fabricate fake [720, 480, 360, 240] tiers
+      expect(controller.availableQualities.length, equals(1));
       expect(notified, isTrue);
     });
 
     test('5. Bridge message "qualitychange" updates selected quality', () {
+      controller.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'qualities',
+        'qualities': [
+          {'id': '720', 'height': 720, 'label': '720p HD'},
+          {'id': '480', 'height': 480, 'label': '480p Standar'},
+        ],
+      }));
+
       VideoQuality? callbackQuality;
       controller.onQualitySelectedChanged = (q) => callbackQuality = q;
 
@@ -130,25 +124,28 @@ void main() {
       expect(callbackQuality?.id, equals('480'));
     });
 
-    test('6. Bridge message "qualities" updates dynamic available qualities from page', () {
+    test('6. Bridge message "qualities" populates only the exact resolutions of the video', () {
       List<VideoQuality>? updatedQualities;
       controller.onQualitiesChanged = (qualities) => updatedQualities = qualities;
 
+      // Video only has 1080p and 360p (no 720p or 480p)
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
         'qualities': [
-          {'id': '1080', 'height': 1080, 'label': '1080p Full HD'},
-          {'id': '720', 'height': 720, 'label': '720p HD'},
-          {'id': '480', 'height': 480, 'label': '480p Standar'},
+          {'id': '80', 'height': 1080, 'label': '1080p Full HD'},
+          {'id': '16', 'height': 360, 'label': '360p Hemat'},
         ],
       }));
 
-      expect(controller.availableQualities.length, equals(4)); // Auto + 1080 + 720 + 480
+      expect(controller.availableQualities.length, equals(3)); // Auto + 1080p + 360p
       expect(controller.availableQualities.first.isAuto, isTrue);
-      expect(controller.availableQualities[1].id, equals('1080'));
-      expect(controller.availableQualities[1].label, equals('1080p Full HD'));
+      expect(controller.availableQualities[1].id, equals('80'));
+      expect(controller.availableQualities[1].height, equals(1080));
+      expect(controller.availableQualities[2].id, equals('16'));
+      expect(controller.availableQualities[2].height, equals(360));
+      expect(controller.availableQualities.any((q) => q.height == 720), isFalse);
+      expect(controller.availableQualities.any((q) => q.height == 480), isFalse);
       expect(updatedQualities, isNotNull);
-      expect(updatedQualities!.any((q) => q.id == '1080'), isTrue);
     });
   });
 
@@ -163,7 +160,7 @@ void main() {
       player.dispose();
     });
 
-    test('1. Bstation media loading configures quality support and labels', () async {
+    test('1. Bstation media loading starts with Auto only (no hardcoded tiers) and updates label on resolution', () async {
       await player.loadMedia(
         'bstation',
         'https://www.bilibili.tv/id/video/2048573920',
@@ -171,12 +168,9 @@ void main() {
       );
 
       expect(player.mediaType, equals('bstation'));
-      expect(player.supportsQualitySelection, isTrue);
-      expect(player.availableQualities, isNotEmpty);
-      expect(player.availableQualities.any((q) => q.isAuto), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '720'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '480'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '360'), isTrue);
+      expect(player.availableQualities.length, equals(1));
+      expect(player.availableQualities.first.isAuto, isTrue);
+      expect(player.supportsQualitySelection, isFalse);
 
       // Initially Auto without resolution
       expect(player.currentQualityLabel, equals('Auto'));
@@ -190,35 +184,10 @@ void main() {
 
       // In Auto mode, label reflects detected stream height
       expect(player.currentQualityLabel, equals('Auto (720p)'));
+      expect(player.maxDetectedHeight, equals(720));
     });
 
-    test('2. Changing video quality updates selected state and currentQualityLabel', () async {
-      await player.loadMedia(
-        'bstation',
-        'https://www.bilibili.tv/id/video/2048573920',
-        autoPlay: false,
-      );
-
-      final q720 = player.availableQualities.firstWhere((q) => q.id == '720');
-      await player.setVideoQuality(q720);
-
-      expect(player.selectedQuality?.id, equals('720'));
-      expect(player.currentQualityLabel, equals('720p'));
-
-      final q480 = player.availableQualities.firstWhere((q) => q.id == '480');
-      await player.setVideoQuality(q480);
-
-      expect(player.selectedQuality?.id, equals('480'));
-      expect(player.currentQualityLabel, equals('480p'));
-
-      // Switch back to Auto
-      final autoQ = player.availableQualities.firstWhere((q) => q.isAuto);
-      await player.setVideoQuality(autoQ);
-
-      expect(player.selectedQuality?.isAuto, isTrue);
-    });
-
-    test('3. Dynamic qualities event from Bstation bridge updates UnifiedPlayerController', () async {
+    test('2. Dynamic qualities event from Bstation bridge enables quality selection with exact tiers', () async {
       await player.loadMedia(
         'bstation',
         'https://www.bilibili.tv/id/video/2048573920',
@@ -234,30 +203,18 @@ void main() {
         ],
       }));
 
+      expect(player.supportsQualitySelection, isTrue);
+      expect(player.explicitQualityCount, equals(3));
       expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
-      expect(player.availableQualities.firstWhere((q) => q.id == '1080').label, equals('1080p FHD'));
+      expect(player.availableQualities.any((q) => q.id == '480'), isFalse);
       expect(player.maxDetectedHeight, equals(1080));
       expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
-    });
 
-    test('4. Stream resolution > default max auto-expands Bstation available quality tiers', () async {
-      await player.loadMedia(
-        'bstation',
-        'https://www.bilibili.tv/id/video/2048573920',
-        autoPlay: false,
-      );
+      final q720 = player.availableQualities.firstWhere((q) => q.id == '720');
+      await player.setVideoQuality(q720);
 
-      // Before explicit qualities list, if <video> reports 1080p (or 1080x1920 vertical)
-      player.bstationController?.handleBridgeMessageForTesting(jsonEncode({
-        'event': 'resolution',
-        'height': 1920,
-        'width': 1080,
-      }));
-
-      expect(player.bstationController?.detectedHeight, equals(1080));
-      expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
-      expect(player.maxDetectedHeight, equals(1080));
-      expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
+      expect(player.selectedQuality?.id, equals('720'));
+      expect(player.currentQualityLabel, equals('720p'));
     });
   });
 
@@ -297,12 +254,22 @@ void main() {
       syncController.dispose();
     });
 
-    testWidgets('Renders Bstation quality options and selects 720p on tap', (tester) async {
+    testWidgets('Renders detected Bstation quality options and selects 720p on tap', (tester) async {
       await player.loadMedia(
         'bstation',
         'https://www.bilibili.tv/id/video/2048573920',
         autoPlay: false,
       );
+
+      // Simulate Bstation bridge detecting 3 exact resolutions for this video
+      player.bstationController?.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'qualities',
+        'qualities': [
+          {'id': '720', 'height': 720, 'label': '720p HD'},
+          {'id': '480', 'height': 480, 'label': '480p Standar'},
+          {'id': '360', 'height': 360, 'label': '360p Hemat'},
+        ],
+      }));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -321,11 +288,12 @@ void main() {
       await tester.tap(find.text('Open Sheet'));
       await tester.pumpAndSettle();
 
-      // Verify Bstation quality sheet header and platform badge
+      // Verify Bstation quality sheet header, platform badge, and count badge
       expect(find.text('Kualitas Video'), findsOneWidget);
       expect(find.text('Bstation'), findsOneWidget);
+      expect(find.text('3 resolusi tersedia'), findsOneWidget);
 
-      // Verify all Bstation quality choices are visible
+      // Verify detected Bstation quality choices are visible
       expect(find.text('Auto (Otomatis Bstation)'), findsOneWidget);
       expect(find.text('720p HD'), findsOneWidget);
       expect(find.text('480p Standar'), findsOneWidget);

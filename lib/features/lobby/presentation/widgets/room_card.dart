@@ -45,9 +45,26 @@ class RoomCard extends StatelessWidget {
         color: AppColors.dailymotionBlue,
       );
     }
+    if (type == 'google_drive' || type == 'gdrive') {
+      return (
+        label: 'Google Drive',
+        icon: Icons.add_to_drive_rounded,
+        color: AppColors.googleDriveGreen,
+      );
+    }
+    if (type == 'web_browser') {
+      return (
+        label: 'Web Browser',
+        icon: Icons.public_rounded,
+        color: AppColors.webBrowserTeal,
+      );
+    }
     if (type == 'direct_url') {
       if (url != null &&
-          (url.startsWith('p2p://') || UnifiedPlayerController.isLocalFilePath(url))) {
+          (url.startsWith('p2p://') ||
+           UnifiedPlayerController.isLocalFilePath(url) ||
+           url.contains(':8080') ||
+           url.contains('/stream'))) {
         return (
           label: 'File P2P',
           icon: Icons.folder_special_rounded,

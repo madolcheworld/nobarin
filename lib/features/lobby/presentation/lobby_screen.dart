@@ -29,6 +29,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   @override
   void initState() {
     super.initState();
+    final initialQuery = ref.read(lobbySearchQueryProvider);
+    if (initialQuery.isNotEmpty) {
+      _searchController.text = initialQuery;
+    }
     _scrollController.addListener(_onScroll);
     PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
     PipService.instance.setAutoEnterPip(false);
@@ -245,40 +249,53 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           ],
         ),
         actions: [
-          // Realtime Status Indicator
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.accentGreen.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.accentGreen.withValues(alpha: 0.3),
-                width: 0.8,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.accentGreen,
+          // Realtime Connection Status Indicator
+          Builder(
+            builder: (context) {
+              final bool hasError = roomsAsync.hasError;
+              final bool isInitialLoading = roomsAsync.isLoading && !roomsAsync.hasValue;
+              final Color statusColor = hasError
+                  ? AppColors.accentRed
+                  : (isInitialLoading ? AppColors.accentYellow : AppColors.accentGreen);
+              final String statusText = hasError
+                  ? 'Offline'
+                  : (isInitialLoading ? 'Menghubungkan' : 'Online');
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.3),
+                    width: 0.8,
                   ),
                 ),
-                const SizedBox(width: 5),
-                const Text(
-                  'Online',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.accentGreen,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(width: 8),
 
@@ -337,22 +354,23 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 200),
           opacity: _showFab ? 1.0 : 0.0,
-          child: _showFab
-              ? FloatingActionButton.extended(
-                  onPressed: () {
-                    AppHaptics.light();
-                    _openCreateRoomDialog();
-                  },
-                  backgroundColor: AppColors.primaryNeonDark,
-                  foregroundColor: Colors.white,
-                  elevation: 6,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text(
-                    'Buat Room',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                )
-              : const SizedBox.shrink(),
+          child: IgnorePointer(
+            ignoring: !_showFab,
+            child: FloatingActionButton.extended(
+              onPressed: () {
+                AppHaptics.light();
+                _openCreateRoomDialog();
+              },
+              backgroundColor: AppColors.primaryNeonDark,
+              foregroundColor: Colors.white,
+              elevation: 6,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'Buat Room',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
         ),
       ),
       body: RefreshIndicator(
@@ -611,6 +629,22 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           ),
                           const SizedBox(width: 8),
                           _buildFilterChip(
+                            label: 'Google Drive',
+                            icon: Icons.add_to_drive_rounded,
+                            iconColor: AppColors.googleDriveGreen,
+                            category: LobbyFilterCategory.googleDrive,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            label: 'Web Browser',
+                            icon: Icons.public_rounded,
+                            iconColor: AppColors.webBrowserTeal,
+                            category: LobbyFilterCategory.webBrowser,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
                             label: 'File P2P',
                             icon: Icons.folder_special_rounded,
                             iconColor: Colors.purpleAccent,
@@ -669,14 +703,34 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               loading: () => SliverPadding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: RoomCardSkeleton(),
-                    ),
-                    childCount: 4,
-                  ),
+                sliver: SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.crossAxisExtent > 760;
+                    if (!isWide) {
+                      return SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: RoomCardSkeleton(),
+                          ),
+                          childCount: 4,
+                        ),
+                      );
+                    }
+                    return SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 600,
+                        mainAxisExtent: 126,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 14,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => const RoomCardSkeleton(),
+                        childCount: 6,
+                      ),
+                    );
+                  },
                 ),
               ),
               error: (err, _) => SliverFillRemaining(
@@ -923,7 +977,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 600,
-                          mainAxisExtent: 110,
+                          mainAxisExtent: 126,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 14,
                         ),

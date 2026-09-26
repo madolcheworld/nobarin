@@ -8,8 +8,11 @@ import '../../../../core/network/p2p_file_stream_service.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
+import '../../../browser/presentation/google_drive_browser_sheet.dart';
+import '../../../browser/presentation/web_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../../room/controllers/dailymotion_player_controller.dart';
+import '../../../room/controllers/google_drive_player_controller.dart';
 import '../../../room/controllers/unified_player_controller.dart';
 import '../../../room/models/room_model.dart';
 import '../lobby_controller.dart';
@@ -89,6 +92,17 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _selectedMediaType = 'dailymotion';
         _selectedVideoId = detected?.mediaId;
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Dailymotion';
+      } else if (detected?.mediaType == 'google_drive' ||
+          widget.initialMediaType == 'google_drive' ||
+          widget.initialMediaType == 'gdrive') {
+        _selectedMediaType = 'google_drive';
+        _selectedVideoId = detected?.mediaId;
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Google Drive';
+      } else if (detected?.mediaType == 'web_browser' ||
+          widget.initialMediaType == 'web_browser') {
+        _selectedMediaType = 'web_browser';
+        _selectedVideoId = null;
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Web Browser';
       } else if (widget.initialMediaType == 'screenshare' || widget.initialMediaUrl == 'screenshare') {
         _selectedMediaType = 'screenshare';
         _selectedVideoId = null;
@@ -96,6 +110,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       } else if (detected?.isDirectUrl == true && UnifiedPlayerController.isLocalFilePath(widget.initialMediaUrl!)) {
         _selectedMediaType = 'direct_url';
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'File Video Lokal';
+      } else if (detected?.isDirectUrl == true || widget.initialMediaType == 'direct_url') {
+        _selectedMediaType = 'direct_url';
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Stream';
       } else {
         _selectedMediaType = 'youtube';
         _selectedVideoId = detected?.mediaId;
@@ -177,6 +194,54 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _titleController.text = title.isNotEmpty && title != 'Video Dailymotion'
                 ? 'Nobar: $title'
                 : 'Nobar: Dailymotion';
+          }
+        });
+      },
+    );
+  }
+
+  void _openGoogleDriveBrowser() {
+    GoogleDriveBrowserSheet.show(
+      context,
+      mode: GoogleDriveBrowserMode.createRoom,
+      onVideoSelected: (type, url, title) {
+        final fId = GoogleDrivePlayerController.extractFileId(url);
+        setState(() {
+          _selectedMediaType = 'google_drive';
+          _selectedMediaUrl = url;
+          _selectedVideoTitle = title.isNotEmpty ? title : 'Video Google Drive';
+          _selectedVideoId = fId;
+          _currentStep = 1;
+          if (_titleController.text == 'Nonton Bareng' ||
+              _titleController.text.isEmpty ||
+              _titleController.text.startsWith('Nobar:')) {
+            _titleController.text = title.isNotEmpty && title != 'Video Google Drive'
+                ? 'Nobar: $title'
+                : 'Nobar: Google Drive';
+          }
+        });
+      },
+    );
+  }
+
+  void _openWebBrowser() {
+    WebBrowserSheet.show(
+      context,
+      mode: WebBrowserMode.createRoom,
+      onVideoSelected: (type, url, title) {
+        setState(() {
+          _selectedMediaType = type;
+          _selectedMediaUrl = url;
+          _selectedVideoTitle = title.isNotEmpty ? title : 'Video Web Browser';
+          _selectedVideoId = null;
+          _currentStep = 1;
+          if (_titleController.text == 'Nonton Bareng' ||
+              _titleController.text.isEmpty ||
+              _titleController.text.startsWith('Nobar:')) {
+            _titleController.text =
+                title.isNotEmpty && title != 'Video Web Browser'
+                    ? 'Nobar: $title'
+                    : 'Nobar: Web Browser';
           }
         });
       },
@@ -536,7 +601,43 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         ),
         const SizedBox(height: 12),
 
-        // 4. Local Video File (Direct P2P Streaming) Option Card
+        // 4. Google Drive Option Card
+        _buildSourceOptionCard(
+          title: 'Google Drive',
+          subtitle: 'Putar video dari akun Google Drive Anda',
+          icon: Icons.add_to_drive_rounded,
+          iconColor: Colors.white,
+          iconBackgroundColor: AppColors.googleDriveGreen,
+          borderColor: AppColors.googleDriveGreen.withValues(alpha: 0.45),
+          gradientColors: [
+            AppColors.googleDriveGreen.withValues(alpha: 0.16),
+            AppColors.surfaceElevated,
+          ],
+          accentColor: AppColors.googleDriveGreen,
+          badgeText: 'Drive',
+          onTap: _openGoogleDriveBrowser,
+        ),
+        const SizedBox(height: 12),
+
+        // 5. Web Browser (Auto-Detect Video) Option Card
+        _buildSourceOptionCard(
+          title: 'Web Browser',
+          subtitle: 'Buka situs apa saja & deteksi otomatis video yang diputar',
+          icon: Icons.public_rounded,
+          iconColor: Colors.black,
+          iconBackgroundColor: AppColors.webBrowserTeal,
+          borderColor: AppColors.webBrowserTeal.withValues(alpha: 0.5),
+          gradientColors: [
+            AppColors.webBrowserTeal.withValues(alpha: 0.16),
+            AppColors.surfaceElevated,
+          ],
+          accentColor: AppColors.webBrowserTeal,
+          badgeText: 'Auto-Detect',
+          onTap: _openWebBrowser,
+        ),
+        const SizedBox(height: 12),
+
+        // 6. Local Video File (Direct P2P Streaming) Option Card
         _buildSourceOptionCard(
           title: 'File Video Lokal (P2P)',
           subtitle: 'Stream video dari memori HP/PC tanpa upload',
@@ -1032,6 +1133,115 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  Widget _buildGoogleDrivePreviewCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.googleDriveGreen.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon container as thumbnail placeholder
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Container(
+                  width: 88,
+                  height: 56,
+                  color: AppColors.googleDriveGreen.withValues(alpha: 0.18),
+                  child: const Center(
+                    child: Icon(
+                      Icons.add_to_drive_rounded,
+                      size: 28,
+                      color: AppColors.googleDriveGreen,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6.5,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.googleDriveGreen.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.add_to_drive_rounded,
+                                size: 12,
+                                color: AppColors.googleDriveGreen,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Google Drive',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.googleDriveGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _selectedVideoTitle ?? 'Video Google Drive',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildChangeVideoButton(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLocalVideoPreviewCard() {
     return Container(
       decoration: BoxDecoration(
@@ -1285,6 +1495,122 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     );
   }
 
+  Widget _buildWebBrowserPreviewCard() {
+    final isDirectStream = _selectedMediaType == 'direct_url';
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.webBrowserTeal.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Container(
+                  width: 88,
+                  height: 56,
+                  color: AppColors.webBrowserTeal.withValues(alpha: 0.18),
+                  child: const Center(
+                    child: Icon(
+                      Icons.public_rounded,
+                      size: 28,
+                      color: AppColors.webBrowserTeal,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6.5,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.webBrowserTeal
+                                .withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.public_rounded,
+                                size: 12,
+                                color: AppColors.webBrowserTeal,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isDirectStream
+                                    ? 'Web Stream'
+                                    : 'Web Browser',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.webBrowserTeal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _selectedVideoTitle ?? 'Video Web Browser',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildChangeVideoButton(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep2RoomSettings() {
     return Form(
       key: _formKey,
@@ -1305,12 +1631,18 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _buildBstationPreviewCard(),
           ] else if (_selectedMediaType == 'dailymotion') ...[
             _buildDailymotionPreviewCard(),
+          ] else if (_selectedMediaType == 'google_drive') ...[
+            _buildGoogleDrivePreviewCard(),
+          ] else if (_selectedMediaType == 'web_browser') ...[
+            _buildWebBrowserPreviewCard(),
           ] else if (_selectedMediaType == 'screenshare') ...[
             _buildScreenSharePreviewCard(),
           ] else if (_selectedMediaType == 'direct_url' &&
               _selectedMediaUrl != null &&
               UnifiedPlayerController.isLocalFilePath(_selectedMediaUrl!)) ...[
             _buildLocalVideoPreviewCard(),
+          ] else if (_selectedMediaType == 'direct_url') ...[
+            _buildWebBrowserPreviewCard(),
           ] else ...[
             _buildYouTubePreviewCard(),
           ],

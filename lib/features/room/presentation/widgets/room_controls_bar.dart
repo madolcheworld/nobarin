@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../screenshare/controllers/webrtc_screenshare_controller.dart';
@@ -65,6 +66,88 @@ class RoomControlsBar extends StatelessWidget {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Track whether mic rationale was accepted in memory
+  static bool hasAcceptedMicRationale = false;
+
+  /// Shows in-app rationale before requesting microphone access (Google Play Policy Rule 9.1)
+  static Future<bool> showMicRationaleDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.mic_rounded, color: AppColors.primaryNeon, size: 24),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Izin Mikrofon',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Nobarin memerlukan akses mikrofon agar kamu dapat mengobrol bersama teman secara real-time saat menonton. Izin hanya digunakan saat mikrofon aktif.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text(
+              'Nanti Saja',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryNeon,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Lanjutkan',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _handleMicToggle(
+      BuildContext context, WebRtcVoiceController voice) async {
+    AppHaptics.medium();
+    if (voice.isMicMuted && !hasAcceptedMicRationale) {
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeen = prefs.getBool('has_seen_mic_rationale') ?? false;
+      if (!hasSeen) {
+        if (!context.mounted) return;
+        final accepted = await showMicRationaleDialog(context);
+        if (!accepted) return;
+        await prefs.setBool('has_seen_mic_rationale', true);
+      }
+      hasAcceptedMicRationale = true;
+    }
+    voice.toggleMic();
   }
 
   static void showShareModal(BuildContext context, RoomModel currentRoom) {
@@ -420,10 +503,7 @@ class RoomControlsBar extends StatelessWidget {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {
-                  AppHaptics.medium();
-                  voice.toggleMic();
-                },
+                onTap: () => _handleMicToggle(context, voice),
                 borderRadius:
                     const BorderRadius.horizontal(left: Radius.circular(16)),
                 child: Padding(

@@ -42,7 +42,7 @@ class AuthRepository {
       throw AuthFailure('Gagal mengakses penyimpanan lokal perangkat.', e);
     }
 
-    String userId;
+    String userId = '';
     // Attempt Supabase anonymous sign-in if client is present
     if (supabase != null) {
       try {
@@ -51,7 +51,12 @@ class AuthRepository {
           userId = currentSession.user.id;
         } else {
           final authResponse = await supabase!.auth.signInAnonymously();
-          userId = authResponse.user?.id ?? const Uuid().v4();
+          userId = authResponse.user?.id ?? '';
+        }
+
+        if (userId.isEmpty) {
+          final cached = await getCachedProfile();
+          userId = cached?.id ?? const Uuid().v4();
         }
 
         // Upsert to Supabase profiles table
@@ -63,9 +68,16 @@ class AuthRepository {
         }).timeout(const Duration(seconds: 5));
       } catch (e) {
         debugPrint('[AuthRepository] Supabase auth/profile sync note: $e');
-        // Fallback to existing cached ID if available to keep identity consistent
-        final cached = await getCachedProfile();
-        userId = cached?.id ?? const Uuid().v4();
+        // Preserve userId if obtained from Supabase Auth; otherwise fallback to cached/UUID
+        if (userId.isEmpty) {
+          final currentAuthUser = supabase?.auth.currentUser;
+          if (currentAuthUser != null) {
+            userId = currentAuthUser.id;
+          } else {
+            final cached = await getCachedProfile();
+            userId = cached?.id ?? const Uuid().v4();
+          }
+        }
       }
     } else {
       final cached = await getCachedProfile();
@@ -83,6 +95,41 @@ class AuthRepository {
     // Cache locally
     await prefs.setString(_profileKey, jsonEncode(profile.toJson()));
     return profile;
+  }
+
+  /// Deletes user profile and hosted rooms from backend and clears local session
+  Future<void> deleteAccount() async {
+    try {
+      final cached = await getCachedProfile();
+      final userId = cached?.id ?? supabase?.auth.currentUser?.id;
+      if (userId != null && supabase != null) {
+        // Delete user's hosted rooms
+        try {
+          await supabase!
+              .from('rooms')
+              .delete()
+              .eq('host_id', userId)
+              .timeout(const Duration(seconds: 5));
+        } catch (e) {
+          debugPrint('[AuthRepository] Error deleting user rooms: $e');
+        }
+
+        // Delete user profile
+        try {
+          await supabase!
+              .from('profiles')
+              .delete()
+              .eq('id', userId)
+              .timeout(const Duration(seconds: 5));
+        } catch (e) {
+          debugPrint('[AuthRepository] Error deleting user profile: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthRepository] Error during deleteAccount: $e');
+    } finally {
+      await clearSession();
+    }
   }
 
   /// Clears profile and session

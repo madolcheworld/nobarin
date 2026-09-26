@@ -27,6 +27,31 @@ class ChatMessage {
     this.reactions = const {},
   });
 
+  factory ChatMessage.text({
+    required String id,
+    required String roomId,
+    String? userId,
+    String username = 'Guest',
+    String avatarUrl = '🦊',
+    required String content,
+    DateTime? createdAt,
+    MessageStatus status = MessageStatus.sent,
+    Map<String, List<String>> reactions = const {},
+  }) {
+    return ChatMessage(
+      id: id,
+      roomId: roomId,
+      userId: userId,
+      username: username,
+      avatarUrl: avatarUrl,
+      content: content,
+      type: 'text',
+      createdAt: createdAt ?? DateTime.now(),
+      status: status,
+      reactions: reactions,
+    );
+  }
+
   bool get isSystem => type == 'system';
   bool get isReaction => type == 'emoji_reaction';
   bool get isText => type == 'text';
@@ -74,7 +99,11 @@ class ChatMessage {
     String senderName = 'Guest';
     String senderAvatar = '🦊';
 
-    if (json['profiles'] is Map) {
+    if (json['sender_name'] != null &&
+        json['sender_name'].toString().trim().isNotEmpty) {
+      senderName = json['sender_name'] as String;
+      senderAvatar = json['sender_avatar'] as String? ?? '🦊';
+    } else if (json['profiles'] is Map) {
       final profile = json['profiles'] as Map<String, dynamic>;
       senderName = profile['username'] as String? ?? 'Guest';
       senderAvatar = profile['avatar_url'] as String? ?? '🦊';
@@ -111,7 +140,7 @@ class ChatMessage {
       content: json['content'] as String? ?? '',
       type: json['type'] as String? ?? 'text',
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'].toString())
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
       reactions: parsedReactions,
     );
@@ -122,6 +151,8 @@ class ChatMessage {
       if (id.isNotEmpty) 'id': id,
       'room_id': roomId,
       if (userId != null) 'user_id': userId,
+      'sender_name': username,
+      'sender_avatar': avatarUrl,
       'content': content,
       'type': type,
       'created_at': createdAt.toIso8601String(),

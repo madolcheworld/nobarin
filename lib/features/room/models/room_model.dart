@@ -52,12 +52,24 @@ class RoomModel {
       return trimmed;
     }
 
-    // YouTube thumbnail resolution
+    // YouTube thumbnail resolution (including Shorts, Live, embed, and youtu.be)
     if (type == 'youtube' || lower.contains('youtube.com') || lower.contains('youtu.be')) {
-      final regExp = RegExp(r'(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]{11})');
-      final match = regExp.firstMatch(trimmed);
-      if (match != null && match.group(1) != null) {
-        return 'https://img.youtube.com/vi/${match.group(1)}/hqdefault.jpg';
+      final patterns = [
+        RegExp(r'(?:youtube\.com|youtu\.be).*?[?&]v=([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+        RegExp(r'(?:youtube\.com|youtube-nocookie\.com)\/embed\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+        RegExp(r'youtube\.com\/shorts\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+        RegExp(r'youtube\.com\/live\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+        RegExp(r'youtu\.be\/([_\-a-zA-Z0-9]{11})', caseSensitive: false),
+        RegExp(r'^[_\-a-zA-Z0-9]{11}$'),
+      ];
+      for (final p in patterns) {
+        final match = p.firstMatch(trimmed);
+        if (match != null) {
+          final id = match.groupCount >= 1 ? match.group(1) : trimmed;
+          if (id != null && id.isNotEmpty) {
+            return 'https://img.youtube.com/vi/$id/hqdefault.jpg';
+          }
+        }
       }
     }
 

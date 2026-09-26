@@ -99,7 +99,7 @@ class _FullscreenReactionBarState extends State<FullscreenReactionBar>
   Widget build(BuildContext context) {
     return Positioned(
       right: 16,
-      bottom: 24,
+      bottom: 76,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,

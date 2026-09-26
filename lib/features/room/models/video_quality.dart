@@ -20,6 +20,8 @@ class VideoQuality {
   final int? height;
   final int? width;
   final int? bitrate;
+  final double? fps;
+  final String? streamUrl;
   final bool isAuto;
   final QualityControlMode mode;
   final dynamic rawTrack;
@@ -30,6 +32,8 @@ class VideoQuality {
     this.height,
     this.width,
     this.bitrate,
+    this.fps,
+    this.streamUrl,
     this.isAuto = false,
     this.mode = QualityControlMode.directTrack,
     this.rawTrack,
@@ -43,6 +47,8 @@ class VideoQuality {
         height = null,
         width = null,
         bitrate = null,
+        fps = null,
+        streamUrl = null,
         isAuto = true,
         rawTrack = null;
 
@@ -52,6 +58,7 @@ class VideoQuality {
     int? height,
     int? width,
     int? bitrate,
+    double? fps,
   }) {
     final finalLabel = height != null && height > 0
         ? '${height}p (Kualitas Asli)'
@@ -62,12 +69,18 @@ class VideoQuality {
       height: height,
       width: width,
       bitrate: bitrate,
+      fps: fps,
       mode: QualityControlMode.fixedOriginal,
     );
   }
 
   /// Factory constructor untuk opsi Dailymotion
-  factory VideoQuality.dailymotion(String q) {
+  factory VideoQuality.dailymotion(
+    String q, {
+    String? label,
+    int? height,
+    String? streamUrl,
+  }) {
     if (q == 'auto') {
       return const VideoQuality.auto(
         label: 'Auto (Otomatis Dailymotion)',
@@ -75,11 +88,12 @@ class VideoQuality {
       );
     }
     final clean = q.replaceAll(RegExp(r'[^0-9]'), '');
-    final parsedHeight = clean.isNotEmpty ? int.tryParse(clean) : null;
+    final parsedHeight = height ?? (clean.isNotEmpty ? int.tryParse(clean) : null);
     return VideoQuality(
       id: q,
-      label: parsedHeight != null ? '${parsedHeight}p' : q,
+      label: label ?? (parsedHeight != null ? '${parsedHeight}p' : q),
       height: parsedHeight,
+      streamUrl: streamUrl,
       mode: QualityControlMode.webviewBridge,
     );
   }
@@ -89,6 +103,9 @@ class VideoQuality {
     required String id,
     required String label,
     int? height,
+    int? width,
+    int? bitrate,
+    double? fps,
   }) {
     if (id == 'auto') {
       return const VideoQuality.auto(
@@ -100,6 +117,35 @@ class VideoQuality {
       id: id,
       label: label,
       height: height ?? int.tryParse(id.replaceAll(RegExp(r'[^0-9]'), '')),
+      width: width,
+      bitrate: bitrate,
+      fps: fps,
+      mode: QualityControlMode.webviewBridge,
+    );
+  }
+
+  /// Factory constructor untuk opsi Web Browser
+  factory VideoQuality.webBrowser({
+    required String id,
+    required String label,
+    int? height,
+    int? width,
+    int? bitrate,
+    double? fps,
+  }) {
+    if (id == 'auto') {
+      return const VideoQuality.auto(
+        label: 'Auto (Otomatis Web)',
+        mode: QualityControlMode.webviewBridge,
+      );
+    }
+    return VideoQuality(
+      id: id,
+      label: label,
+      height: height ?? int.tryParse(id.replaceAll(RegExp(r'[^0-9]'), '')),
+      width: width,
+      bitrate: bitrate,
+      fps: fps,
       mode: QualityControlMode.webviewBridge,
     );
   }
@@ -235,19 +281,6 @@ class VideoQuality {
       return 360;
     }
     return shortSide;
-  }
-
-  /// Menghasilkan daftar tier resolusi standar hingga batas maksimum [maxHeight].
-  static List<int> buildStandardTiersUpTo(int maxHeight, {int minHeight = 240}) {
-    const standardTiers = [2160, 1440, 1080, 720, 480, 360, 240, 144];
-    final normalizedMax = normalizeResolutionHeight(height: maxHeight) ?? maxHeight;
-    final result = standardTiers
-        .where((t) => t <= normalizedMax && t >= minHeight)
-        .toList();
-    if (normalizedMax > 0 && (result.isEmpty || result.first < normalizedMax)) {
-      result.insert(0, normalizedMax);
-    }
-    return result;
   }
 
   /// Label ringkas untuk badge di UI (misal: "HD", "1080p", "Auto")

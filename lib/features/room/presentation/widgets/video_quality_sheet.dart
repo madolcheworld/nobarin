@@ -37,8 +37,21 @@ class VideoQualitySheet extends StatelessWidget {
         final mediaType = player.mediaType;
         final isLocal = player.isLocalFile;
         final isP2P = player.isP2PStream;
-        final sourceColor = _getSourceColor(mediaType, isLocal: isLocal, isP2P: isP2P);
-        final sourceLabel = _getSourceLabel(mediaType, isLocal: isLocal, isP2P: isP2P);
+        final isHls = player.isHlsStream || player.hasMultipleQualities;
+        final sourceColor =
+            _getSourceColor(mediaType, isLocal: isLocal, isP2P: isP2P);
+        final sourceLabel = _getSourceLabel(
+          mediaType,
+          isLocal: isLocal,
+          isP2P: isP2P,
+          isHls: isHls,
+        );
+
+        final String countBadgeText = player.hasMultipleQualities
+            ? '${player.explicitQualityCount} resolusi tersedia'
+            : (player.isDetectingQualities
+                ? 'Memindai resolusi...'
+                : 'Resolusi tunggal');
 
         return Container(
           decoration: const BoxDecoration(
@@ -132,6 +145,28 @@ class VideoQualitySheet extends StatelessWidget {
                                 color: AppColors.textSecondary,
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppColors.border,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                countBadgeText,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
                             if (player.maxResolutionLabel != null)
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -172,10 +207,9 @@ class VideoQualitySheet extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Content: List of Qualities or Informational Notice
+              // Content: 1) Multi-Resolution List, 2) Scanning State, or 3) Single-Resolution Info
               if (player.supportsQualitySelection &&
-                  qualities.isNotEmpty &&
-                  (mediaType != 'youtube' || player.hasMultipleQualities)) ...[
+                  player.hasMultipleQualities) ...[
                 Flexible(
                   child: ListView.separated(
                     shrinkWrap: true,
@@ -222,7 +256,77 @@ class VideoQualitySheet extends StatelessWidget {
                     },
                   ),
                 ),
+              ] else if (player.isDetectingQualities) ...[
+                if (qualities.isNotEmpty) ...[
+                  _QualityTile(
+                    quality: qualities.first,
+                    isSelected: true,
+                    activeColor: sourceColor,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: sourceColor.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(sourceColor),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Memindai pilihan resolusi dari stream video...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          AppHaptics.selection();
+                          player.refreshAvailableQualities();
+                        },
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          size: 15,
+                          color: sourceColor,
+                        ),
+                        label: Text(
+                          'Pindai Ulang',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: sourceColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ] else if (mediaType == 'youtube') ...[
+                if (qualities.isNotEmpty) ...[
+                  _QualityTile(
+                    quality: qualities.first,
+                    isSelected: true,
+                    activeColor: sourceColor,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -275,45 +379,34 @@ class VideoQualitySheet extends StatelessWidget {
                               ],
                             ),
                           ),
+                          TextButton.icon(
+                            onPressed: () {
+                              AppHaptics.selection();
+                              player.refreshAvailableQualities();
+                            },
+                            icon: const Icon(
+                              Icons.refresh_rounded,
+                              size: 15,
+                              color: AppColors.youtubeRed,
+                            ),
+                            label: const Text(
+                              'Pindai Ulang',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.youtubeRed,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'YouTube menyesuaikan resolusi secara dinamis (DASH) sesuai kestabilan internet Anda agar video tidak buffering.',
+                        'YouTube menyesuaikan resolusi secara dinamis (DASH) sesuai kestabilan internet Anda. Putar video beberapa saat lalu ketuk "Pindai Ulang" jika daftar resolusi belum muncul.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.4,
                           color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(
-                              Icons.settings_rounded,
-                              size: 16,
-                              color: AppColors.textSecondary,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Untuk resolusi manual, ketuk ikon gerigi pengaturan pada pemutar video.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ],
@@ -321,6 +414,15 @@ class VideoQualitySheet extends StatelessWidget {
                 ),
               ] else ...[
                 // Local File, P2P Stream, or Single-Track Direct Video Passthrough
+                if (qualities.isNotEmpty) ...[
+                  _QualityTile(
+                    quality: qualities.first,
+                    isSelected: true,
+                    activeColor: sourceColor,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -361,7 +463,7 @@ class VideoQualitySheet extends StatelessWidget {
                                       ? 'Streaming P2P Langsung'
                                       : (isLocal
                                           ? 'File Video Lokal'
-                                          : 'Resolusi Asli Video'),
+                                          : 'Resolusi Asli Video (Single Track)'),
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -382,6 +484,26 @@ class VideoQualitySheet extends StatelessWidget {
                               ],
                             ),
                           ),
+                          if (!isLocal && !isP2P)
+                            TextButton.icon(
+                              onPressed: () {
+                                AppHaptics.selection();
+                                player.refreshAvailableQualities();
+                              },
+                              icon: Icon(
+                                Icons.refresh_rounded,
+                                size: 15,
+                                color: sourceColor,
+                              ),
+                              label: Text(
+                                'Pindai Ulang',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: sourceColor,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -390,7 +512,7 @@ class VideoQualitySheet extends StatelessWidget {
                             ? 'Video ditransmisikan langsung antar perangkat tanpa kompresi tambahan untuk menjaga kualitas gambar sejernih mungkin.'
                             : (isLocal
                                 ? 'Video dimainkan langsung dari penyimpanan perangkat Anda pada resolusi aslinya tanpa kompresi ulang, menghemat baterai & performa grafis.'
-                                : 'Sumber video ini menyediakan satu stream langsung (Single Track) dan diputar otomatis pada resolusi maksimal yang tersedia.'),
+                                : 'Sumber video ini hanya menyediakan satu resolusi stream (Single Track) dan diputar langsung pada kualitas aslinya.'),
                         style: const TextStyle(
                           fontSize: 12,
                           height: 1.4,
@@ -449,6 +571,8 @@ class VideoQualitySheet extends StatelessWidget {
     if (type == 'youtube') return AppColors.youtubeRed;
     if (type == 'bstation') return AppColors.bstationBlue;
     if (type == 'dailymotion') return AppColors.dailymotionBlue;
+    if (type == 'google_drive' || type == 'gdrive') return AppColors.googleDriveGreen;
+    if (type == 'web_browser') return AppColors.webBrowserTeal;
     if (isP2P) return AppColors.p2pPurple;
     if (isLocal) return AppColors.accentGreen;
     return AppColors.primaryNeon;
@@ -458,13 +582,17 @@ class VideoQualitySheet extends StatelessWidget {
     String type, {
     bool isLocal = false,
     bool isP2P = false,
+    bool isHls = false,
   }) {
     if (type == 'youtube') return 'YouTube';
     if (type == 'bstation') return 'Bstation';
     if (type == 'dailymotion') return 'Dailymotion';
+    if (type == 'google_drive' || type == 'gdrive') return 'Google Drive';
+    if (type == 'web_browser') return 'Web Browser';
     if (isP2P) return 'P2P Video';
     if (isLocal) return 'File Lokal';
-    return 'Direct Stream (HLS)';
+    if (isHls) return 'Direct Stream (HLS)';
+    return 'Direct Video';
   }
 }
 

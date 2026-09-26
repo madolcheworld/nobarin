@@ -112,7 +112,18 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
           (hostKey != null && LobbyRepository.extractHostKey(r) == hostKey));
       if (index >= 0) {
         final existing = currentRooms[index];
+        final effectiveHostName = (room.hostName != null &&
+                room.hostName!.isNotEmpty &&
+                room.hostName != 'Host')
+            ? room.hostName
+            : (existing.hostName ?? room.hostName);
+        final effectiveThumbnail = (room.thumbnailUrl != null &&
+                room.thumbnailUrl!.isNotEmpty)
+            ? room.thumbnailUrl
+            : existing.thumbnailUrl;
         final mergedRoom = room.copyWith(
+          hostName: effectiveHostName,
+          thumbnailUrl: effectiveThumbnail,
           participantCount: room.participantCount > 1
               ? room.participantCount
               : existing.participantCount,
@@ -133,7 +144,10 @@ class LobbyController extends StateNotifier<AsyncValue<List<RoomModel>>> {
   }
 
   Future<void> refreshRooms() async {
-    state = const AsyncValue.loading();
+    // Only transition to loading state if we don't already have data to prevent skeleton shimmer flickering
+    if (!state.hasValue) {
+      state = const AsyncValue.loading();
+    }
     try {
       final rooms = await _repository.getPublicRooms();
       state = AsyncValue.data(rooms);
@@ -239,6 +253,8 @@ enum LobbyFilterCategory {
   youtube,
   bstation,
   dailymotion,
+  googleDrive,
+  webBrowser,
   p2pFile,
 }
 
@@ -278,12 +294,25 @@ final filteredRoomsProvider = Provider<List<RoomModel>>((ref) {
         result = result
             .where((r) => r.currentMediaType == 'dailymotion')
             .toList();
+      } else if (category == LobbyFilterCategory.googleDrive) {
+        result = result
+            .where((r) =>
+                r.currentMediaType == 'google_drive' ||
+                r.currentMediaType == 'gdrive')
+            .toList();
+      } else if (category == LobbyFilterCategory.webBrowser) {
+        result = result
+            .where((r) => r.currentMediaType == 'web_browser')
+            .toList();
       } else if (category == LobbyFilterCategory.p2pFile) {
         result = result
             .where((r) =>
                 r.currentMediaType == 'direct_url' &&
                 (r.currentMediaUrl?.startsWith('p2p://') == true ||
-                 UnifiedPlayerController.isLocalFilePath(r.currentMediaUrl ?? '')))
+                 UnifiedPlayerController.isLocalFilePath(r.currentMediaUrl ?? '') ||
+                 (r.currentMediaUrl != null &&
+                  (r.currentMediaUrl!.contains(':8080') ||
+                   r.currentMediaUrl!.contains('/stream')))))
             .toList();
       }
 

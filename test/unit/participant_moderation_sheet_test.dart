@@ -191,5 +191,32 @@ void main() {
 
       controller.dispose();
     });
+
+    testWidgets('shows disabled mute action when participant is already muted', (tester) async {
+      final controller = RoomController(
+        initialRoom: testRoom,
+        currentUser: hostUser,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ParticipantModerationSheet(
+              targetUser: viewerUser,
+              roomController: controller,
+              isMuted: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Matikan Mikrofon'), findsOneWidget);
+      expect(find.text('Mikrofon sudah mati'), findsOneWidget);
+
+      final listTile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Matikan Mikrofon'));
+      expect(listTile.enabled, isFalse);
+
+      controller.dispose();
+    });
   });
 }

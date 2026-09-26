@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 import '../../models/video_quality.dart';
+import '../../services/hls_manifest_parser.dart';
 import 'web_video_adapter.dart';
 
 bool get isSupported => kIsWeb;
@@ -43,6 +44,7 @@ extension type _HlsLevel._(JSObject _) implements JSObject {
   external int? get height;
   external int? get width;
   external int? get bitrate;
+  external double? get frameRate;
   external String? get name;
 }
 
@@ -64,6 +66,7 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
   final web.HTMLVideoElement _videoElement;
   final List<StreamSubscription> _subscriptions = [];
   double _pendingStartSeconds = 0.0;
+  String _masterUrl = '';
   _HlsJS? _hlsInstance;
 
   final void Function(double position) onPositionChanged;
@@ -144,8 +147,10 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
         }
       }
 
-      // If single file (not HLS), detect video resolution from element
-      if (_hlsInstance == null && _videoElement.videoHeight > 0) {
+      // If single file (not multi-variant HLS), detect video resolution from element
+      if (_hlsInstance == null &&
+          _availableQualities.length <= 1 &&
+          _videoElement.videoHeight > 0) {
         final rawH = _videoElement.videoHeight;
         final rawW = _videoElement.videoWidth;
         final normH = VideoQuality.normalizeResolutionHeight(
@@ -153,8 +158,9 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
               height: rawH,
             ) ??
             rawH;
-        if (_availableQualities.length <= 1 ||
-            _availableQualities.first.height != normH) {
+        if (_availableQualities.isEmpty ||
+            _availableQualities.first.height != normH ||
+            _availableQualities.first.mode != QualityControlMode.fixedOriginal) {
           _availableQualities = [
             VideoQuality.fixed(
               label: '${normH}p (Kualitas Asli)',
@@ -201,13 +207,37 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
   void _extractHlsLevels() {
     if (_hlsInstance == null) return;
     try {
+      final rawLevels = _hlsInstance!.levels.toDart;
+      if (rawLevels.isEmpty) return;
+
+      if (rawLevels.length == 1) {
+        final lvl = _HlsLevel._(rawLevels.first);
+        final normH = VideoQuality.normalizeResolutionHeight(
+          width: lvl.width,
+          height: lvl.height,
+        );
+        _availableQualities = [
+          VideoQuality.fixed(
+            label: (normH != null && normH > 0)
+                ? '${normH}p (Kualitas Asli)'
+                : (lvl.name ?? 'Kualitas Asli (Direct)'),
+            height: normH,
+            width: lvl.width,
+            bitrate: lvl.bitrate,
+            fps: lvl.frameRate,
+          ),
+        ];
+        _selectedQuality = _availableQualities.first;
+        onQualitiesChanged?.call(_availableQualities);
+        return;
+      }
+
       final List<VideoQuality> qualities = [
         const VideoQuality.auto(
           label: 'Auto (Otomatis)',
           mode: QualityControlMode.directTrack,
         ),
       ];
-      final rawLevels = _hlsInstance!.levels.toDart;
       final Map<int, int> heightCounts = {};
       for (int i = 0; i < rawLevels.length; i++) {
         final lvl = _HlsLevel._(rawLevels[i]);
@@ -228,6 +258,7 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
         );
         final w = lvl.width;
         final b = lvl.bitrate;
+        final fps = lvl.frameRate;
         String label;
         if (normH != null && normH > 0) {
           if (normH >= 2160) {
@@ -236,6 +267,9 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
             label = '2K (${normH}p)';
           } else {
             label = '${normH}p';
+          }
+          if (fps != null && fps >= 50) {
+            label += ' ${fps.round()}fps';
           }
           if ((heightCounts[normH] ?? 0) > 1 && b != null && b > 0) {
             final mbps = (b / 1000000).toStringAsFixed(1);
@@ -251,6 +285,7 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
             height: normH,
             width: w,
             bitrate: b,
+            fps: fps,
             mode: QualityControlMode.directTrack,
           ),
         );
@@ -300,12 +335,20 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
     double startSeconds = 0.0,
   }) async {
     _cleanupHls();
+    _masterUrl = url;
     _pendingStartSeconds = startSeconds;
 
-    final isHls = url.toLowerCase().contains('.m3u8');
-    final canNativeHls = _videoElement.canPlayType('application/vnd.apple.mpegurl').isNotEmpty;
+    final isHls = HlsManifestParser.isHlsUrl(url);
 
-    if (isHls && !canNativeHls && _isHlsSupported()) {
+    if (!isHls) {
+      _availableQualities = [
+        VideoQuality.fixed(label: 'Kualitas Asli (Direct)'),
+      ];
+      _selectedQuality = _availableQualities.first;
+      onQualitiesChanged?.call(_availableQualities);
+    }
+
+    if (isHls && _isHlsSupported()) {
       try {
         final hls = _HlsJS();
         _hlsInstance = hls;
@@ -325,6 +368,15 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
     } else {
       _videoElement.src = url;
       _videoElement.load();
+      if (isHls) {
+        HlsManifestParser.fetchAndParseQualities(url).then((parsed) {
+          if (parsed.isNotEmpty && _masterUrl == url && _hlsInstance == null) {
+            _availableQualities = parsed;
+            _selectedQuality = parsed.first;
+            onQualitiesChanged?.call(_availableQualities);
+          }
+        });
+      }
     }
 
     if (autoPlay) {
@@ -361,6 +413,28 @@ class WebVideoAdapterWeb implements WebVideoAdapter {
         }
       } catch (e) {
         debugPrint('[WebVideoAdapter] Error setting HLS quality: $e');
+      }
+    } else if (_availableQualities.length > 1) {
+      // Native HLS fallback (e.g. Safari) using parsed variant streamUrl
+      try {
+        final target = _availableQualities.firstWhere(
+          (q) => q.id == qualityId || (qualityId == 'auto' && q.isAuto),
+          orElse: () => _availableQualities.first,
+        );
+        _selectedQuality = target;
+        final targetUrl = target.isAuto ? _masterUrl : (target.streamUrl ?? _masterUrl);
+        if (targetUrl.isNotEmpty && _videoElement.src != targetUrl) {
+          final currentPos = _videoElement.currentTime.toDouble();
+          final wasPlaying = !_videoElement.paused;
+          _pendingStartSeconds = currentPos;
+          _videoElement.src = targetUrl;
+          _videoElement.load();
+          if (wasPlaying) {
+            await play();
+          }
+        }
+      } catch (e) {
+        debugPrint('[WebVideoAdapter] Error setting native HLS quality: $e');
       }
     }
   }

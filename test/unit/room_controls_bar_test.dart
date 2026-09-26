@@ -8,6 +8,7 @@ import 'package:nobarin/features/room/controllers/unified_player_controller.dart
 import 'package:nobarin/features/room/models/room_model.dart';
 import 'package:nobarin/features/room/presentation/widgets/room_controls_bar.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nobarin/features/screenshare/controllers/webrtc_screenshare_controller.dart';
 import 'package:nobarin/features/voice/controllers/webrtc_voice_controller.dart';
 
@@ -65,6 +66,7 @@ void main() {
     );
 
     setUp(() {
+      RoomControlsBar.hasAcceptedMicRationale = true;
       playerController = UnifiedPlayerController();
       syncController = SyncController(
         room: baseRoom,
@@ -297,6 +299,53 @@ void main() {
       // Tap Mic pill to toggle
       await tester.tap(find.text('Mic Mati'));
       await tester.pump();
+
+      expect(voice.isMicMuted, isFalse);
+      expect(find.text('Mic Aktif'), findsOneWidget);
+
+      voice.dispose();
+    });
+
+    testWidgets('shows mic rationale dialog when tapping Mic Mati for the first time',
+        (tester) async {
+      RoomControlsBar.hasAcceptedMicRationale = false;
+      SharedPreferences.setMockInitialValues({'has_seen_mic_rationale': false});
+
+      final voice = WebRtcVoiceController(
+        roomId: baseRoom.id,
+        userId: testHost.id,
+        userName: testHost.username,
+        supabase: null,
+        userMediaFunction: (_) async => _FakeMediaStream(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RoomControlsBar(
+              syncController: syncController,
+              player: playerController,
+              roomController: roomController,
+              voiceController: voice,
+              onOpenMediaPicker: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mic Mati'), findsOneWidget);
+      await tester.tap(find.text('Mic Mati'));
+      await tester.pumpAndSettle();
+
+      // Verify rationale dialog appears
+      expect(find.text('Izin Mikrofon'), findsOneWidget);
+      expect(find.text('Lanjutkan'), findsOneWidget);
+
+      // Confirm dialog
+      await tester.tap(find.text('Lanjutkan'));
+      await tester.pumpAndSettle();
 
       expect(voice.isMicMuted, isFalse);
       expect(find.text('Mic Aktif'), findsOneWidget);

@@ -47,6 +47,16 @@ class AuthController extends StateNotifier<AsyncValue<UserProfile?>> {
     await _repository.clearSession();
     state = const AsyncValue.data(null);
   }
+
+  Future<void> deleteAccount() async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.deleteAccount();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
 }
 
 final authControllerProvider =

@@ -101,6 +101,26 @@ void main() {
       expect(response.bodyBytes.first, equals(500 % 256));
     });
 
+    test('serves 206 Partial Content for suffix Range: bytes=-200 (RFC 7233)', () async {
+      final url = await server.start(
+        filePath: sampleVideoFile.path,
+        bindToLan: false,
+        mimeType: 'video/mp4',
+      );
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'Range': 'bytes=-200'},
+      );
+
+      expect(response.statusCode, equals(206));
+      expect(response.headers['content-range'], equals('bytes 800-999/1000'));
+      expect(response.headers['content-length'], equals('200'));
+      expect(response.bodyBytes.length, equals(200));
+      expect(response.bodyBytes.first, equals(800 % 256));
+      expect(response.bodyBytes.last, equals(999 % 256));
+    });
+
     test('serves HEAD requests with headers but empty body', () async {
       final url = await server.start(
         filePath: sampleVideoFile.path,

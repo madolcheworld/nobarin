@@ -8,6 +8,8 @@ import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/video_title_resolver.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
+import '../../../browser/presentation/google_drive_browser_sheet.dart';
+import '../../../browser/presentation/web_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../../chat/controllers/chat_controller.dart';
 import '../../../screenshare/controllers/webrtc_screenshare_controller.dart';
@@ -116,6 +118,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
           currentTitle == 'Video YouTube' ||
           currentTitle == 'Video Bstation' ||
           currentTitle == 'Video Dailymotion' ||
+          currentTitle == 'Video Google Drive' ||
+          currentTitle == 'Video Web Browser' ||
           currentTitle == 'Video Stream';
       if (isPlaceholder) {
         _titleController.text = detected.title;
@@ -144,10 +148,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
             currentTitle == 'Video YouTube' ||
             currentTitle == 'Video Bstation' ||
             currentTitle == 'Video Dailymotion' ||
+            currentTitle == 'Video Google Drive' ||
+            currentTitle == 'Video Web Browser' ||
             currentTitle == 'Video Stream' ||
             currentTitle.startsWith('Video YouTube (') ||
             currentTitle.startsWith('Video Bstation (') ||
             currentTitle.startsWith('Video Dailymotion (') ||
+            currentTitle.startsWith('Video Google Drive (') ||
+            currentTitle.startsWith('Video Web Browser (') ||
             RegExp(r'^\d+$').hasMatch(currentTitle);
 
         if (isPlaceholder) {
@@ -187,6 +195,8 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
         title != 'Video YouTube' &&
         title != 'Video Bstation' &&
         title != 'Video Dailymotion' &&
+        title != 'Video Google Drive' &&
+        title != 'Video Web Browser' &&
         title != 'Video Stream') {
       widget.chatController?.sendSystemMessage(
         '${widget.syncController.currentUser.username} memutar "$title".',
@@ -956,6 +966,217 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                                   widget.isAddingToQueueInitial
                                       ? 'Pilih video untuk antrean'
                                       : 'Jelajahi video di Dailymotion',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Google Drive In-App Browser Option Card
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      GoogleDriveBrowserSheet.show(
+                        context,
+                        syncController: widget.syncController,
+                        queueController: widget.queueController,
+                        chatController: widget.chatController,
+                        mode: widget.isAddingToQueueInitial
+                            ? GoogleDriveBrowserMode.queueOnly
+                            : GoogleDriveBrowserMode.watchNow,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.googleDriveGreen.withValues(alpha: 0.18),
+                            AppColors.surfaceElevated,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.googleDriveGreen.withValues(alpha: 0.45),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: AppColors.googleDriveGreen,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add_to_drive_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.isAddingToQueueInitial
+                                      ? 'Pilih dari Google Drive'
+                                      : 'Google Drive',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.isAddingToQueueInitial
+                                      ? 'Pilih video Drive untuk antrean'
+                                      : 'Login & putar video dari Google Drive',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Web Browser (Auto-Detect Video) Option Card
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      WebBrowserSheet.show(
+                        context,
+                        syncController: widget.syncController,
+                        queueController: widget.queueController,
+                        chatController: widget.chatController,
+                        mode: widget.isAddingToQueueInitial
+                            ? WebBrowserMode.queueOnly
+                            : WebBrowserMode.watchNow,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.webBrowserTeal.withValues(alpha: 0.18),
+                            AppColors.surfaceElevated,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.webBrowserTeal.withValues(alpha: 0.45),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: AppColors.webBrowserTeal,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.public_rounded,
+                              color: Colors.black,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.isAddingToQueueInitial
+                                            ? 'Cari di Web Browser'
+                                            : 'Web Browser',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.webBrowserTeal
+                                            .withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Auto-Detect',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.webBrowserTeal,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.isAddingToQueueInitial
+                                      ? 'Buka situs apa saja & deteksi video untuk antrean'
+                                      : 'Jelajahi web & deteksi otomatis video yang diputar',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,

@@ -192,17 +192,12 @@ class LobbyRepository {
     }
     final desc = room.description ?? '';
     final idMatch = RegExp(r'\[HOST:[^\]]*id=([^;\]]+)').firstMatch(desc);
-    if (idMatch != null) {
+    if (idMatch != null && idMatch.group(1) != null && idMatch.group(1)!.isNotEmpty) {
       return 'id:${idMatch.group(1)}';
     }
-    final nameMatch = RegExp(r'\[HOST:[^\]]*name=([^;\]]+)').firstMatch(desc);
-    if (nameMatch != null && nameMatch.group(1) != 'Host') {
-      return 'name:${nameMatch.group(1)!.toLowerCase()}';
-    }
-    if (room.hostName != null &&
-        room.hostName!.isNotEmpty &&
-        room.hostName != 'Host') {
-      return 'name:${room.hostName!.toLowerCase()}';
+    final name = room.hostName?.trim();
+    if (name != null && name.isNotEmpty) {
+      return 'name:${name.toLowerCase()}';
     }
     return null;
   }
@@ -247,22 +242,19 @@ class LobbyRepository {
     return deduplicated;
   }
 
-  /// Cleans up any existing active rooms belonging to the same host before creating a new one
+  /// Cleans up any existing active rooms belonging to the same host before creating a new one.
+  /// Uses ONLY hostId (never hostName) to prevent accidental deletion of other users' rooms.
   Future<void> cleanupExistingRoomsForHost({
     required String hostId,
     required String hostName,
   }) async {
+    if (hostId.isEmpty) return;
+
     // 1. Remove from local in-memory demo rooms
     _demoRooms.removeWhere((r) {
-      if (hostId.isNotEmpty && r.hostId == hostId) return true;
-      if (hostName != 'Host' &&
-          r.hostName != null &&
-          r.hostName!.toLowerCase() == hostName.toLowerCase()) {
-        return true;
-      }
+      if (r.hostId == hostId) return true;
       final desc = r.description ?? '';
-      if (hostId.isNotEmpty && desc.contains('id=$hostId')) return true;
-      if (hostName != 'Host' && desc.contains('name=$hostName')) return true;
+      if (desc.contains('id=$hostId')) return true;
       return false;
     });
 
@@ -270,15 +262,10 @@ class LobbyRepository {
     if (supabase != null) {
       try {
         final filters = <String>[];
-        if (hostId.isNotEmpty && _isValidUuid(hostId)) {
+        if (_isValidUuid(hostId)) {
           filters.add('host_id.eq.$hostId');
         }
-        if (hostName.isNotEmpty && hostName != 'Host') {
-          filters.add('host_name.eq.$hostName');
-        }
-        if (hostId.isNotEmpty) {
-          filters.add('description.ilike.*id=$hostId*');
-        }
+        filters.add('description.ilike.*id=$hostId*');
 
         if (filters.isNotEmpty) {
           final res = await supabase!
@@ -339,40 +326,37 @@ class LobbyRepository {
     }
   }
 
-  /// Fetches public rooms
+  /// Fetches public rooms. Propagates network errors to controller so UI can display retry/error state.
   Future<List<RoomModel>> getPublicRooms() async {
     if (supabase != null) {
+      dynamic response;
       try {
-        dynamic response;
-        try {
-          response = await supabase!
-              .from('rooms')
-              .select('*, profiles(username, avatar_url)')
-              .eq('is_public', true)
-              .neq('current_state', 'closed')
-              .order('created_at', ascending: false)
-              .limit(30)
-              .timeout(const Duration(seconds: 4));
-        } catch (e) {
-          debugPrint('[LobbyRepository] getPublicRooms with profiles join failed: $e');
-          response = await supabase!
-              .from('rooms')
-              .select('*')
-              .eq('is_public', true)
-              .neq('current_state', 'closed')
-              .order('created_at', ascending: false)
-              .limit(30)
-              .timeout(const Duration(seconds: 4));
-        }
-
-        final List<dynamic> list = response as List<dynamic>;
-        final rawRooms = list
-            .map((item) => RoomModel.fromJson(item as Map<String, dynamic>))
-            .toList();
-        return deduplicateRooms(rawRooms);
+        response = await supabase!
+            .from('rooms')
+            .select('*, profiles(username, avatar_url)')
+            .eq('is_public', true)
+            .neq('current_state', 'closed')
+            .order('created_at', ascending: false)
+            .limit(30)
+            .timeout(const Duration(seconds: 4));
       } catch (e) {
-        debugPrint('[LobbyRepository] Supabase getPublicRooms fallback: $e');
+        debugPrint('[LobbyRepository] getPublicRooms with profiles join failed, retrying plain rooms query: $e');
+        // Retry without join in case profiles relation is not configured
+        response = await supabase!
+            .from('rooms')
+            .select('*')
+            .eq('is_public', true)
+            .neq('current_state', 'closed')
+            .order('created_at', ascending: false)
+            .limit(30)
+            .timeout(const Duration(seconds: 4));
       }
+
+      final List<dynamic> list = response as List<dynamic>;
+      final rawRooms = list
+          .map((item) => RoomModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+      return deduplicateRooms(rawRooms);
     }
     return deduplicateRooms(
       _demoRooms.where((r) => r.isPublic && r.currentState != 'closed').toList(),

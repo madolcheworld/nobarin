@@ -43,15 +43,29 @@ class VideoTitleResolver {
         .replaceAll('&gt;', '>')
         .replaceAll('&nbsp;', ' ');
 
-    // Strip common platform suffixes (e.g. " - Bstation", " | YouTube", " HD | bilibili", " - Dailymotion")
+    // Strip common platform suffixes (e.g. " - Bstation", " | YouTube", " HD | bilibili", " - Dailymotion", " - Google Drive")
     title = title.replaceAll(
-      RegExp(r'\s*(HD\s*)?[-|/–—_]\s*(Bstation|Bilibili|YouTube|Dailymotion).*$', caseSensitive: false),
+      RegExp(r'\s*(HD\s*)?[-|/–—_]\s*(Bstation|Bilibili|YouTube|Dailymotion|Google Drive|Google Dokumen).*$', caseSensitive: false),
       '',
     );
     title = title.replaceAll(
       RegExp(r'\s*HD\s*\|\s*bilibili.*$', caseSensitive: false),
       '',
     );
+
+    // Strip common Google Drive / media prefixes
+    if (title.toLowerCase().startsWith('video ')) {
+      final stripped = title.substring(6).trim();
+      if (stripped.isNotEmpty) {
+        title = stripped;
+      }
+    }
+    if (title.toLowerCase().startsWith('menampilkan ')) {
+      final stripped = title.substring(12).trim();
+      if (stripped.isNotEmpty) {
+        title = stripped;
+      }
+    }
 
     title = title.trim();
 
@@ -65,6 +79,7 @@ class VideoTitleResolver {
         lower == 'bilibili' ||
         lower == 'youtube' ||
         lower == 'dailymotion' ||
+        lower == 'google drive' ||
         lower == 'video') {
       return '';
     }
@@ -135,7 +150,38 @@ class VideoTitleResolver {
         return null;
       }
 
-      // 4. Direct URL / Media File Detection
+      // 4. Google Drive Detection
+      if (mediaType == 'google_drive' ||
+          trimmed.contains('drive.google.com') ||
+          trimmed.contains('docs.google.com')) {
+        final resolved = await _resolveGoogleDriveTitle(trimmed, effectiveClient);
+        if (resolved != null && resolved.isNotEmpty) {
+          _titleCache[trimmed] = resolved;
+          return resolved;
+        }
+        return null;
+      }
+
+      // 5. Web Browser Page Detection
+      if (mediaType == 'web_browser') {
+        final resolved = await _resolveBstationTitle(trimmed, effectiveClient);
+        if (resolved != null && resolved.isNotEmpty) {
+          _titleCache[trimmed] = resolved;
+          return resolved;
+        }
+        final uri = Uri.tryParse(trimmed);
+        if (uri != null && uri.host.isNotEmpty) {
+          final hostClean = uri.host.replaceFirst(RegExp(r'^www\.'), '');
+          if (hostClean.isNotEmpty) {
+            final fallback = 'Video Web ($hostClean)';
+            _titleCache[trimmed] = fallback;
+            return fallback;
+          }
+        }
+        return null;
+      }
+
+      // 6. Direct URL / Media File Detection
       if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
         final uri = Uri.tryParse(trimmed);
         if (uri != null && uri.pathSegments.isNotEmpty) {
@@ -260,6 +306,63 @@ class VideoTitleResolver {
         ).firstMatch(body);
         if (twMatch != null) {
           final raw = twMatch.group(1) ?? twMatch.group(2);
+          final clean = cleanTitle(raw);
+          if (clean.isNotEmpty) {
+            return clean;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Resolves Google Drive file title by fetching public preview/view HTML and parsing title/og:title.
+  static Future<String?> _resolveGoogleDriveTitle(String rawUrl, http.Client client) async {
+    try {
+      final fileIdMatch = RegExp(r'(?:/file/d/|[?&]id=)([a-zA-Z0-9_-]+)').firstMatch(rawUrl);
+      final fileId = fileIdMatch?.group(1);
+      final targetUrl = fileId != null
+          ? 'https://drive.google.com/file/d/$fileId/view'
+          : rawUrl;
+
+      final res = await client
+          .get(
+            Uri.parse(targetUrl),
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (res.statusCode == 200) {
+        final body = res.body;
+
+        // 1. Try <meta property="og:title" content="...">
+        final ogMatch = RegExp(
+          r'<meta\s+[^>]*?property=["\x27]og:title["\x27][^>]*?content=(?:"([^"]*)"|\x27([^\x27]*)\x27)',
+          caseSensitive: false,
+        ).firstMatch(body) ??
+        RegExp(
+          r'<meta\s+[^>]*?content=(?:"([^"]*)"|\x27([^\x27]*)\x27)[^>]*?property=["\x27]og:title["\x27]',
+          caseSensitive: false,
+        ).firstMatch(body);
+        if (ogMatch != null) {
+          final raw = ogMatch.group(1) ?? ogMatch.group(2);
+          final clean = cleanTitle(raw);
+          if (clean.isNotEmpty) {
+            return clean;
+          }
+        }
+
+        // 2. Try <title>...</title>
+        final titleMatch = RegExp(
+          r'<title[^>]*>([^<]+)</title>',
+          caseSensitive: false,
+        ).firstMatch(body);
+        if (titleMatch != null) {
+          final raw = titleMatch.group(1);
           final clean = cleanTitle(raw);
           if (clean.isNotEmpty) {
             return clean;

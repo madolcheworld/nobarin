@@ -24,20 +24,16 @@ class BstationPlayerController extends ChangeNotifier {
     _isFullscreenTransition = active;
   }
 
-  // Video Quality state for Bstation
+  // Video Quality state for Bstation (populated dynamically from page/API)
   List<VideoQuality> _availableQualities = [
     const VideoQuality.auto(
       label: 'Auto (Otomatis Bstation)',
       mode: QualityControlMode.webviewBridge,
     ),
-    VideoQuality.bstation(id: '720', label: '720p HD', height: 720),
-    VideoQuality.bstation(id: '480', label: '480p Standar', height: 480),
-    VideoQuality.bstation(id: '360', label: '360p Hemat', height: 360),
   ];
   VideoQuality? _selectedQuality;
   int? _detectedHeight;
   int? _detectedWidth;
-  bool _hasExplicitQualitiesFromBridge = false;
 
   BstationPlayerController() {
     _selectedQuality = _availableQualities.first;
@@ -78,11 +74,17 @@ class BstationPlayerController extends ChangeNotifier {
     _url = url;
     _position = startSeconds;
     _isPlaying = autoPlay;
+    _availableQualities = [
+      const VideoQuality.auto(
+        label: 'Auto (Otomatis Bstation)',
+        mode: QualityControlMode.webviewBridge,
+      ),
+    ];
     _selectedQuality = _availableQualities.first;
     _detectedHeight = null;
     _detectedWidth = null;
-    _hasExplicitQualitiesFromBridge = false;
     notifyListeners();
+    onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
 
     if (!_isSupportedMobilePlatform) {
       if (!kIsWeb) {
@@ -310,7 +312,99 @@ class BstationPlayerController extends ChangeNotifier {
             }
             video.addEventListener('loadedmetadata', reportBstationResolution);
             video.addEventListener('resize', reportBstationResolution);
-            // 4. Track available qualities from page
+            // 4. Track available qualities from page & network playurl responses
+            function extractFromPlayInfoObj(pData, addQualityItem, qMap, hMap) {
+              if (!pData || typeof pData !== 'object') return;
+              var sfList = pData.support_formats || (pData.playurl && pData.playurl.support_formats) || (pData.video_resource && pData.video_resource.support_formats);
+              if (Array.isArray(sfList)) {
+                for (var i = 0; i < sfList.length; i++) {
+                  var sf = sfList[i];
+                  var qCode = sf.quality;
+                  var hVal = sf.height || hMap[qCode];
+                  var desc = sf.new_description || sf.display_desc || sf.description || qMap[qCode];
+                  if (!hVal && desc) {
+                    var m = String(desc).match(/(\\d{3,4})[pP]?/);
+                    if (m) hVal = parseInt(m[1], 10);
+                  }
+                  if (hVal) {
+                    addQualityItem(String(hVal), hVal, desc || (hVal + 'p'));
+                  }
+                }
+              }
+              var dashVideos = (pData.dash && pData.dash.video) || (pData.playurl && pData.playurl.video) || (pData.video_resource && pData.video_resource.dash && pData.video_resource.dash.video);
+              if (Array.isArray(dashVideos)) {
+                for (var k = 0; k < dashVideos.length; k++) {
+                  var dv = dashVideos[k];
+                  var dvObj = dv.video_resource || dv;
+                  var qId = dvObj.id || dvObj.quality;
+                  var dvH = dvObj.height || hMap[qId];
+                  var dvDesc = dvObj.description || dvObj.new_description || qMap[qId];
+                  if (dvH) {
+                    addQualityItem(String(dvH), dvH, dvDesc || (dvH + 'p'));
+                  }
+                }
+              }
+              var acc = pData.accept_quality || (pData.playurl && pData.playurl.accept_quality);
+              if (Array.isArray(acc)) {
+                for (var j = 0; j < acc.length; j++) {
+                  var code = acc[j];
+                  if (hMap[code]) {
+                    addQualityItem(String(hMap[code]), hMap[code], qMap[code] || (hMap[code] + 'p'));
+                  }
+                }
+              }
+            }
+
+            if (!window.__nobarBstationHookInstalled) {
+              window.__nobarBstationHookInstalled = true;
+              window.__nobarBstationPayloads = [];
+              try {
+                var origFetch = window.fetch;
+                if (typeof origFetch === 'function') {
+                  window.fetch = function() {
+                    var p = origFetch.apply(this, arguments);
+                    try {
+                      var reqUrl = arguments[0] ? String(arguments[0].url || arguments[0]) : '';
+                      if (reqUrl.indexOf('playurl') !== -1 || reqUrl.indexOf('video') !== -1 || reqUrl.indexOf('play') !== -1) {
+                        p.then(function(resp) {
+                          try {
+                            resp.clone().json().then(function(json) {
+                              if (json && (json.data || json.result)) {
+                                window.__nobarBstationPayloads.push(json.data || json.result);
+                                reportBstationQualities();
+                              }
+                            }).catch(function(){});
+                          } catch (_) {}
+                        }).catch(function(){});
+                      }
+                    } catch (_) {}
+                    return p;
+                  };
+                }
+                var origOpen = XMLHttpRequest.prototype.open;
+                var origSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.open = function(method, url) {
+                  this.__nobarUrl = String(url || '');
+                  return origOpen.apply(this, arguments);
+                };
+                XMLHttpRequest.prototype.send = function() {
+                  var xhr = this;
+                  if (xhr.__nobarUrl && (xhr.__nobarUrl.indexOf('playurl') !== -1 || xhr.__nobarUrl.indexOf('video') !== -1)) {
+                    xhr.addEventListener('load', function() {
+                      try {
+                        var json = JSON.parse(xhr.responseText);
+                        if (json && (json.data || json.result)) {
+                          window.__nobarBstationPayloads.push(json.data || json.result);
+                          reportBstationQualities();
+                        }
+                      } catch (_) {}
+                    });
+                  }
+                  return origSend.apply(this, arguments);
+                };
+              } catch (_) {}
+            }
+
             function reportBstationQualities() {
               try {
                 var detected = [];
@@ -325,42 +419,16 @@ class BstationPlayerController extends ChangeNotifier {
                   detected.push({ id: String(idStr), height: heightNum, label: labelStr || (heightNum + 'p') });
                 }
 
+                // Method 0: Intercepted network playurl responses
+                if (Array.isArray(window.__nobarBstationPayloads)) {
+                  for (var pIdx = 0; pIdx < window.__nobarBstationPayloads.length; pIdx++) {
+                    extractFromPlayInfoObj(window.__nobarBstationPayloads[pIdx], addQualityItem, qMap, hMap);
+                  }
+                }
+
                 // Method A: Bilibili __playinfo__ global (support_formats, accept_quality, dash.video)
-                if (window.__playinfo__ && window.__playinfo__.data) {
-                  var pData = window.__playinfo__.data;
-                  if (Array.isArray(pData.support_formats)) {
-                    for (var i = 0; i < pData.support_formats.length; i++) {
-                      var sf = pData.support_formats[i];
-                      var qCode = sf.quality;
-                      var hVal = sf.height || hMap[qCode];
-                      var desc = sf.new_description || sf.display_desc || qMap[qCode];
-                      if (!hVal && desc) {
-                        var m = String(desc).match(/(\\d{3,4})[pP]?/);
-                        if (m) hVal = parseInt(m[1], 10);
-                      }
-                      if (hVal) {
-                        addQualityItem(String(hVal), hVal, desc || (hVal + 'p'));
-                      }
-                    }
-                  }
-                  if (detected.length === 0 && Array.isArray(pData.accept_quality)) {
-                    var acc = pData.accept_quality;
-                    for (var j = 0; j < acc.length; j++) {
-                      var code = acc[j];
-                      if (hMap[code]) {
-                        addQualityItem(String(hMap[code]), hMap[code], qMap[code] || (hMap[code] + 'p'));
-                      }
-                    }
-                  }
-                  if (detected.length === 0 && pData.dash && Array.isArray(pData.dash.video)) {
-                    for (var k = 0; k < pData.dash.video.length; k++) {
-                      var dv = pData.dash.video[k];
-                      var dvH = dv.height || hMap[dv.id];
-                      if (dvH) {
-                        addQualityItem(String(dvH), dvH, qMap[dv.id] || (dvH + 'p'));
-                      }
-                    }
-                  }
+                if (window.__playinfo__) {
+                  extractFromPlayInfoObj(window.__playinfo__.data || window.__playinfo__.result || window.__playinfo__, addQualityItem, qMap, hMap);
                 }
 
                 // Method B: Bstation / Bilibili global player instance
@@ -417,7 +485,7 @@ class BstationPlayerController extends ChangeNotifier {
                 }
               } catch (e) {}
             }
-            setInterval(reportBstationQualities, 3000);
+            setInterval(reportBstationQualities, 2000);
             reportBstationQualities();
           }
         }
@@ -487,31 +555,6 @@ class BstationPlayerController extends ChangeNotifier {
             if (normH != null && normH > 0 && normH != _detectedHeight) {
               _detectedHeight = normH;
               _detectedWidth = w;
-              // If bridge hasn't sent explicit quality list yet and detected resolution is higher than current max, expand tiers
-              if (!_hasExplicitQualitiesFromBridge) {
-                final maxExisting = _availableQualities
-                    .where((q) => !q.isAuto && q.height != null)
-                    .fold<int>(0, (prev, q) => q.height! > prev ? q.height! : prev);
-                if (normH > maxExisting) {
-                  final tiers = VideoQuality.buildStandardTiersUpTo(normH, minHeight: 360);
-                  _availableQualities = [
-                    const VideoQuality.auto(
-                      label: 'Auto (Otomatis Bstation)',
-                      mode: QualityControlMode.webviewBridge,
-                    ),
-                    ...tiers.map((t) => VideoQuality.bstation(
-                          id: '$t',
-                          label: t >= 2160
-                              ? '4K Ultra HD'
-                              : (t >= 1080
-                                  ? '${t}p FHD'
-                                  : (t >= 720 ? '${t}p HD' : '${t}p')),
-                          height: t,
-                        )),
-                  ];
-                  onQualitiesChanged?.call(List.unmodifiable(_availableQualities));
-                }
-              }
               notifyListeners();
             }
             break;
@@ -597,9 +640,6 @@ class BstationPlayerController extends ChangeNotifier {
         }
       }
     }
-    if (detected.length > 1) {
-      _hasExplicitQualitiesFromBridge = true;
-    }
     // Sort descending by height (excluding auto)
     detected.sort((a, b) {
       if (a.isAuto) return -1;
@@ -629,10 +669,15 @@ class BstationPlayerController extends ChangeNotifier {
           (function(targetId) {
             try {
               var codeMap = {
+                '2160': 120,
+                '1080_60': 116,
+                '1080+': 112,
                 '1080': 80,
+                '720_60': 74,
                 '720': 64,
                 '480': 32,
                 '360': 16,
+                '240': 6,
                 'auto': -1
               };
               var qCode = codeMap[targetId] || parseInt(targetId, 10) || 0;

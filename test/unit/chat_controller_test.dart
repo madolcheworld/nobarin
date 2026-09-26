@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nobarin/features/auth/domain/user_profile.dart';
 import 'package:nobarin/features/chat/controllers/chat_controller.dart';
+import 'package:nobarin/features/chat/models/chat_message.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +47,38 @@ void main() {
       expect(chatController.messages.length, initialCount);
     });
 
+    test('sendMessage enforces 500-char limit and collapses excessive newlines', () async {
+      final longText = 'A' * 600;
+      await chatController.sendMessage(longText);
+
+      expect(chatController.messages.length, 1);
+      expect(chatController.messages.first.content.length, 500);
+
+      final multilineText = 'Line 1\n\n\n\n\nLine 2';
+      await chatController.sendMessage(multilineText);
+      expect(chatController.messages.last.content, 'Line 1\n\nLine 2');
+    });
+
+    test('ChatMessage JSON serialization preserves guest sender_name and sender_avatar', () {
+      final guestMsg = ChatMessage(
+        id: 'msg-guest-1',
+        roomId: 'room-123',
+        userId: null,
+        username: 'GuestUser',
+        avatarUrl: '🦊',
+        content: 'Halo dari tamu!',
+        createdAt: DateTime.now(),
+      );
+
+      final json = guestMsg.toJson();
+      expect(json['sender_name'], 'GuestUser');
+      expect(json['sender_avatar'], '🦊');
+
+      final reconstructed = ChatMessage.fromJson(json);
+      expect(reconstructed.username, 'GuestUser');
+      expect(reconstructed.avatarUrl, '🦊');
+    });
+
     test('sendReaction adds emoji message and emits on reaction stream',
         () async {
       FloatingReaction? emittedReaction;
@@ -61,6 +94,109 @@ void main() {
       expect(emittedReaction!.emoji, '🔥');
 
       await sub.cancel();
+    });
+
+    test('toggleMessageReaction adds and removes reaction for current user atomically', () async {
+      await chatController.sendMessage('Tes reaksi');
+      final msgId = chatController.messages.first.id;
+
+      // Add reaction
+      await chatController.toggleMessageReaction(msgId, '❤️');
+      expect(chatController.messages.first.reactions['❤️'], contains(testUser.id));
+
+      // Remove reaction (toggle off)
+      await chatController.toggleMessageReaction(msgId, '❤️');
+      expect(chatController.messages.first.reactions['❤️']?.contains(testUser.id) ?? false, isFalse);
+    });
+
+    test('handleReactionToggledBroadcast merges reactions without overriding other emojis', () async {
+      await chatController.sendMessage('Tes reaksi broadcast');
+      final msgId = chatController.messages.first.id;
+
+      // Bob adds 👍
+      chatController.handleReactionToggledBroadcast({
+        'message_id': msgId,
+        'user_id': 'user-bob',
+        'emoji': '👍',
+        'action': 'add',
+      });
+      expect(chatController.messages.first.reactions['👍'], contains('user-bob'));
+
+      // Alice adds ❤️
+      chatController.handleReactionToggledBroadcast({
+        'message_id': msgId,
+        'user_id': 'user-alice',
+        'emoji': '❤️',
+        'action': 'add',
+      });
+      // Both 👍 from Bob and ❤️ from Alice exist
+      expect(chatController.messages.first.reactions['👍'], contains('user-bob'));
+      expect(chatController.messages.first.reactions['❤️'], contains('user-alice'));
+
+      // Bob removes 👍
+      chatController.handleReactionToggledBroadcast({
+        'message_id': msgId,
+        'user_id': 'user-bob',
+        'emoji': '👍',
+        'action': 'remove',
+      });
+      expect(chatController.messages.first.reactions['👍']?.contains('user-bob') ?? false, isFalse);
+      expect(chatController.messages.first.reactions['❤️'], contains('user-alice'));
+    });
+
+    test('blockUser hides messages from blocked user and unblock restores visibility', () {
+      final msg1 = ChatMessage.text(
+        id: 'msg-1',
+        roomId: 'room-123',
+        userId: 'spammer-id',
+        username: 'Spammer',
+        avatarUrl: '💀',
+        content: 'Spam message',
+      );
+      final msg2 = ChatMessage.text(
+        id: 'msg-2',
+        roomId: 'room-123',
+        userId: 'friend-id',
+        username: 'Friend',
+        avatarUrl: '😊',
+        content: 'Friendly message',
+      );
+
+      chatController.addMessage(msg1);
+      chatController.addMessage(msg2);
+
+      expect(chatController.messages.length, 2);
+
+      // Block spammer
+      chatController.blockUser('spammer-id');
+      expect(chatController.isUserBlocked('spammer-id'), isTrue);
+      expect(chatController.messages.length, 1);
+      expect(chatController.messages.first.userId, 'friend-id');
+
+      // Unblock spammer
+      chatController.unblockUser('spammer-id');
+      expect(chatController.isUserBlocked('spammer-id'), isFalse);
+      expect(chatController.messages.length, 2);
+    });
+
+    test('deleteMessage removes message locally and via broadcast', () async {
+      await chatController.sendMessage('Pesan akan dihapus');
+      final msgId = chatController.messages.first.id;
+      expect(chatController.messages.length, 1);
+
+      // Local delete
+      await chatController.deleteMessage(msgId);
+      expect(chatController.messages.isEmpty, isTrue);
+
+      // Add another message and delete via broadcast
+      await chatController.sendMessage('Pesan kedua');
+      final msgId2 = chatController.messages.first.id;
+      expect(chatController.messages.length, 1);
+
+      chatController.handleMessageDeletedBroadcast({
+        'message_id': msgId2,
+      });
+      expect(chatController.messages.isEmpty, isTrue);
     });
 
     test('sendSystemMessage adds system notification properly', () async {
@@ -150,6 +286,21 @@ void main() {
 
       expect(chatController.hasTypingUsers, isFalse);
       expect(chatController.typingStatusText, isNull);
+    });
+
+    test('handleTypingBroadcast handles nested Supabase payload envelope', () {
+      chatController.handleTypingBroadcast({
+        'event': 'TYPING_STATUS',
+        'type': 'broadcast',
+        'payload': {
+          'user_id': 'user-99',
+          'username': 'EnvelopeUser',
+          'is_typing': true,
+        },
+      });
+
+      expect(chatController.hasTypingUsers, isTrue);
+      expect(chatController.typingStatusText, 'EnvelopeUser sedang mengetik...');
     });
 
     test('sendMessage automatically resets typing state', () async {

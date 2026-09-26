@@ -222,32 +222,56 @@ void main() {
       expect(fixedOriginal.badgeDescription, contains('efisien'));
     });
 
-    test('UnifiedPlayerController supportsQualitySelection handles each media source', () async {
+    test('UnifiedPlayerController supportsQualitySelection handles dynamic multi-quality vs single-track sources', () async {
       final controller = UnifiedPlayerController();
       addTearDown(() => controller.dispose());
 
-      // Direct URL
-      await controller.loadMedia('direct_url', 'https://example.com/live.m3u8');
-      expect(controller.supportsQualitySelection, isTrue);
+      // Single-track MP4 direct URL -> only 1 original resolution
+      await controller.loadMedia('direct_url', 'https://example.com/video.mp4');
+      expect(controller.supportsQualitySelection, isFalse);
+      expect(controller.availableQualities.length, equals(1));
+      expect(controller.availableQualities.first.mode, equals(QualityControlMode.fixedOriginal));
 
-      // Local file
+      // Multi-quality HLS stream once variants are detected
+      controller.setAvailableQualitiesForTesting([
+        const VideoQuality.auto(mode: QualityControlMode.directTrack),
+        const VideoQuality(id: 'hls_1080', label: '1080p', height: 1080),
+        const VideoQuality(id: 'hls_720', label: '720p', height: 720),
+      ]);
+      expect(controller.supportsQualitySelection, isTrue);
+      expect(controller.explicitQualityCount, equals(2));
+
+      // Local file -> always single original resolution
       await controller.loadMedia('direct_url', '/sdcard/Download/movie.mp4');
       expect(controller.isLocalFile, isTrue);
       expect(controller.supportsQualitySelection, isFalse);
       expect(controller.currentQualityLabel, contains('Asli'));
 
-      // P2P stream
+      // P2P stream -> always single original resolution
       await controller.loadMedia('direct_url', 'p2p://room123/video.mp4');
       expect(controller.isP2PStream, isTrue);
       expect(controller.supportsQualitySelection, isFalse);
 
-      // YouTube
+      // YouTube -> false until >1 qualities are detected from IFrame API
       await controller.loadMedia('youtube', 'https://youtu.be/dQw4w9WgXcQ');
       expect(controller.supportsQualitySelection, isFalse);
 
-      // Dailymotion
+      // Dailymotion -> false initially (only Auto), true once qualities are detected
       await controller.loadMedia('dailymotion', 'https://dai.ly/x7tgad0');
+      expect(controller.supportsQualitySelection, isFalse);
+      controller.dailymotionController?.handleBridgeMessageForTesting(
+        '{"event":"qualities","qualities":["720","480"]}',
+      );
       expect(controller.supportsQualitySelection, isTrue);
+
+      // Google Drive -> false initially (only Auto), true once qualities are detected
+      await controller.loadMedia('google_drive', 'https://drive.google.com/file/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/view');
+      expect(controller.supportsQualitySelection, isFalse);
+      controller.googleDriveController?.handleBridgeMessageForTesting(
+        '{"event":"qualities","qualities":["hd1080","hd720","medium"]}',
+      );
+      expect(controller.supportsQualitySelection, isTrue);
+      expect(controller.explicitQualityCount, equals(3));
     });
 
     test('entering and exiting fullscreen while playing activates transition guard and preserves playing state', () async {

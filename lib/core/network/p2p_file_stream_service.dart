@@ -502,8 +502,15 @@ class P2PFileStreamService extends ChangeNotifier {
       final rangeSpec = rangeHeader.substring(6).trim();
       final parts = rangeSpec.split('-');
       if (parts.length == 2) {
-        if (parts[0].isNotEmpty) start = int.tryParse(parts[0]) ?? 0;
-        if (parts[1].isNotEmpty) end = int.tryParse(parts[1]) ?? (totalBytes - 1);
+        if (parts[0].isEmpty && parts[1].isNotEmpty) {
+          // bytes=-suffix: last N bytes (RFC 7233)
+          final suffix = int.tryParse(parts[1]) ?? 0;
+          start = (totalBytes - suffix).clamp(0, totalBytes - 1);
+          end = totalBytes - 1;
+        } else {
+          if (parts[0].isNotEmpty) start = int.tryParse(parts[0]) ?? 0;
+          if (parts[1].isNotEmpty) end = int.tryParse(parts[1]) ?? (totalBytes - 1);
+        }
       }
       start = start.clamp(0, totalBytes - 1);
       end = end.clamp(start, totalBytes - 1);

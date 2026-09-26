@@ -356,10 +356,11 @@ void main() {
         expect(target, closeTo(35.6, 0.001));
       });
 
-      test('Google Drive URL is recognized as direct stream URL', () {
+      test('Google Drive URL is recognized as google_drive mediaType', () {
         final detected = UnifiedPlayerController.detectMediaFromUrl(gdriveUrl);
         expect(detected, isNotNull);
-        expect(detected!.mediaType, 'direct_url');
+        expect(detected!.mediaType, 'google_drive');
+        expect(detected.isGoogleDrive, isTrue);
         expect(detected.mediaUrl, gdriveUrl);
       });
     });

@@ -32,7 +32,30 @@ class ChatController extends ChangeNotifier {
   static const int maxInMemoryMessages = 150;
 
   final List<ChatMessage> _messages = [];
-  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  final Set<String> _blockedUserIds = {};
+  Set<String> get blockedUserIds => Set.unmodifiable(_blockedUserIds);
+
+  /// Returns messages filtered by blocked users
+  List<ChatMessage> get messages => List.unmodifiable(
+        _messages.where(
+          (m) => m.userId == null || !_blockedUserIds.contains(m.userId),
+        ),
+      );
+
+  void blockUser(String userId) {
+    if (userId.isEmpty || userId == currentUser.id) return;
+    _blockedUserIds.add(userId);
+    notifyListeners();
+  }
+
+  void unblockUser(String userId) {
+    if (_blockedUserIds.remove(userId)) {
+      notifyListeners();
+    }
+  }
+
+  bool isUserBlocked(String? userId) =>
+      userId != null && _blockedUserIds.contains(userId);
 
   void _pruneOldMessages() {
     if (_messages.length > maxInMemoryMessages) {
@@ -58,11 +81,13 @@ class ChatController extends ChangeNotifier {
   final Map<String, String> _typingUsers = {};
   final Map<String, Timer> _typingTimers = {};
   Timer? _localTypingDebounceTimer;
+  Timer? _typingHeartbeatTimer;
   bool _isLocalTyping = false;
 
   String? _lastReactionEmoji;
   DateTime? _lastReactionTime;
   int _localReactionCombo = 1;
+  Timer? _reactionBroadcastDebounceTimer;
 
   List<String> get typingUsernames => _typingUsers.values.toList();
   bool get hasTypingUsers => _typingUsers.isNotEmpty;
@@ -153,23 +178,15 @@ class ChatController extends ChangeNotifier {
         event: 'MESSAGE_REACTION',
         callback: (payload) {
           if (_isDisposed) return;
-          final msgId = payload['message_id'] as String?;
-          if (msgId == null) return;
-          final index = _messages.indexWhere((m) => m.id == msgId);
-          if (index == -1) return;
-          final reactionsRaw = payload['reactions'];
-          final Map<String, List<String>> updatedReactions = {};
-          if (reactionsRaw is Map) {
-            reactionsRaw.forEach((k, v) {
-              if (v is List) {
-                updatedReactions[k.toString()] =
-                    v.map((e) => e.toString()).toList();
-              }
-            });
-          }
-          _messages[index] =
-              _messages[index].copyWith(reactions: updatedReactions);
-          notifyListeners();
+          handleReactionToggledBroadcast(payload);
+        },
+      );
+
+      _chatChannel!.onBroadcast(
+        event: 'MESSAGE_DELETED',
+        callback: (payload) {
+          if (_isDisposed) return;
+          handleMessageDeletedBroadcast(payload);
         },
       );
 
@@ -197,7 +214,7 @@ class ChatController extends ChangeNotifier {
             .from('room_messages')
             .select('*, profiles(username, avatar_url)')
             .eq('room_id', roomId)
-            .order('created_at', ascending: true)
+            .order('created_at', ascending: false)
             .limit(50);
       } catch (e) {
         debugPrint('[ChatController] Error loading history with profiles join: $e');
@@ -205,14 +222,15 @@ class ChatController extends ChangeNotifier {
             .from('room_messages')
             .select('*')
             .eq('room_id', roomId)
-            .order('created_at', ascending: true)
+            .order('created_at', ascending: false)
             .limit(50);
       }
 
       final list = response as List<dynamic>;
       if (list.isNotEmpty) {
+        final reversedList = list.reversed.toList();
         bool addedAny = false;
-        for (final item in list) {
+        for (final item in reversedList) {
           final msg = ChatMessage.fromJson(item as Map<String, dynamic>);
           if (!_messages.any((m) => m.id == msg.id)) {
             _messages.add(msg);
@@ -220,6 +238,7 @@ class ChatController extends ChangeNotifier {
           }
         }
         if (addedAny) {
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           _pruneOldMessages();
           notifyListeners();
         }
@@ -256,13 +275,26 @@ class ChatController extends ChangeNotifier {
       if (!_isLocalTyping) {
         _isLocalTyping = true;
         _broadcastTypingStatus(true);
+        _typingHeartbeatTimer?.cancel();
+        _typingHeartbeatTimer = Timer.periodic(
+          const Duration(milliseconds: 2500),
+          (timer) {
+            if (_isDisposed || !_isLocalTyping) {
+              timer.cancel();
+              return;
+            }
+            _broadcastTypingStatus(true);
+          },
+        );
       }
       _localTypingDebounceTimer?.cancel();
-      _localTypingDebounceTimer = Timer(const Duration(seconds: 3), () {
+      _localTypingDebounceTimer = Timer(const Duration(seconds: 4), () {
         if (_isDisposed) return;
         setTyping(false);
       });
     } else {
+      _typingHeartbeatTimer?.cancel();
+      _typingHeartbeatTimer = null;
       _localTypingDebounceTimer?.cancel();
       _localTypingDebounceTimer = null;
       if (_isLocalTyping) {
@@ -289,7 +321,10 @@ class ChatController extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void handleTypingBroadcast(Map<String, dynamic> payload) {
+  void handleTypingBroadcast(Map<String, dynamic> raw) {
+    final payload = (raw['payload'] is Map)
+        ? Map<String, dynamic>.from(raw['payload'] as Map)
+        : raw;
     final userId = payload['user_id'] as String?;
     final username = payload['username'] as String?;
     final isTyping = payload['is_typing'] as bool? ?? false;
@@ -316,11 +351,114 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  @visibleForTesting
+  void addMessage(ChatMessage message) {
+    _messages.add(message);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void handleReactionToggledBroadcast(Map<String, dynamic> raw) {
+    final data = (raw['payload'] is Map)
+        ? Map<String, dynamic>.from(raw['payload'] as Map)
+        : raw;
+    final msgId = data['message_id'] as String?;
+    if (msgId == null) return;
+    final index = _messages.indexWhere((m) => m.id == msgId);
+    if (index == -1) return;
+
+    final action = data['action'] as String?;
+    final userId = data['user_id'] as String?;
+    final emoji = data['emoji'] as String?;
+
+    if (action != null && userId != null && emoji != null) {
+      final msg = _messages[index];
+      final updatedReactions = Map<String, List<String>>.from(
+        msg.reactions.map((k, v) => MapEntry(k, List<String>.from(v))),
+      );
+      final users = updatedReactions[emoji] ?? [];
+      if (action == 'add') {
+        if (!users.contains(userId)) {
+          users.add(userId);
+          updatedReactions[emoji] = users;
+        }
+      } else if (action == 'remove') {
+        users.remove(userId);
+        if (users.isEmpty) {
+          updatedReactions.remove(emoji);
+        } else {
+          updatedReactions[emoji] = users;
+        }
+      }
+      _messages[index] = msg.copyWith(reactions: updatedReactions);
+      notifyListeners();
+    } else {
+      final reactionsRaw = data['reactions'];
+      final Map<String, List<String>> updatedReactions = {};
+      if (reactionsRaw is Map) {
+        reactionsRaw.forEach((k, v) {
+          if (v is List) {
+            updatedReactions[k.toString()] =
+                v.map((e) => e.toString()).toList();
+          }
+        });
+      }
+      _messages[index] =
+          _messages[index].copyWith(reactions: updatedReactions);
+      notifyListeners();
+    }
+  }
+
+  @visibleForTesting
+  void handleMessageDeletedBroadcast(Map<String, dynamic> raw) {
+    final data = (raw['payload'] is Map)
+        ? Map<String, dynamic>.from(raw['payload'] as Map)
+        : raw;
+    final msgId = data['message_id'] as String?;
+    if (msgId == null) return;
+    final index = _messages.indexWhere((m) => m.id == msgId);
+    if (index != -1) {
+      _messages.removeAt(index);
+      notifyListeners();
+    }
+  }
+
   void _updateMessageStatus(String messageId, MessageStatus newStatus) {
     final index = _messages.indexWhere((m) => m.id == messageId);
     if (index != -1) {
       _messages[index] = _messages[index].copyWith(status: newStatus);
       notifyListeners();
+    }
+  }
+
+  /// Deletes a message from memory, broadcasts the deletion, and removes from DB
+  Future<void> deleteMessage(String messageId) async {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    _messages.removeAt(index);
+    notifyListeners();
+
+    if (_chatChannel != null) {
+      try {
+        await _chatChannel!.sendBroadcastMessage(
+          event: 'MESSAGE_DELETED',
+          payload: {'message_id': messageId},
+        );
+      } catch (e) {
+        debugPrint('[ChatController] Error broadcasting message deletion: $e');
+      }
+    }
+
+    if (supabase != null) {
+      try {
+        await supabase!
+            .from('room_messages')
+            .delete()
+            .eq('id', messageId)
+            .timeout(const Duration(seconds: 4));
+      } catch (dbErr) {
+        debugPrint('[ChatController] Error deleting message from DB: $dbErr');
+      }
     }
   }
 
@@ -341,18 +479,37 @@ class ChatController extends ChangeNotifier {
             ...msg.toJson(),
             'username': currentUser.username,
             'avatar_url': currentUser.avatarUrl,
+            'sender_name': currentUser.username,
+            'sender_avatar': currentUser.avatarUrl,
           },
         );
+        _updateMessageStatus(messageId, MessageStatus.sent);
 
         if (supabase != null) {
           final payload = msg.toJson();
+          payload.remove('reactions');
           if (supabase!.auth.currentUser == null ||
               supabase!.auth.currentUser!.id != currentUser.id) {
             payload.remove('user_id');
           }
-          await supabase!.from('room_messages').insert(payload);
+          try {
+            await supabase!
+                .from('room_messages')
+                .insert(payload)
+                .timeout(const Duration(seconds: 4));
+          } catch (dbErr) {
+            // Graceful fallback if schema does not have sender_name/sender_avatar yet
+            if (dbErr.toString().contains('sender_name') ||
+                dbErr.toString().contains('sender_avatar')) {
+              payload.remove('sender_name');
+              payload.remove('sender_avatar');
+              try {
+                await supabase!.from('room_messages').insert(payload);
+              } catch (_) {}
+            }
+            debugPrint('[ChatController] DB persistence note on retry: $dbErr');
+          }
         }
-        _updateMessageStatus(messageId, MessageStatus.sent);
       } catch (e) {
         debugPrint('[ChatController] Error retrying message: $e');
         _updateMessageStatus(messageId, MessageStatus.failed);
@@ -362,11 +519,18 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Sends a chat message
+  /// Sends a chat message with length validation and sanitization
   Future<void> sendMessage(String text) async {
     setTyping(false);
-    final clean = text.trim();
+    var clean = text.trim();
     if (clean.isEmpty) return;
+
+    // Enforce 500 characters max
+    if (clean.length > 500) {
+      clean = clean.substring(0, 500).trim();
+    }
+    // Collapse excessive consecutive newlines (max 2)
+    clean = clean.replaceAll(RegExp(r'\n{3,}'), '\n\n');
 
     final msg = ChatMessage(
       id: const Uuid().v4(),
@@ -392,18 +556,37 @@ class ChatController extends ChangeNotifier {
             ...msg.toJson(),
             'username': currentUser.username,
             'avatar_url': currentUser.avatarUrl,
+            'sender_name': currentUser.username,
+            'sender_avatar': currentUser.avatarUrl,
           },
         );
+        _updateMessageStatus(msg.id, MessageStatus.sent);
 
         if (supabase != null) {
           final payload = msg.toJson();
+          payload.remove('reactions');
           if (supabase!.auth.currentUser == null ||
               supabase!.auth.currentUser!.id != currentUser.id) {
             payload.remove('user_id');
           }
-          await supabase!.from('room_messages').insert(payload);
+          try {
+            await supabase!
+                .from('room_messages')
+                .insert(payload)
+                .timeout(const Duration(seconds: 4));
+          } catch (dbErr) {
+            // Graceful fallback if schema does not have sender_name/sender_avatar yet
+            if (dbErr.toString().contains('sender_name') ||
+                dbErr.toString().contains('sender_avatar')) {
+              payload.remove('sender_name');
+              payload.remove('sender_avatar');
+              try {
+                await supabase!.from('room_messages').insert(payload);
+              } catch (_) {}
+            }
+            debugPrint('[ChatController] DB insert note: $dbErr');
+          }
         }
-        _updateMessageStatus(msg.id, MessageStatus.sent);
       } catch (e) {
         debugPrint('[ChatController] Error broadcasting message: $e');
         _updateMessageStatus(msg.id, MessageStatus.failed);
@@ -457,7 +640,7 @@ class ChatController extends ChangeNotifier {
           createdAt: now,
         );
         notifyListeners();
-        _broadcastReaction(emoji, combo);
+        _scheduleBroadcastReaction(emoji, combo);
         return;
       }
     }
@@ -477,7 +660,19 @@ class ChatController extends ChangeNotifier {
     _pruneOldMessages();
     notifyListeners();
 
-    _broadcastReaction(emoji, combo, msg: msg);
+    _scheduleBroadcastReaction(emoji, combo, msg: msg);
+  }
+
+  void _scheduleBroadcastReaction(
+    String emoji,
+    int combo, {
+    ChatMessage? msg,
+  }) {
+    _reactionBroadcastDebounceTimer?.cancel();
+    _reactionBroadcastDebounceTimer = Timer(
+      const Duration(milliseconds: 150),
+      () => _broadcastReaction(emoji, combo, msg: msg),
+    );
   }
 
   Future<void> _broadcastReaction(
@@ -485,7 +680,7 @@ class ChatController extends ChangeNotifier {
     int combo, {
     ChatMessage? msg,
   }) async {
-    if (_chatChannel == null) return;
+    if (_chatChannel == null || _isDisposed) return;
     try {
       await _chatChannel!.sendBroadcastMessage(
         event: 'NEW_MESSAGE',
@@ -501,6 +696,8 @@ class ChatController extends ChangeNotifier {
           },
           'username': currentUser.username,
           'avatar_url': currentUser.avatarUrl,
+          'sender_name': currentUser.username,
+          'sender_avatar': currentUser.avatarUrl,
           'combo': combo,
           'raw_emoji': emoji,
         },
@@ -510,7 +707,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Toggles an emoji reaction on a specific chat message bubble
+  /// Toggles an emoji reaction on a specific chat message bubble (atomic delta)
   Future<void> toggleMessageReaction(String messageId, String emoji) async {
     final index = _messages.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
@@ -520,6 +717,8 @@ class ChatController extends ChangeNotifier {
     );
     final users = currentReactions[emoji] ?? [];
     final hasReacted = users.contains(currentUser.id);
+    final action = hasReacted ? 'remove' : 'add';
+
     if (hasReacted) {
       users.remove(currentUser.id);
       if (users.isEmpty) {
@@ -543,6 +742,7 @@ class ChatController extends ChangeNotifier {
             'message_id': messageId,
             'user_id': currentUser.id,
             'emoji': emoji,
+            'action': action,
             'reactions': currentReactions,
           },
         );
@@ -563,6 +763,12 @@ class ChatController extends ChangeNotifier {
       return;
     }
     _recentSystemMessages[clean] = now;
+
+    // Prune cache if it grows too large (prevent memory leak)
+    if (_recentSystemMessages.length > 50) {
+      _recentSystemMessages.clear();
+      _recentSystemMessages[clean] = now;
+    }
 
     final msg = ChatMessage(
       id: const Uuid().v4(),
@@ -597,7 +803,12 @@ class ChatController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _typingHeartbeatTimer?.cancel();
+    _typingHeartbeatTimer = null;
     _localTypingDebounceTimer?.cancel();
+    _localTypingDebounceTimer = null;
+    _reactionBroadcastDebounceTimer?.cancel();
+    _reactionBroadcastDebounceTimer = null;
     for (final timer in _typingTimers.values) {
       timer.cancel();
     }

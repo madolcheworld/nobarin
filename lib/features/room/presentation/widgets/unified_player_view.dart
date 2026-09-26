@@ -16,7 +16,9 @@ import '../../controllers/sync_controller.dart';
 import '../../controllers/unified_player_controller.dart';
 import 'bstation_player_widget.dart';
 import 'dailymotion_player_widget.dart';
+import 'google_drive_player_widget.dart';
 import 'video_quality_sheet.dart';
+import 'web_browser_player_widget.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
   final UnifiedPlayerController player;
@@ -306,6 +308,18 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             controller: widget.player.dailymotionController!,
             aspectRatio: 16 / 9,
           );
+        } else if (widget.player.mediaType == 'google_drive' &&
+            widget.player.googleDriveController != null) {
+          playerWidget = GoogleDrivePlayerWidget(
+            controller: widget.player.googleDriveController!,
+            aspectRatio: 16 / 9,
+          );
+        } else if (widget.player.mediaType == 'web_browser' &&
+            widget.player.webBrowserController != null) {
+          playerWidget = WebBrowserPlayerWidget(
+            controller: widget.player.webBrowserController!,
+            aspectRatio: 16 / 9,
+          );
         } else if (kIsWeb && widget.player.webVideoWidget != null) {
           playerWidget = widget.player.webVideoWidget!;
         } else if (widget.player.mkVideoController != null) {
@@ -314,6 +328,8 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             controls: NoVideoControls,
             fit: BoxFit.contain,
           );
+        } else if (widget.player.mediaType == 'direct_url') {
+          playerWidget = const SizedBox.expand();
         } else {
           playerWidget = _buildEmptyPlaceholder();
         }
@@ -329,13 +345,18 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
               if (hasMedia &&
                   widget.player.mediaType != 'youtube' &&
                   widget.player.mediaType != 'screenshare' &&
-                  (widget.player.mkVideoController != null ||
+                  (widget.player.mediaType == 'direct_url' ||
+                      widget.player.mkVideoController != null ||
                       (kIsWeb && widget.player.webVideoWidget != null) ||
                       widget.player.bstationController != null ||
-                      widget.player.dailymotionController != null) &&
+                      widget.player.dailymotionController != null ||
+                      widget.player.googleDriveController != null ||
+                      widget.player.webBrowserController != null) &&
                   !(kIsWeb &&
                       (widget.player.mediaType == 'bstation' ||
-                          widget.player.mediaType == 'dailymotion')) &&
+                          widget.player.mediaType == 'dailymotion' ||
+                          widget.player.mediaType == 'google_drive' ||
+                          widget.player.mediaType == 'web_browser')) &&
                   errorMsg == null &&
                   !widget.isPipMode)
                 Positioned.fill(
@@ -451,37 +472,88 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
 
         return Stack(
           fit: StackFit.expand,
-      children: [
-        // 0. Base tap and double-tap targets (Seek -10s on left, Seek +10s on right)
-        Positioned.fill(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    debugPrint('[UnifiedPlayerView] left half tapped');
-                    _toggleControls();
-                  },
-                  onDoubleTap: _onDoubleTapLeft,
-                  child: Container(color: Colors.transparent),
+          children: [
+            // 0. Base tap and double-tap targets (Seek -10s on left, Seek +10s on right)
+            // For 'web_browser' embeds (which often contain cross-origin iframe players
+            // requiring direct touch gestures), allow touches to pass through to WebView
+            // when controls are hidden, and provide a floating corner pill to summon controls.
+            if (widget.player.mediaType != 'web_browser')
+              Positioned.fill(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          debugPrint('[UnifiedPlayerView] left half tapped');
+                          _toggleControls();
+                        },
+                        onDoubleTap: _onDoubleTapLeft,
+                        child: Container(color: Colors.transparent),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          debugPrint('[UnifiedPlayerView] right half tapped');
+                          _toggleControls();
+                        },
+                        onDoubleTap: _onDoubleTapRight,
+                        child: Container(color: Colors.transparent),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    debugPrint('[UnifiedPlayerView] right half tapped');
-                    _toggleControls();
-                  },
-                  onDoubleTap: _onDoubleTapRight,
-                  child: Container(color: Colors.transparent),
+
+            if (widget.player.mediaType == 'web_browser' &&
+                !_showControls &&
+                !widget.isPipMode)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _toggleControls,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppColors.primaryNeon.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Kontrol',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
 
         // 0b. Double-Tap Seek Visual Feedback Badges
         if (_leftDoubleTapActive)

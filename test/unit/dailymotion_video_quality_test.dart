@@ -17,7 +17,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('DailymotionPlayerController - Video Quality Unit Tests', () {
+  group('DailymotionPlayerController - Dynamic Video Quality Unit Tests', () {
     late DailymotionPlayerController controller;
 
     setUp(() {
@@ -28,50 +28,61 @@ void main() {
       controller.dispose();
     });
 
-    test('1. Default available qualities and initial auto state', () {
+    test('1. Initial state has only Auto without hardcoded resolution options', () {
       expect(controller.availableQualities, isNotEmpty);
-      expect(controller.availableQualities.length, equals(6));
+      expect(controller.availableQualities.length, equals(1));
 
-      // Initially Auto
       final autoQ = controller.availableQualities[0];
       expect(autoQ.isAuto, isTrue);
       expect(autoQ.id, equals('auto'));
       expect(autoQ.shortLabel, equals('Auto'));
       expect(autoQ.mode, equals(QualityControlMode.webviewBridge));
       expect(controller.selectedQuality?.isAuto, isTrue);
-
-      // Default presets present
-      expect(controller.availableQualities[1].id, equals('1080'));
-      expect(controller.availableQualities[2].id, equals('720'));
-      expect(controller.availableQualities[3].id, equals('480'));
-      expect(controller.availableQualities[4].id, equals('360'));
-      expect(controller.availableQualities[5].id, equals('240'));
     });
 
-    test('2. Updating qualities from bridge populates, sorts and notifies', () {
+    test('2. Updating qualities from bridge populates, sorts and notifies only exact tiers', () {
       List<VideoQuality>? updatedQualities;
       controller.onQualitiesChanged = (qualities) {
         updatedQualities = qualities;
       };
 
+      // Video only has 480, 360, 240 (no 1080 or 720)
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
-        'qualities': ['240', '1080', '480', '720', '360'],
+        'qualities': ['240', '480', '360'],
       }));
 
-      expect(controller.availableQualities.length, equals(6)); // Auto + 5 tiers
+      expect(controller.availableQualities.length, equals(4)); // Auto + 3 tiers
       expect(controller.availableQualities.first.isAuto, isTrue);
-      expect(controller.availableQualities[1].id, equals('1080'));
-      expect(controller.availableQualities[1].height, equals(1080));
-      expect(controller.availableQualities[2].id, equals('720'));
-      expect(controller.availableQualities[3].id, equals('480'));
-      expect(controller.availableQualities[4].id, equals('360'));
-      expect(controller.availableQualities[5].id, equals('240'));
+      expect(controller.availableQualities[1].id, equals('480'));
+      expect(controller.availableQualities[1].height, equals(480));
+      expect(controller.availableQualities[2].id, equals('360'));
+      expect(controller.availableQualities[3].id, equals('240'));
+      expect(controller.availableQualities.any((q) => q.height == 1080), isFalse);
+      expect(controller.availableQualities.any((q) => q.height == 720), isFalse);
       expect(updatedQualities, isNotNull);
-      expect(updatedQualities!.length, equals(6));
+      expect(updatedQualities!.length, equals(4));
     });
 
-    test('3. setQuality switches quality, notifies listeners, and calls callbacks', () async {
+    test('3. extractQualitiesFromMetadataJson extracts exact resolution keys from Dailymotion API JSON', () {
+      final keys = DailymotionPlayerController.extractQualitiesFromMetadataJson({
+        'qualities': {
+          'auto': [
+            {'type': 'application/x-mpegURL', 'url': 'https://proxy.dailymotion.com/master.m3u8'}
+          ],
+          '380': [
+            {'type': 'video/mp4', 'url': 'https://proxy.dailymotion.com/380.mp4'}
+          ],
+          '720': [
+            {'type': 'video/mp4', 'url': 'https://proxy.dailymotion.com/720.mp4'}
+          ],
+        }
+      });
+
+      expect(keys, equals(['380', '720']));
+    });
+
+    test('4. setQuality switches quality, notifies listeners, and calls callbacks', () async {
       // First populate qualities
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
@@ -113,13 +124,13 @@ void main() {
       expect(selectedCallbackQuality?.isAuto, isTrue);
     });
 
-    test('4. setQuality handles custom/unknown quality fallback gracefully', () async {
+    test('5. setQuality handles custom/unknown quality fallback gracefully', () async {
       await controller.setQuality('customQuality');
       expect(controller.selectedQuality?.id, equals('customQuality'));
       expect(controller.selectedQuality?.mode, equals(QualityControlMode.webviewBridge));
     });
 
-    test('5. Bridge message "resolution" updates detected height & width', () {
+    test('6. Bridge message "resolution" updates detected height & width without fabricating tiers', () {
       var notified = false;
       controller.addListener(() => notified = true);
 
@@ -131,10 +142,11 @@ void main() {
 
       expect(controller.detectedHeight, equals(1080));
       expect(controller.detectedWidth, equals(1920));
+      expect(controller.availableQualities.length, equals(1));
       expect(notified, isTrue);
     });
 
-    test('6. Bridge message "qualitychange" updates selected quality', () {
+    test('7. Bridge message "qualitychange" updates selected quality', () {
       // First populate qualities
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
@@ -153,7 +165,7 @@ void main() {
       expect(callbackQuality?.id, equals('720'));
     });
 
-    test('7. Bridge message "qualities" with map objects handles attributes cleanly', () {
+    test('8. Bridge message "qualities" with map objects handles attributes cleanly', () {
       controller.handleBridgeMessageForTesting(jsonEncode({
         'event': 'qualities',
         'qualities': [
@@ -180,7 +192,7 @@ void main() {
       player.dispose();
     });
 
-    test('1. Dailymotion media loading configures quality support and labels', () async {
+    test('1. Dailymotion media loading starts with Auto and updates label on resolution', () async {
       await player.loadMedia(
         'dailymotion',
         'https://www.dailymotion.com/video/x84sh87',
@@ -188,17 +200,8 @@ void main() {
       );
 
       expect(player.mediaType, equals('dailymotion'));
-      expect(player.supportsQualitySelection, isTrue);
       expect(player.availableQualities, isNotEmpty);
-      expect(player.availableQualities.any((q) => q.isAuto), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '720'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '480'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '360'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '240'), isTrue);
-
-      // Initially Auto without resolution
-      expect(player.currentQualityLabel, equals('Auto'));
+      expect(player.availableQualities.first.isAuto, isTrue);
 
       // Simulate stream reporting 1080p resolution
       player.dailymotionController?.handleBridgeMessageForTesting(jsonEncode({
@@ -209,41 +212,10 @@ void main() {
 
       // In Auto mode, label reflects detected stream height
       expect(player.currentQualityLabel, equals('Auto (1080p)'));
+      expect(player.maxDetectedHeight, equals(1080));
     });
 
-    test('2. Changing video quality updates selected state and currentQualityLabel', () async {
-      await player.loadMedia(
-        'dailymotion',
-        'https://www.dailymotion.com/video/x84sh87',
-        autoPlay: false,
-      );
-
-      final q1080 = player.availableQualities.firstWhere((q) => q.id == '1080');
-      await player.setVideoQuality(q1080);
-
-      expect(player.selectedQuality?.id, equals('1080'));
-      expect(player.currentQualityLabel, equals('1080p'));
-
-      final q720 = player.availableQualities.firstWhere((q) => q.id == '720');
-      await player.setVideoQuality(q720);
-
-      expect(player.selectedQuality?.id, equals('720'));
-      expect(player.currentQualityLabel, equals('720p'));
-
-      final q480 = player.availableQualities.firstWhere((q) => q.id == '480');
-      await player.setVideoQuality(q480);
-
-      expect(player.selectedQuality?.id, equals('480'));
-      expect(player.currentQualityLabel, equals('480p'));
-
-      // Switch back to Auto
-      final autoQ = player.availableQualities.firstWhere((q) => q.isAuto);
-      await player.setVideoQuality(autoQ);
-
-      expect(player.selectedQuality?.isAuto, isTrue);
-    });
-
-    test('3. Dynamic qualities event from Dailymotion bridge updates UnifiedPlayerController', () async {
+    test('2. Dynamic qualities event from Dailymotion bridge updates UnifiedPlayerController and allows selection', () async {
       await player.loadMedia(
         'dailymotion',
         'https://www.dailymotion.com/video/x84sh87',
@@ -255,6 +227,7 @@ void main() {
         'qualities': ['1080', '720', '360'],
       }));
 
+      expect(player.supportsQualitySelection, isTrue);
       expect(player.availableQualities.length, equals(4)); // Auto + 3
       expect(player.availableQualities.any((q) => q.id == '1080'), isTrue);
       expect(player.availableQualities.any((q) => q.id == '720'), isTrue);
@@ -262,27 +235,12 @@ void main() {
       expect(player.availableQualities.any((q) => q.id == '240'), isFalse);
       expect(player.maxDetectedHeight, equals(1080));
       expect(player.maxResolutionLabel, equals('Full HD (1080p)'));
-    });
 
-    test('4. Stream resolution 4K auto-expands Dailymotion available quality tiers up to 2160p', () async {
-      await player.loadMedia(
-        'dailymotion',
-        'https://www.dailymotion.com/video/x84sh87',
-        autoPlay: false,
-      );
+      final q720 = player.availableQualities.firstWhere((q) => q.id == '720');
+      await player.setVideoQuality(q720);
 
-      // Simulate 4K stream detected from <video> before explicit qualities arrive
-      player.dailymotionController?.handleBridgeMessageForTesting(jsonEncode({
-        'event': 'resolution',
-        'height': 2160,
-        'width': 3840,
-      }));
-
-      expect(player.dailymotionController?.detectedHeight, equals(2160));
-      expect(player.availableQualities.any((q) => q.id == '2160'), isTrue);
-      expect(player.availableQualities.any((q) => q.id == '1440'), isTrue);
-      expect(player.maxDetectedHeight, equals(2160));
-      expect(player.maxResolutionLabel, equals('4K (2160p)'));
+      expect(player.selectedQuality?.id, equals('720'));
+      expect(player.currentQualityLabel, equals('720p'));
     });
   });
 
@@ -322,7 +280,7 @@ void main() {
       syncController.dispose();
     });
 
-    testWidgets('Renders Dailymotion quality options and selects 720p on tap', (tester) async {
+    testWidgets('Renders detected Dailymotion quality options and selects 720p on tap', (tester) async {
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -333,6 +291,12 @@ void main() {
         'https://www.dailymotion.com/video/x84sh87',
         autoPlay: false,
       );
+
+      // Simulate Dailymotion bridge detecting 3 exact resolutions for this video (720p, 480p, 360p)
+      player.dailymotionController?.handleBridgeMessageForTesting(jsonEncode({
+        'event': 'qualities',
+        'qualities': ['720', '480', '360'],
+      }));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -351,17 +315,18 @@ void main() {
       await tester.tap(find.text('Open Sheet'));
       await tester.pumpAndSettle();
 
-      // Verify Dailymotion quality sheet header and platform badge
+      // Verify Dailymotion quality sheet header, platform badge, and count badge
       expect(find.text('Kualitas Video'), findsOneWidget);
       expect(find.text('Dailymotion'), findsOneWidget);
+      expect(find.text('3 resolusi tersedia'), findsOneWidget);
 
-      // Verify Dailymotion quality choices are visible
+      // Verify only the 3 detected Dailymotion quality choices are visible (no fake 1080p or 240p)
       expect(find.text('Auto (Otomatis Dailymotion)'), findsOneWidget);
-      expect(find.text('1080p'), findsOneWidget);
       expect(find.text('720p'), findsOneWidget);
       expect(find.text('480p'), findsOneWidget);
       expect(find.text('360p'), findsOneWidget);
-      expect(find.text('240p'), findsOneWidget);
+      expect(find.text('1080p'), findsNothing);
+      expect(find.text('240p'), findsNothing);
 
       // Tap on 720p option
       await tester.tap(find.text('720p'));

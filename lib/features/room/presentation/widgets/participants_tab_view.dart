@@ -86,10 +86,11 @@ class ParticipantsTabView extends StatelessWidget {
               coHostUserIds.contains(user.username);
           final isSpeaking = isMe
               ? (voiceController?.isLocalSpeaking ?? false)
-              : speakingUserIds.contains(user.id);
+              : (voiceController?.activeSpeakerIds.contains(user.id) ??
+                  speakingUserIds.contains(user.id));
           final isMuted = isMe
               ? (voiceController?.isMicMuted ?? true)
-              : mutedUserIds.contains(user.id);
+              : (voiceController?.isUserMuted(user.id) ?? true);
 
           return Container(
             margin: const EdgeInsets.only(bottom: 6),

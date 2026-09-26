@@ -291,37 +291,56 @@ class ParticipantModerationSheet extends StatelessWidget {
           else ...[
             // Mute participant microphone
             ListTile(
+              enabled: !isMuted,
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceHighlight,
+                  color: isMuted
+                      ? AppColors.surfaceElevated
+                      : AppColors.surfaceHighlight,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.mic_off_rounded,
-                  color: AppColors.accentYellow,
+                  color: isMuted ? AppColors.textMuted : AppColors.accentYellow,
                   size: 20,
                 ),
               ),
-              title: const Text(
+              title: Text(
                 'Matikan Mikrofon',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: isMuted ? AppColors.textMuted : AppColors.textPrimary,
+                ),
               ),
-              onTap: () async {
-                Navigator.of(context).pop();
-                await roomController.forceMuteParticipant(
-                  targetUser,
-                  chatController: chatController,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Mikrofon ${targetUser.username} telah dimatikan.'),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
+              subtitle: isMuted
+                  ? const Text(
+                      'Mikrofon sudah mati',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    )
+                  : null,
+              onTap: isMuted
+                  ? null
+                  : () async {
+                      Navigator.of(context).pop();
+                      await roomController.forceMuteParticipant(
+                        targetUser,
+                        chatController: chatController,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Mikrofon ${targetUser.username} telah dimatikan.'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
             ),
 
             // Promote or Demote Co-Host (Host only)

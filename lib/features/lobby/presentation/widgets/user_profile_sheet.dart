@@ -125,6 +125,203 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
     }
   }
 
+  Future<void> _handleDeleteAccount() async {
+    final user = ref.read(authControllerProvider).asData?.value;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: AppColors.accentRed, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Hapus Akun & Data?',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tindakan ini akan menghapus akun ${user?.username ?? 'kamu'} beserta seluruh riwayat profil dan room yang pernah kamu buat secara permanen.',
+              style:
+                  const TextStyle(color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Data yang telah dihapus tidak dapat dipulihkan kembali.',
+              style: TextStyle(
+                color: AppColors.accentRed,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Hapus Akun'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      Navigator.of(context).pop(); // Close sheet
+      await ref.read(authControllerProvider.notifier).deleteAccount();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Akun dan data berhasil dihapus.'),
+            backgroundColor: AppColors.surfaceElevated,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        context.go('/');
+      }
+    }
+  }
+
+  void _showPrivacyPolicyDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.privacy_tip_outlined,
+                color: AppColors.primaryNeon, size: 22),
+            SizedBox(width: 8),
+            Text('Kebijakan Privasi', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Nobarin menghargai privasi kamu. Berikut adalah ringkasan pengelolaan data kami:',
+                  style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '1. Data Akun & Profil',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Kami hanya menyimpan username dan pilihan avatar anonim. Tidak ada data pribadi sensitif yang dikumpulkan tanpa persetujuan.',
+                  style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '2. Komunikasi Real-time & VoIP',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Obrolan suara (WebRTC) dan text chat ditransmisikan secara terenkripsi (DTLS/SRTP/WSS) dan tidak direkam di server secara permanen.',
+                  style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '3. Hak Penghapusan Data',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Kamu berhak menghapus akun dan data kamu kapan saja melalui tombol "Hapus Akun & Data" di bawah atau via tautan web.',
+                  style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'URL Kebijakan Privasi Lengkap:',
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                      SizedBox(height: 4),
+                      SelectableText(
+                        ApiConstants.privacyPolicyUrl,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.primaryNeon,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -315,19 +512,59 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
                       )
                     : const Text('Simpan Profil'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
 
-              // Logout Button
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accentRed,
-                  side: BorderSide(
-                    color: AppColors.accentRed.withValues(alpha: 0.5),
+              // Privacy Policy Link
+              Center(
+                child: TextButton.icon(
+                  onPressed: _showPrivacyPolicyDialog,
+                  icon: const Icon(Icons.privacy_tip_outlined,
+                      size: 15, color: AppColors.textSecondary),
+                  label: const Text(
+                    'Kebijakan Privasi & Ketentuan',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
-                onPressed: _handleLogout,
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Keluar Akun'),
+              ),
+              const SizedBox(height: 6),
+
+              // Account Actions (Logout & Delete Account)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(
+                          color: AppColors.border,
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _handleLogout,
+                      icon: const Icon(Icons.logout_rounded, size: 16),
+                      label: const Text('Keluar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentRed,
+                        side: BorderSide(
+                          color: AppColors.accentRed.withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _handleDeleteAccount,
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                      label: const Text('Hapus Akun'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
             ],

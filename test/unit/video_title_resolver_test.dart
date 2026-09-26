@@ -66,6 +66,17 @@ void main() {
       expect(VideoTitleResolver.cleanTitle('12345 - Bstation'), equals(''));
     });
 
+    test('strips Video and Menampilkan prefixes from Google Drive or media sources', () {
+      expect(
+        VideoTitleResolver.cleanTitle('Video E02 - Goblin 2016 Sub Indo bilibili.mp4'),
+        equals('E02 - Goblin 2016 Sub Indo bilibili.mp4'),
+      );
+      expect(
+        VideoTitleResolver.cleanTitle('Menampilkan Goblin Episode 1 Subtitle Indonesia.mp4'),
+        equals('Goblin Episode 1 Subtitle Indonesia.mp4'),
+      );
+    });
+
     test('preserves valid titles without suffixes', () {
       expect(
         VideoTitleResolver.cleanTitle('Solo Leveling Episode 1 - I\'m Used to It'),

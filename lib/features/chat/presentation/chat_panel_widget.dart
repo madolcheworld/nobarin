@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
@@ -27,17 +28,23 @@ class ChatPanelWidget extends StatefulWidget {
   State<ChatPanelWidget> createState() => _ChatPanelWidgetState();
 }
 
-class _ChatPanelWidgetState extends State<ChatPanelWidget> {
+class _ChatPanelWidgetState extends State<ChatPanelWidget>
+    with AutomaticKeepAliveClientMixin {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  int _lastMessageCount = 0;
+  String? _lastMessageId;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _lastMessageCount = widget.chatController.messages.length;
+    final msgs = widget.chatController.messages;
+    _lastMessageId = msgs.isNotEmpty ? msgs.last.id : null;
     widget.chatController.addListener(_handleChatUpdate);
     _inputController.addListener(_onTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   @override
@@ -46,7 +53,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
     if (oldWidget.chatController != widget.chatController) {
       oldWidget.chatController.setTyping(false);
       oldWidget.chatController.removeListener(_handleChatUpdate);
-      _lastMessageCount = widget.chatController.messages.length;
+      final msgs = widget.chatController.messages;
+      _lastMessageId = msgs.isNotEmpty ? msgs.last.id : null;
       widget.chatController.addListener(_handleChatUpdate);
     }
   }
@@ -57,9 +65,10 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
   }
 
   void _handleChatUpdate() {
-    final currentCount = widget.chatController.messages.length;
-    if (currentCount > _lastMessageCount) {
-      _lastMessageCount = currentCount;
+    final msgs = widget.chatController.messages;
+    final latestId = msgs.isNotEmpty ? msgs.last.id : null;
+    if (latestId != _lastMessageId) {
+      _lastMessageId = latestId;
       _scrollToBottom();
     }
   }
@@ -143,11 +152,19 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
   void _showMessageReactionBar(ChatMessage msg) {
     if (msg.isSystem || msg.isReaction) return;
     AppHaptics.medium();
+    final currentUserId = widget.chatController.currentUser.id;
+    final isMe = msg.userId == currentUserId;
+    final isHostOrCoHost = (widget.hostId != null && widget.hostId == currentUserId) ||
+        widget.coHostUserIds.contains(currentUserId);
+    final canDelete = isMe || isHostOrCoHost;
+    final snippet = msg.content.characters.length > 25
+        ? '${msg.content.characters.take(25)}...'
+        : msg.content;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: AppColors.surfaceElevated,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -160,8 +177,12 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
             ),
           ],
         ),
-        child: SafeArea(
-          child: Column(
+        child: Material(
+          color: Colors.transparent,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
@@ -174,13 +195,14 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                 ),
               ),
               Text(
-                'Reaksi untuk ${msg.username}: "${msg.content.length > 25 ? '${msg.content.substring(0, 25)}...' : msg.content}"',
+                'Aksi untuk ${msg.username}: "$snippet"',
                 style:
                     const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 14),
+              // Emojis row
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
@@ -250,15 +272,205 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                   ],
                 ),
               ),
+              const Divider(color: AppColors.border, height: 24, thickness: 0.8),
+              // Actions List
+              ListTile(
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                leading: const Icon(Icons.copy_rounded, size: 20, color: AppColors.textPrimary),
+                title: const Text('Salin Pesan', style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  Clipboard.setData(ClipboardData(text: msg.content));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Pesan disalin ke clipboard'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+              if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.flag_outlined, size: 20, color: AppColors.accentRed),
+                  title: const Text('Laporkan Pesan', style: TextStyle(fontSize: 13, color: AppColors.accentRed)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _showReportDialog(msg);
+                  },
+                ),
+              if (!isMe && msg.userId != null && msg.userId!.isNotEmpty)
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.block_rounded, size: 20, color: AppColors.textMuted),
+                  title: Text('Blokir ${msg.username}', style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _showBlockUserConfirmation(msg);
+                  },
+                ),
+              if (canDelete)
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.accentRed),
+                  title: const Text('Hapus Pesan', style: TextStyle(fontSize: 13, color: AppColors.accentRed)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    widget.chatController.deleteMessage(msg.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Pesan telah dihapus'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
             ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
+  void _showReportDialog(ChatMessage msg) {
+    const reasons = [
+      'Spam atau iklan',
+      'Ujaran kebencian / pelecehan',
+      'Konten pornografi atau vulgar',
+      'Pelanggaran hak cipta',
+      'Penipuan atau aktivitas berbahaya',
+      'Lainnya',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.flag_rounded, color: AppColors.accentRed, size: 22),
+            SizedBox(width: 8),
+            Text('Laporkan Pesan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Laporkan konten dari ${msg.username}. Pilih alasan pelaporan:',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            ...reasons.map(
+              (reason) => InkWell(
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.surfaceElevated,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: AppColors.primaryNeon, width: 0.8),
+                      ),
+                      content: const Text(
+                        'Laporan Anda telah diterima dan akan ditinjau tim moderator. Terima kasih.',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          reason,
+                          style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBlockUserConfirmation(ChatMessage msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: Text(
+          'Blokir ${msg.username}?',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        ),
+        content: Text(
+          'Pesan dari pengguna ${msg.username} tidak akan lagi ditampilkan pada layar Anda selama sesi room.',
+          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (msg.userId != null) {
+                widget.chatController.blockUser(msg.userId!);
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${msg.username} berhasil diblokir'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Blokir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return ListenableBuilder(
       listenable: widget.chatController,
       builder: (context, _) {
@@ -297,6 +509,8 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                       )
                     : ListView.builder(
                         controller: _scrollController,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         itemCount: messages.length,
@@ -346,6 +560,12 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                         Expanded(
                           child: TextField(
                             controller: _inputController,
+                            maxLength: 500,
+                            buildCounter: (context,
+                                    {required currentLength,
+                                    required isFocused,
+                                    required maxLength}) =>
+                                null,
                             style: const TextStyle(fontSize: 14),
                             decoration: InputDecoration(
                               hintText: 'Tulis pesan...',
@@ -372,6 +592,7 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
                             gradient: AppColors.primaryGradient,
                           ),
                           child: IconButton(
+                            tooltip: 'Kirim pesan',
                             icon: const Icon(Icons.send_rounded,
                                 size: 18, color: Colors.white),
                             onPressed: _sendMessage,
@@ -411,20 +632,15 @@ class _ChatPanelWidgetState extends State<ChatPanelWidget> {
   }
 
   Widget _buildMessageBubble(ChatMessage msg, bool isMe) {
-    final isHost = (widget.hostId != null &&
-            widget.hostId!.isNotEmpty &&
-            msg.userId == widget.hostId) ||
-        (widget.hostName != null &&
-            widget.hostName!.isNotEmpty &&
-            widget.hostName != 'Host' &&
-            msg.username == widget.hostName);
-    final isCoHost = widget.coHostUserIds.contains(msg.userId) ||
-        widget.coHostUserIds.contains(msg.username);
+    final isHost = widget.hostId != null &&
+        widget.hostId!.isNotEmpty &&
+        msg.userId == widget.hostId;
+    final isCoHost = widget.coHostUserIds.contains(msg.userId);
 
     final trimmedContent = msg.content.trim();
+    final bool isAsciiOrSymbol = trimmedContent.runes.any((r) => r <= 127);
     final isSingleEmoji = msg.isReaction ||
-        (trimmedContent.characters.length == 1 &&
-            !RegExp(r'[a-zA-Z0-9\s]').hasMatch(trimmedContent));
+        (!isAsciiOrSymbol && trimmedContent.characters.length == 1);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

@@ -62,6 +62,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   final GlobalKey _playerKey = GlobalKey();
   final GlobalKey _screenShareKey = GlobalKey();
 
+  int _unreadChatCount = 0;
+  String? _lastObservedMessageId;
+
   late final TabController _tabController;
   late final UnifiedPlayerController _player;
   SyncController? _syncController;
@@ -78,12 +81,41 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _player = UnifiedPlayerController();
     _player.addListener(_onPlayerStateChanged);
     PipService.instance.isInPipModeNotifier.addListener(_onPipModeChanged);
     PipService.instance.pipActionNotifier.addListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(true);
     _fetchAndInitializeRoom();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.index == 0 && _unreadChatCount > 0) {
+      setState(() {
+        _unreadChatCount = 0;
+      });
+    }
+  }
+
+  void _onChatUpdated() {
+    if (_chatController == null) return;
+    final msgs = _chatController!.messages;
+    final latestId = msgs.isNotEmpty ? msgs.last.id : null;
+    if (latestId != _lastObservedMessageId) {
+      _lastObservedMessageId = latestId;
+      if (_tabController.index != 0 && msgs.isNotEmpty) {
+        final lastMsg = msgs.last;
+        final currentUserId = _chatController!.currentUser.id;
+        if (lastMsg.userId != currentUserId && !lastMsg.isReaction) {
+          if (mounted) {
+            setState(() {
+              _unreadChatCount++;
+            });
+          }
+        }
+      }
+    }
   }
 
   void _onPlayerStateChanged() {
@@ -256,6 +288,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         currentUser: user,
         supabase: supabase,
       );
+      _chatController!.addListener(_onChatUpdated);
 
       _roomController!.onParticipantLeft = (username) {
         _chatController?.sendSystemMessage('$username keluar');
@@ -333,6 +366,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       _signalingChannel?.subscribe((status, error) {
         debugPrint(
             '[RoomScreen] Signaling channel status: $status (error: $error)');
+        if (status == RealtimeSubscribeStatus.subscribed) {
+          _voiceController?.onSignalingChannelSubscribed();
+        }
       });
 
       _player.onPlaybackEnded = () {
@@ -461,6 +497,25 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         _wasHost = isNowHost;
       }
 
+      if (_voiceController?.errorMessage != null) {
+        final err = _voiceController!.errorMessage!;
+        _voiceController!.clearError();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  err,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                backgroundColor: AppColors.accentRed,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        });
+      }
 
       final isSharing = _screenShareController?.isSharing == true;
       PipService.instance.updateScreenShareState(isSharing);
@@ -528,6 +583,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     PipService.instance.pipActionNotifier.removeListener(_onPipActionReceived);
     PipService.instance.setAutoEnterPip(false);
     PipService.instance.updateScreenShareState(false);
+    _chatController?.removeListener(_onChatUpdated);
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _roomController?.dispose();
     _chatController?.dispose();
@@ -651,16 +708,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
               _room!.id,
               code: _room!.code,
             );
-      }
-    } else {
-      if (user != null && _chatController != null) {
-        try {
-          await _chatController!.sendSystemMessage(
-            '${user.username} keluar',
-          );
-          // Allow brief moment for broadcast packet to reach network before disposing channel
-          await Future.delayed(const Duration(milliseconds: 250));
-        } catch (_) {}
       }
     }
 
@@ -1277,8 +1324,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     required Set<String> mutedIds,
   }) {
     final queueCount = _queueController?.items.length ?? 0;
-    final activeSpeakerCount = (_voiceController?.activeSpeakerIds.length ?? 0) +
-        (_voiceController?.isLocalSpeaking == true ? 1 : 0);
+    final activeSpeakerCount = _voiceController?.activeSpeakerIds.length ?? 0;
 
     return Column(
       children: [
@@ -1311,15 +1357,34 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             dividerColor: Colors.transparent,
             onTap: (_) => AppHaptics.selection(),
             tabs: [
-              const Tab(
+              Tab(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.chat_bubble_outline_rounded, size: 14),
-                    SizedBox(width: 5),
-                    Flexible(
+                    const Icon(Icons.chat_bubble_outline_rounded, size: 14),
+                    const SizedBox(width: 5),
+                    const Flexible(
                       child: Text('Obrolan', overflow: TextOverflow.ellipsis),
                     ),
+                    if (_unreadChatCount > 0) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryNeon,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _unreadChatCount > 99 ? '99+' : '$_unreadChatCount',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

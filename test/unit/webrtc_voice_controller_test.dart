@@ -97,6 +97,11 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
   @override
   Future<void> setLocalDescription(RTCSessionDescription description) async {
     localDesc = description;
+    if (description.type == 'rollback') {
+      signalingState = RTCSignalingState.RTCSignalingStateStable;
+    } else if (description.type == 'offer') {
+      signalingState = RTCSignalingState.RTCSignalingStateHaveLocalOffer;
+    }
   }
 
   @override
@@ -124,6 +129,11 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
     return RTCSessionDescription('fake-answer-sdp', 'answer');
   }
 
+  final List<FakeRtpTransceiver> fakeTransceivers = [];
+
+  @override
+  Future<List<RTCRtpTransceiver>> getTransceivers() async => fakeTransceivers;
+
   @override
   Future<void> addCandidate(RTCIceCandidate candidate) async {
     candidates.add(candidate);
@@ -137,6 +147,7 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
     addedTracks.add(track);
     final sender = FakeRtpSender(track);
     fakeSenders.add(sender);
+    fakeTransceivers.add(FakeRtpTransceiver(sender: sender));
     return sender;
   }
 
@@ -153,6 +164,25 @@ class FakeRTCPeerConnection implements RTCPeerConnection {
   @override
   Future<List<StatsReport>> getStats([MediaStreamTrack? track]) async =>
       statsReports;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeRtpTransceiver implements RTCRtpTransceiver {
+  @override
+  final RTCRtpSender sender;
+  TransceiverDirection assignedDirection = TransceiverDirection.SendRecv;
+
+  FakeRtpTransceiver({required this.sender});
+
+  @override
+  TransceiverDirection get currentDirection => assignedDirection;
+
+  @override
+  Future<void> setDirection(TransceiverDirection direction) async {
+    assignedDirection = direction;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -903,6 +933,183 @@ void main() {
           .toList();
 
       expect(leaveMessages.length, 1);
+    });
+
+    test('isUserMuted() defaults to true for unannounced users and tracks mute state accurately', () async {
+      final fakeSupabase = FakeSupabaseClient();
+      final controller = WebRtcVoiceController(
+        roomId: 'test-room',
+        userId: 'user-alice',
+        userName: 'Alice',
+        supabase: fakeSupabase,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            FakeRTCPeerConnection(),
+      );
+
+      // Local user starts muted
+      expect(controller.isUserMuted('user-alice'), isTrue);
+      // Unknown remote participant defaults to muted (prevents false green mic in UI)
+      expect(controller.isUserMuted('user-bob'), isTrue);
+
+      // Bob announces unmuted state
+      controller.handleVoiceState({
+        'action': 'update',
+        'sender_id': 'user-bob',
+        'is_muted': false,
+      });
+      expect(controller.isUserMuted('user-bob'), isFalse);
+
+      // Bob mutes
+      controller.handleVoiceState({
+        'action': 'update',
+        'sender_id': 'user-bob',
+        'is_muted': true,
+      });
+      expect(controller.isUserMuted('user-bob'), isTrue);
+
+      controller.dispose();
+    });
+
+    test('handleVoiceState with action: join disposes stale peer connections from same peer', () async {
+      final fakeSupabase = FakeSupabaseClient();
+      final pc1 = FakeRTCPeerConnection();
+      final controller = WebRtcVoiceController(
+        roomId: 'test-room',
+        userId: 'user-alice',
+        userName: 'Alice',
+        supabase: fakeSupabase,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async => pc1,
+      );
+
+      // Connect to establish initial state
+      await controller.connect();
+
+      // Simulate Bob sending an offer to create pc1
+      await controller.handleVoiceOffer({
+        'sender_id': 'user-bob',
+        'target_id': 'user-alice',
+        'sdp': {'type': 'offer', 'sdp': 'fake-offer-sdp'},
+      });
+      expect(controller.peerConnections.containsKey('user-bob'), isTrue);
+      expect(pc1.isClosed, isFalse);
+
+      // Bob rejoins room (reconnect or page reload), sends action: 'join'
+      controller.handleVoiceState({
+        'action': 'join',
+        'sender_id': 'user-bob',
+        'sender_name': 'Bob',
+      });
+
+      // The stale peer connection pc1 should be disposed/closed immediately
+      expect(pc1.isClosed, isTrue);
+
+      controller.dispose();
+    });
+
+    test('handleVoiceOffer performs rollback when glare collision occurs on polite peer', () async {
+      final fakeSupabase = FakeSupabaseClient();
+      final pc = FakeRTCPeerConnection();
+      // Alice is polite peer because 'user-alice' < 'user-bob'
+      final controller = WebRtcVoiceController(
+        roomId: 'test-room',
+        userId: 'user-alice',
+        userName: 'Alice',
+        supabase: fakeSupabase,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async => pc,
+      );
+
+      await controller.connect();
+
+      // Alice generates an offer locally, putting pc in have-local-offer state
+      await pc.setLocalDescription(RTCSessionDescription('local-sdp', 'offer'));
+      expect(pc.signalingState, RTCSignalingState.RTCSignalingStateHaveLocalOffer);
+
+      // Alice receives concurrent offer from Bob (Glare condition)
+      await controller.handleVoiceOffer({
+        'sender_id': 'user-bob',
+        'target_id': 'user-alice',
+        'sdp': {'type': 'offer', 'sdp': 'bob-offer-sdp'},
+      });
+
+      // Alice as polite peer rolled back her local offer and accepted Bob's offer
+      expect(pc.signalingState, RTCSignalingState.RTCSignalingStateStable);
+      expect(pc.remoteDesc?.sdp, 'bob-offer-sdp');
+
+      controller.dispose();
+    });
+
+    test('Audio ducking does not jump volume when player volume is already 0.0 (muted)', () async {
+      final fakePlayer = FakePlayerController();
+      fakePlayer.setVolume(0.0); // User had explicitly muted the video player
+
+      final controller = WebRtcVoiceController(
+        roomId: 'test-room',
+        userId: 'user-alice',
+        userName: 'Alice',
+        playerController: fakePlayer,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async =>
+            FakeRTCPeerConnection(),
+      );
+
+      await controller.connect();
+
+      // Remote peer speaks
+      controller.handleVoiceState({
+        'action': 'speaking',
+        'sender_id': 'user-bob',
+        'is_speaking': true,
+      });
+
+      // Volume must stay at 0.0 and NOT jump to 0.4 (duckingFactor)
+      expect(fakePlayer.volume, 0.0);
+
+      // Remote peer stops speaking
+      controller.handleVoiceState({
+        'action': 'speaking',
+        'sender_id': 'user-bob',
+        'is_speaking': false,
+      });
+
+      // Volume must stay at 0.0 and NOT restore to 1.0
+      expect(fakePlayer.volume, 0.0);
+
+      controller.dispose();
+    });
+
+    test('toggleMic sets transceiver direction to SendRecv on existing peer connections', () async {
+      final fakeSupabase = FakeSupabaseClient();
+      final pc = FakeRTCPeerConnection();
+      final controller = WebRtcVoiceController(
+        roomId: 'test-room',
+        userId: 'user-alice',
+        userName: 'Alice',
+        autoCaptureMic: false, // Lazy mic acquisition
+        supabase: fakeSupabase,
+        userMediaFunction: (_) async => fakeStream,
+        peerConnectionFunction: (config, [constraints = const {}]) async => pc,
+      );
+
+      await controller.connect();
+
+      // Peer connection established before local mic was acquired
+      await controller.handleVoiceOffer({
+        'sender_id': 'user-bob',
+        'target_id': 'user-alice',
+        'sdp': {'type': 'offer', 'sdp': 'fake-offer'},
+      });
+
+      // User toggles mic ON
+      await controller.toggleMic();
+
+      // Transceiver direction was updated to SendRecv
+      expect(pc.fakeTransceivers.isNotEmpty, isTrue);
+      expect(pc.fakeTransceivers.first.assignedDirection, TransceiverDirection.SendRecv);
+
+      controller.dispose();
     });
   });
 

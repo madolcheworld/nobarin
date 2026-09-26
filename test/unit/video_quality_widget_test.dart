@@ -45,7 +45,7 @@ void main() {
     });
 
     testWidgets(
-        '1. Bottom bar displays quality pill and opens VideoQualitySheet on tap',
+        '1. Bottom bar displays quality pill and opens VideoQualitySheet for single-track and multi-quality videos',
         (tester) async {
       await player.loadMedia(
         'direct_url',
@@ -69,15 +69,28 @@ void main() {
 
       // Find the quality pill in the player controls
       expect(find.byIcon(Icons.tune_rounded), findsWidgets);
-      expect(find.text('Auto'), findsWidgets);
 
       // Tap on the quality button/pill
       await tester.tap(find.byIcon(Icons.tune_rounded).first);
       await tester.pumpAndSettle();
 
-      // Sheet must be open with title and Auto option
+      // Single-track MP4 must show single-resolution notice and original quality tile
       expect(find.text('Kualitas Video'), findsOneWidget);
+      expect(find.text('Resolusi tunggal'), findsOneWidget);
+      expect(find.text('Resolusi Asli Video (Single Track)'), findsOneWidget);
+
+      // Simulate multi-quality stream detected (e.g. HLS manifest parsed)
+      player.setAvailableQualitiesForTesting([
+        const VideoQuality.auto(),
+        const VideoQuality(id: '1080', label: '1080p', height: 1080),
+        const VideoQuality(id: '720', label: '720p', height: 720),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 resolusi tersedia'), findsOneWidget);
       expect(find.text('Auto (Otomatis)'), findsOneWidget);
+      expect(find.text('1080p'), findsOneWidget);
+      expect(find.text('720p'), findsOneWidget);
     });
 
     testWidgets('2. Selecting VideoQuality updates controller state',

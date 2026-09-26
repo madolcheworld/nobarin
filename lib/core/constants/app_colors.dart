@@ -72,6 +72,10 @@ class AppColors {
   static const Color youtubeRed = Color(0xFFFF4E45);
   static const Color dailymotionBlue = Color(0xFF3B9EFF);
   static const Color bstationBlue = Color(0xFF26C6FA);
+  static const Color googleDriveGreen = Color(0xFF0F9D58);
+  static const Color googleDriveAmber = Color(0xFFF4B400);
+  static const Color googleDriveBlue = Color(0xFF4285F4);
+  static const Color webBrowserTeal = Color(0xFF00E5FF);
   static const Color p2pPurple = Color(0xFFA78BFA);
 
   // Shimmer / Skeleton Loading

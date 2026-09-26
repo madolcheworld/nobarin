@@ -74,6 +74,10 @@ class WebRtcVoiceController extends ChangeNotifier {
   final Set<String> _activeSpeakerIds = {};
   // Set of user IDs currently muted (local and/or remote)
   final Set<String> _mutedUserIds = {};
+  // Set of user IDs explicitly unmuted (for accurate default mute tracking)
+  final Set<String> _unmutedUserIds = {};
+  Timer? _localSpeechHangoverTimer;
+  bool _isTogglingMic = false;
 
   VoiceStatus get status => _status;
   bool get isMicMuted => _isMicMuted;
@@ -86,11 +90,24 @@ class WebRtcVoiceController extends ChangeNotifier {
   bool get isLocalSpeaking => _isLocalSpeaking;
   bool get isDucking => _isDucking;
   String? get errorMessage => _errorMessage;
+
+  void clearError() {
+    _errorMessage = null;
+  }
   MediaStream? get localStream => _localStream;
   Set<String> get activeSpeakerIds => Set.unmodifiable(_activeSpeakerIds);
   Set<String> get mutedUserIds => Set.unmodifiable(_mutedUserIds);
+  Set<String> get unmutedUserIds => Set.unmodifiable(_unmutedUserIds);
   Map<String, RTCPeerConnection> get peerConnections =>
       Map.unmodifiable(_peerConnections);
+
+  /// Returns whether a given user is muted. Default is true for any participant
+  /// until an explicit unmuted state is received from signaling.
+  bool isUserMuted(String peerId) {
+    if (peerId == userId) return _isMicMuted;
+    if (_unmutedUserIds.contains(peerId)) return false;
+    return true;
+  }
 
   final bool autoCaptureMic;
 
@@ -359,11 +376,27 @@ class WebRtcVoiceController extends ChangeNotifier {
         _voiceChannel!.subscribe((status, error) {
           debugPrint(
               '[WebRtcVoiceController] Realtime status: $status (error: $error)');
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            onSignalingChannelSubscribed();
+          }
         });
       }
     } catch (e) {
       debugPrint('[WebRtcVoiceController] Error setting up signaling: $e');
     }
+  }
+
+  /// Called when the signaling channel has successfully subscribed and is ready to broadcast
+  Future<void> onSignalingChannelSubscribed() async {
+    if (_isDisposed || _status != VoiceStatus.connected) return;
+    debugPrint('[WebRtcVoiceController] Signaling channel subscribed, announcing join');
+    await _sendSignalingMessage('VOICE_STATE', {
+      'sender_id': userId,
+      'user_name': userName,
+      'is_muted': _isMicMuted,
+      'is_speaking': _isLocalSpeaking,
+      'action': 'join',
+    });
   }
 
   /// Sends a broadcast signaling message via Supabase Realtime
@@ -396,6 +429,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     if (action == 'leave') {
       _activeSpeakerIds.remove(senderId);
       _mutedUserIds.remove(senderId);
+      _unmutedUserIds.remove(senderId);
       await _closePeerConnection(senderId);
       _handleAudioDucking(immediate: true);
       notifyListeners();
@@ -405,8 +439,10 @@ class WebRtcVoiceController extends ChangeNotifier {
     // Update muted and speaking state for this peer
     if (isMuted) {
       _mutedUserIds.add(senderId);
+      _unmutedUserIds.remove(senderId);
     } else {
       _mutedUserIds.remove(senderId);
+      _unmutedUserIds.add(senderId);
     }
 
     if (isSpeaking && !isMuted && !_isDeafened) {
@@ -416,6 +452,12 @@ class WebRtcVoiceController extends ChangeNotifier {
     }
 
     if (action == 'join') {
+      // Clean up stale peer connection from previous disconnected session
+      if (_peerConnections.containsKey(senderId) ||
+          _creatingPeerConnections.containsKey(senderId)) {
+        await _closePeerConnection(senderId);
+      }
+
       // Announce our presence back so new peer knows we are in the room
       await _sendSignalingMessage('VOICE_STATE', {
         'sender_id': userId,
@@ -438,12 +480,29 @@ class WebRtcVoiceController extends ChangeNotifier {
       // Existing peer announced itself in response to our join.
       // Only initiate offer if connection does not already exist to avoid duplicate offer collisions!
       if (!_peerConnections.containsKey(senderId) &&
+          !_creatingPeerConnections.containsKey(senderId) &&
           userId.compareTo(senderId) > 0) {
         await _initiateOfferTo(senderId);
       }
       _handleAudioDucking();
       notifyListeners();
       return;
+    }
+
+    // Self-healing: if an update is received from an unconnected peer, establish mesh link
+    if (!_peerConnections.containsKey(senderId) &&
+        !_creatingPeerConnections.containsKey(senderId)) {
+      if (userId.compareTo(senderId) > 0) {
+        await _initiateOfferTo(senderId);
+      } else {
+        await _sendSignalingMessage('VOICE_STATE', {
+          'sender_id': userId,
+          'user_name': userName,
+          'is_muted': _isMicMuted,
+          'is_speaking': _isLocalSpeaking,
+          'action': 'announce',
+        });
+      }
     }
 
     _handleAudioDucking();
@@ -507,7 +566,37 @@ class WebRtcVoiceController extends ChangeNotifier {
       final sdp = sdpMap['sdp'] as String? ?? '';
       final type = sdpMap['type'] as String? ?? 'offer';
 
+      // Perfect Negotiation: Check for offer collision (glare)
+      RTCSignalingState? currentState;
+      try {
+        currentState = await pc.getSignalingState();
+      } catch (_) {}
+
+      final isCollision = currentState != null &&
+          currentState != RTCSignalingState.RTCSignalingStateStable;
+      final isPolite = userId.compareTo(senderId) < 0;
+
+      if (isCollision) {
+        if (!isPolite) {
+          debugPrint(
+              '[WebRtcVoiceController] Impolite peer ignoring colliding offer from $senderId (state: $currentState)');
+          return;
+        }
+        debugPrint(
+            '[WebRtcVoiceController] Polite peer rolling back local offer to accept offer from $senderId');
+        try {
+          await pc.setLocalDescription(RTCSessionDescription('', 'rollback'));
+        } catch (e) {
+          debugPrint('[WebRtcVoiceController] Rollback note: $e');
+        }
+      }
+
       await pc.setRemoteDescription(RTCSessionDescription(sdp, type));
+
+      // Attach local audio track if unmuted so answerer can send audio
+      if (_localStream != null) {
+        await _attachLocalAudioTracksTo(pc);
+      }
 
       final answer = await pc.createAnswer({
         'offerToReceiveAudio': 1,
@@ -580,7 +669,9 @@ class WebRtcVoiceController extends ChangeNotifier {
           await pc.addCandidate(candidate);
           return;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[WebRtcVoiceController] addCandidate failed, buffering: $e');
+      }
     }
 
     // Queue candidate until remote description is set
@@ -625,6 +716,19 @@ class WebRtcVoiceController extends ChangeNotifier {
         } catch (_) {}
       }
     }
+
+    // Ensure audio transceiver direction is SendRecv so outgoing packets are transmitted
+    try {
+      final transceivers = await pc.getTransceivers();
+      for (final t in transceivers) {
+        try {
+          if (t.sender.track?.kind == 'audio' ||
+              t.receiver.track?.kind == 'audio') {
+            await t.setDirection(TransceiverDirection.SendRecv);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   /// Creates or retrieves existing RTCPeerConnection for [remotePeerId]
@@ -736,57 +840,71 @@ class WebRtcVoiceController extends ChangeNotifier {
 
   /// Toggles microphone mute state and broadcasts updated VOICE_STATE
   Future<void> toggleMic() async {
-    _isMicMuted = !_isMicMuted;
+    if (_isTogglingMic) return;
+    _isTogglingMic = true;
 
-    // Lazily acquire mic if not yet available and user wants to unmute
-    if (!_isMicMuted && _localStream == null) {
-      try {
-        final stream = await _userMediaFunction(highQualityAudioConstraints);
-        _localStream = stream;
-        for (final entry in _peerConnections.entries.toList()) {
-          final peerId = entry.key;
-          final pc = entry.value;
-          await _attachLocalAudioTracksTo(pc);
-          await _initiateOfferTo(peerId);
+    try {
+      _isMicMuted = !_isMicMuted;
+
+      // Lazily acquire mic if not yet available and user wants to unmute
+      if (!_isMicMuted && _localStream == null) {
+        try {
+          final stream = await _userMediaFunction(highQualityAudioConstraints);
+          _localStream = stream;
+          for (final entry in _peerConnections.entries.toList()) {
+            final peerId = entry.key;
+            final pc = entry.value;
+            await _attachLocalAudioTracksTo(pc);
+            await _initiateOfferTo(peerId);
+          }
+        } catch (e) {
+          debugPrint(
+              '[WebRtcVoiceController] Mic lazy acquisition failed on unmute: $e');
+          _errorMessage = 'Gagal mengakses mikrofon: $e';
+          _isMicMuted = true;
+          _mutedUserIds.add(userId);
+          _unmutedUserIds.remove(userId);
+          notifyListeners();
+          return;
         }
-      } catch (e) {
-        debugPrint(
-            '[WebRtcVoiceController] Mic lazy acquisition failed on unmute: $e');
-        _errorMessage = 'Gagal mengakses mikrofon: $e';
-        _isMicMuted = true;
+      }
+
+      // Toggle hardware audio track
+      if (_localStream != null) {
+        for (final track in _localStream!.getAudioTracks()) {
+          track.enabled = !_isMicMuted;
+        }
+      }
+
+      // Update local mute state in set
+      if (_isMicMuted) {
         _mutedUserIds.add(userId);
-        notifyListeners();
-        return;
+        _unmutedUserIds.remove(userId);
+        _localSpeechHangoverTimer?.cancel();
+        _localSpeechHangoverTimer = null;
+        if (_isLocalSpeaking) {
+          _isLocalSpeaking = false;
+          _activeSpeakerIds.remove(userId);
+        }
+        // Immediately restore video volume if ducking was active
+        _handleAudioDucking(immediate: true);
+      } else {
+        _mutedUserIds.remove(userId);
+        _unmutedUserIds.add(userId);
       }
+
+      await _sendSignalingMessage('VOICE_STATE', {
+        'sender_id': userId,
+        'user_name': userName,
+        'is_muted': _isMicMuted,
+        'is_speaking': _isLocalSpeaking,
+        'action': 'update',
+      });
+
+      notifyListeners();
+    } finally {
+      _isTogglingMic = false;
     }
-
-    // Toggle hardware audio track
-    if (_localStream != null) {
-      for (final track in _localStream!.getAudioTracks()) {
-        track.enabled = !_isMicMuted;
-      }
-    }
-
-    // Update local mute state in set
-    if (_isMicMuted) {
-      _mutedUserIds.add(userId);
-      if (_isLocalSpeaking) {
-        _isLocalSpeaking = false;
-        _activeSpeakerIds.remove(userId);
-      }
-    } else {
-      _mutedUserIds.remove(userId);
-    }
-
-    await _sendSignalingMessage('VOICE_STATE', {
-      'sender_id': userId,
-      'user_name': userName,
-      'is_muted': _isMicMuted,
-      'is_speaking': _isLocalSpeaking,
-      'action': 'update',
-    });
-
-    notifyListeners();
   }
 
   /// Explicitly sets microphone mute state
@@ -899,10 +1017,26 @@ class WebRtcVoiceController extends ChangeNotifier {
             if (localAudioDetected) break;
           }
 
-          if (localAudioDetected != _isLocalSpeaking) {
-            setLocalSpeaking(localAudioDetected);
+          if (localAudioDetected) {
+            _localSpeechHangoverTimer?.cancel();
+            _localSpeechHangoverTimer = null;
+            if (!_isLocalSpeaking) {
+              setLocalSpeaking(true);
+            }
+          } else {
+            // Speech paused: hold state for 600ms to prevent rapid broadcast storms and avatar flickering
+            if (_isLocalSpeaking && _localSpeechHangoverTimer == null) {
+              _localSpeechHangoverTimer =
+                  Timer(const Duration(milliseconds: 600), () {
+                if (_isDisposed) return;
+                setLocalSpeaking(false);
+                _localSpeechHangoverTimer = null;
+              });
+            }
           }
         } else if (_isMicMuted || _peerConnections.isEmpty) {
+          _localSpeechHangoverTimer?.cancel();
+          _localSpeechHangoverTimer = null;
           if (_isLocalSpeaking) {
             setLocalSpeaking(false);
           }
@@ -1003,12 +1137,13 @@ class WebRtcVoiceController extends ChangeNotifier {
       if (!_isDucking) {
         _isDucking = true;
         final vol = playerController!.volume;
-        _savedVideoVolume = vol > 0.05 ? vol : 1.0;
+        _savedVideoVolume = vol;
         notifyListeners();
       }
 
-      final targetVolume =
-          (_savedVideoVolume * _duckingConfig.duckingFactor).clamp(0.0, 1.0);
+      final targetVolume = _savedVideoVolume <= 0.01
+          ? 0.0
+          : (_savedVideoVolume * _duckingConfig.duckingFactor).clamp(0.0, 1.0);
 
       final bool useFade = !immediate &&
           _duckingConfig.smoothTransition &&
@@ -1079,12 +1214,12 @@ class WebRtcVoiceController extends ChangeNotifier {
       return;
     }
 
-    final totalSteps = (duration.inMilliseconds / 25).round().clamp(2, 20);
+    final totalSteps = (duration.inMilliseconds / 50).round().clamp(2, 15);
     final volumeDelta = targetVolume - startVolume;
     int step = 0;
 
     _duckingFadeTimer =
-        Timer.periodic(const Duration(milliseconds: 25), (timer) {
+        Timer.periodic(const Duration(milliseconds: 50), (timer) {
       if (_isDisposed || playerController == null) {
         timer.cancel();
         return;
@@ -1159,6 +1294,8 @@ class WebRtcVoiceController extends ChangeNotifier {
     if (_status == VoiceStatus.disconnected) return;
 
     _vadTimer?.cancel();
+    _localSpeechHangoverTimer?.cancel();
+    _localSpeechHangoverTimer = null;
     _duckingReleaseTimer?.cancel();
     _duckingReleaseTimer = null;
     _duckingFadeTimer?.cancel();
@@ -1183,6 +1320,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     _candidateBuffer.clear();
     _activeSpeakerIds.clear();
     _mutedUserIds.clear();
+    _unmutedUserIds.clear();
     _mutedUserIds.add(userId);
 
     await _audioRouteHandler(false);
@@ -1221,6 +1359,8 @@ class WebRtcVoiceController extends ChangeNotifier {
   @override
   void dispose() {
     _vadTimer?.cancel();
+    _localSpeechHangoverTimer?.cancel();
+    _localSpeechHangoverTimer = null;
     _duckingReleaseTimer?.cancel();
     _duckingReleaseTimer = null;
     _duckingFadeTimer?.cancel();
@@ -1256,6 +1396,7 @@ class WebRtcVoiceController extends ChangeNotifier {
     _candidateBuffer.clear();
     _activeSpeakerIds.clear();
     _mutedUserIds.clear();
+    _unmutedUserIds.clear();
 
     WebRtcSignalingHelper.disposeMediaStream(
       _localStream,

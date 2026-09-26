@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nobarin/features/room/models/video_quality.dart';
+import 'package:nobarin/features/room/services/hls_manifest_parser.dart';
 
 void main() {
   group('VideoQuality Model & Logic Tests', () {
@@ -53,40 +54,20 @@ void main() {
       expect(q1, isNot(equals(q3)));
     });
 
-    test('YouTube preset quality mappings', () {
-      final ytPresets = [
-        const VideoQuality.auto(),
-        const VideoQuality(id: 'hd1080', label: '1080p (Full HD)', height: 1080),
-        const VideoQuality(id: 'hd720', label: '720p (HD)', height: 720),
-        const VideoQuality(id: 'large', label: '480p (SD)', height: 480),
-        const VideoQuality(id: 'medium', label: '360p (Hemat Kuota)', height: 360),
-        const VideoQuality(id: 'small', label: '240p (Rendah)', height: 240),
-        const VideoQuality(id: 'tiny', label: '144p (Sangat Rendah)', height: 144),
-      ];
-
-      expect(ytPresets.length, 7);
-      expect(ytPresets.first.isAuto, isTrue);
-      expect(ytPresets[1].id, 'hd1080');
-      expect(ytPresets[2].id, 'hd720');
-      expect(ytPresets[3].id, 'large');
-      expect(ytPresets[4].id, 'medium');
-      expect(ytPresets[5].id, 'small');
-      expect(ytPresets[6].id, 'tiny');
-    });
-
-    test('Dailymotion preset qualities and factory constructor', () {
+    test('Dailymotion factory constructor maps resolution heights', () {
       final dmAuto = VideoQuality.dailymotion('auto');
       expect(dmAuto.isAuto, isTrue);
       expect(dmAuto.id, 'auto');
       expect(dmAuto.shortLabel, 'Auto');
       expect(dmAuto.mode, QualityControlMode.webviewBridge);
 
-      final dm1080 = VideoQuality.dailymotion('1080');
+      final dm1080 = VideoQuality.dailymotion('1080', streamUrl: 'https://example.com/1080.m3u8');
       expect(dm1080.isAuto, isFalse);
       expect(dm1080.id, '1080');
       expect(dm1080.height, 1080);
       expect(dm1080.shortLabel, '1080p');
       expect(dm1080.badgeDescription, 'Full HD');
+      expect(dm1080.streamUrl, 'https://example.com/1080.m3u8');
       expect(dm1080.mode, QualityControlMode.webviewBridge);
 
       final dm720p = VideoQuality.dailymotion('720p');
@@ -110,7 +91,7 @@ void main() {
       expect(dm240.badgeDescription, 'Sangat Hemat Kuota');
     });
 
-    test('Bstation preset qualities and factory constructor', () {
+    test('Bstation factory constructor preserves fps and bitrate', () {
       final bstationAuto = VideoQuality.bstation(
         id: 'auto',
         label: 'Auto (Otomatis Bstation)',
@@ -120,35 +101,20 @@ void main() {
       expect(bstationAuto.shortLabel, 'Auto');
       expect(bstationAuto.mode, QualityControlMode.webviewBridge);
 
-      final bstation720 = VideoQuality.bstation(
-        id: '720',
-        label: '720p HD',
-        height: 720,
+      final bstation1080p60 = VideoQuality.bstation(
+        id: '116',
+        label: '1080p 60fps',
+        height: 1080,
+        fps: 60.0,
+        bitrate: 4500000,
       );
-      expect(bstation720.isAuto, isFalse);
-      expect(bstation720.id, '720');
-      expect(bstation720.height, 720);
-      expect(bstation720.shortLabel, '720p');
-      expect(bstation720.badgeDescription, 'HD Resolusi Tinggi');
-      expect(bstation720.mode, QualityControlMode.webviewBridge);
-
-      final bstation480 = VideoQuality.bstation(
-        id: '480',
-        label: '480p Standar',
-        height: 480,
-      );
-      expect(bstation480.height, 480);
-      expect(bstation480.shortLabel, '480p');
-      expect(bstation480.badgeDescription, 'Standar Definition (SD)');
-
-      final bstation360 = VideoQuality.bstation(
-        id: '360',
-        label: '360p Hemat',
-        height: 360,
-      );
-      expect(bstation360.height, 360);
-      expect(bstation360.shortLabel, '360p');
-      expect(bstation360.badgeDescription, 'Hemat Kuota');
+      expect(bstation1080p60.isAuto, isFalse);
+      expect(bstation1080p60.id, '116');
+      expect(bstation1080p60.height, 1080);
+      expect(bstation1080p60.fps, 60.0);
+      expect(bstation1080p60.bitrate, 4500000);
+      expect(bstation1080p60.shortLabel, '1080p');
+      expect(bstation1080p60.mode, QualityControlMode.webviewBridge);
     });
 
     test('YouTube factory constructor maps standard IFrame quality codes', () {
@@ -201,13 +167,74 @@ void main() {
       expect(VideoQuality.normalizeResolutionHeight(width: 2560, height: 1080), 1440);
       expect(VideoQuality.normalizeResolutionHeight(width: 3840, height: 1600), 2160);
     });
+  });
 
-    test('buildStandardTiersUpTo generates descending resolution tiers up to maxHeight', () {
-      final tiers720 = VideoQuality.buildStandardTiersUpTo(720, minHeight: 240);
-      expect(tiers720, equals([720, 480, 360, 240]));
+  group('HlsManifestParser Unit Tests', () {
+    test('isHlsUrl detects .m3u8 paths and query parameters', () {
+      expect(HlsManifestParser.isHlsUrl('https://cdn.example.com/live/master.m3u8'), isTrue);
+      expect(HlsManifestParser.isHlsUrl('https://cdn.example.com/live/master.m3u8?token=abc'), isTrue);
+      expect(HlsManifestParser.isHlsUrl('https://cdn.example.com/video.mp4'), isFalse);
+    });
 
-      final tiers2160 = VideoQuality.buildStandardTiersUpTo(2160, minHeight: 360);
-      expect(tiers2160, equals([2160, 1440, 1080, 720, 480, 360]));
+    test('extractVariants and parseMasterPlaylist extract exact resolution variants and resolve relative URLs', () {
+      const manifest = '''
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360,FRAME-RATE=30.0
+360p/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2800000,AVERAGE-BANDWIDTH=2400000,RESOLUTION=1280x720,FRAME-RATE=30.0
+720p/index.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=5500000,RESOLUTION=1920x1080,FRAME-RATE=60.0
+https://cdn.example.com/streams/1080p60/index.m3u8
+''';
+
+      final baseUri = Uri.parse('https://cdn.example.com/streams/master.m3u8');
+      final variants = HlsManifestParser.extractVariants(
+        manifest,
+        baseUri: baseUri,
+      );
+
+      expect(variants.length, equals(3));
+      expect(variants[0].height, equals(360));
+      expect(variants[0].streamUrl, equals('https://cdn.example.com/streams/360p/index.m3u8'));
+      expect(variants[1].height, equals(720));
+      expect(variants[1].bandwidth, equals(2400000));
+      expect(variants[1].streamUrl, equals('https://cdn.example.com/streams/720p/index.m3u8'));
+      expect(variants[2].height, equals(1080));
+      expect(variants[2].frameRate, equals(60.0));
+      expect(variants[2].streamUrl, equals('https://cdn.example.com/streams/1080p60/index.m3u8'));
+
+      final qualities = HlsManifestParser.parseMasterPlaylist(
+        manifest,
+        baseUri: baseUri,
+      );
+      expect(qualities.length, equals(4)); // Auto + 1080p 60fps + 720p + 360p
+      expect(qualities[0].isAuto, isTrue);
+      expect(qualities[1].label, equals('1080p 60fps'));
+      expect(qualities[1].height, equals(1080));
+      expect(qualities[2].label, equals('720p'));
+      expect(qualities[2].height, equals(720));
+      expect(qualities[3].label, equals('360p'));
+      expect(qualities[3].height, equals(360));
+    });
+
+    test('parseMasterPlaylist returns empty list for single-stream media playlist', () {
+      const mediaPlaylist = '''
+#EXTM3U
+#EXT-X-TARGETDURATION:10
+#EXTINF:9.009,
+segment0.ts
+#EXTINF:9.009,
+segment1.ts
+''';
+
+      final baseUri = Uri.parse('https://cdn.example.com/streams/360p/index.m3u8');
+      final variants = HlsManifestParser.extractVariants(
+        mediaPlaylist,
+        baseUri: baseUri,
+      );
+      expect(variants, isEmpty);
+      expect(HlsManifestParser.parseMasterPlaylist(mediaPlaylist, baseUri: baseUri), isEmpty);
     });
   });
 }
