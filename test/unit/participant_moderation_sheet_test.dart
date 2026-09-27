@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nobarin/features/auth/domain/user_profile.dart';
+import 'package:nobarin/features/chat/controllers/chat_controller.dart';
 import 'package:nobarin/features/room/controllers/room_controller.dart';
 import 'package:nobarin/features/room/models/room_model.dart';
 import 'package:nobarin/features/room/presentation/widgets/participant_moderation_sheet.dart';
@@ -217,6 +218,71 @@ void main() {
       expect(listTile.enabled, isFalse);
 
       controller.dispose();
+    });
+
+    testWidgets('renders report option and triggers report dialog for non-self participant', (tester) async {
+      final controller = RoomController(
+        initialRoom: testRoom,
+        currentUser: const UserProfile(id: 'other-viewer', username: 'Other', isGuest: true),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ParticipantModerationSheet(
+              targetUser: viewerUser,
+              roomController: controller,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Laporkan Pengguna'), findsOneWidget);
+
+      await tester.tap(find.text('Laporkan Pengguna'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pelecehan atau Perundungan (Harassment)'), findsOneWidget);
+
+      await tester.tap(find.text('Pelecehan atau Perundungan (Harassment)'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Laporan terhadap CharlieViewer telah diterima'), findsOneWidget);
+
+      controller.dispose();
+    });
+
+    testWidgets('allows regular viewer to locally mute and unblock another participant in chat', (tester) async {
+      final controller = RoomController(
+        initialRoom: testRoom,
+        currentUser: const UserProfile(id: 'other-viewer', username: 'Other', isGuest: true),
+      );
+      final chatController = ChatController(
+        roomId: testRoom.id,
+        currentUser: const UserProfile(id: 'other-viewer', username: 'Other', isGuest: true),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ParticipantModerationSheet(
+              targetUser: viewerUser,
+              roomController: controller,
+              chatController: chatController,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Bisukan Peserta (Lokal)'), findsOneWidget);
+
+      await tester.tap(find.text('Bisukan Peserta (Lokal)'));
+      await tester.pumpAndSettle();
+
+      expect(chatController.isUserBlocked(viewerUser.id), isTrue);
+
+      controller.dispose();
+      chatController.dispose();
     });
   });
 }

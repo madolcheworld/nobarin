@@ -54,6 +54,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   bool _wasPlayingBeforeFullscreen = false;
   Timer? _fullscreenTransitionTimer;
   double _position = 0.0;
+  final ValueNotifier<double> positionNotifier = ValueNotifier<double>(0.0);
   double _duration = 0.0;
   double _playbackSpeed = 1.0;
   double _volume = 1.0;
@@ -351,7 +352,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         onPositionChanged: (pos) {
           if (_isDisposed || _mediaType != 'direct_url') return;
           _position = pos;
-          notifyListeners();
+          positionNotifier.value = pos;
           onPositionChanged?.call(_position);
         },
         onDurationChanged: (dur) {
@@ -458,6 +459,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (posSec > 0 && _errorMessage != null && (_mkPlayer?.state.playing ?? false)) {
         _errorMessage = null;
         _isPlaying = true;
+        notifyListeners();
       }
       if (_isSwitchingQuality && _pendingQualitySeekSeconds != null) {
         if (posSec < 0.5 && _pendingQualitySeekSeconds! > 1.0) {
@@ -469,7 +471,7 @@ class UnifiedPlayerController extends ChangeNotifier {
         }
       }
       _position = posSec;
-      notifyListeners();
+      positionNotifier.value = posSec;
       onPositionChanged?.call(_position);
     }));
 
@@ -1056,7 +1058,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       final pos = state.position.inMilliseconds / 1000.0;
       if ((pos - _position).abs() >= 0.25) {
         _position = pos;
-        notifyListeners();
+        positionNotifier.value = pos;
         onPositionChanged?.call(_position);
       }
     }));
@@ -1112,7 +1114,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_isDisposed || _mediaType != 'bstation') return;
       if ((pos - _position).abs() >= 0.25) {
         _position = pos;
-        notifyListeners();
+        positionNotifier.value = pos;
         onPositionChanged?.call(_position);
       }
     };
@@ -1169,7 +1171,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_isDisposed || _mediaType != 'dailymotion') return;
       if ((pos - _position).abs() >= 0.25) {
         _position = pos;
-        notifyListeners();
+        positionNotifier.value = pos;
         onPositionChanged?.call(_position);
       }
     };
@@ -1226,7 +1228,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_isDisposed || _mediaType != 'google_drive') return;
       if ((pos - _position).abs() >= 0.25) {
         _position = pos;
-        notifyListeners();
+        positionNotifier.value = pos;
         onPositionChanged?.call(_position);
       }
     };
@@ -1283,7 +1285,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       if (_isDisposed || _mediaType != 'web_browser') return;
       if ((pos - _position).abs() >= 0.25) {
         _position = pos;
-        notifyListeners();
+        positionNotifier.value = pos;
         onPositionChanged?.call(_position);
       }
     };
@@ -1478,6 +1480,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       hasMediaNotifier.value = hasMedia;
     }
     _position = startSeconds;
+    positionNotifier.value = startSeconds;
     _playbackSpeed = 1.0;
     _hlsMasterUrl = '';
     _activeVariantStreamUrl = '';
@@ -1982,6 +1985,7 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   Future<void> seekTo(double seconds) async {
     _position = seconds < 0 ? 0 : seconds;
+    positionNotifier.value = _position;
     notifyListeners();
 
     try {
@@ -2542,6 +2546,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     hasMediaNotifier.dispose();
+    positionNotifier.dispose();
     _ytQualityPollTimer?.cancel();
     _qualityDetectTimeoutTimer?.cancel();
     _fullscreenTransitionTimer?.cancel();

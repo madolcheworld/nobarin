@@ -293,5 +293,24 @@ void main() {
       expect(controller.isFullscreenTransition, isFalse);
       expect(controller.isPlaying, isFalse);
     });
+
+    test('positionNotifier tracks position changes and updates independently', () async {
+      final controller = UnifiedPlayerController();
+      addTearDown(() => controller.dispose());
+
+      expect(controller.positionNotifier.value, equals(0.0));
+
+      await controller.loadMedia(
+        'direct_url',
+        'https://example.com/movie.mp4',
+        startSeconds: 42.0,
+      );
+      expect(controller.positionNotifier.value, equals(42.0));
+      expect(controller.position, equals(42.0));
+
+      await controller.seekTo(120.5);
+      expect(controller.positionNotifier.value, equals(120.5));
+      expect(controller.position, equals(120.5));
+    });
   });
 }

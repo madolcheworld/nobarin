@@ -49,6 +49,7 @@ class FrostedGlassBox extends StatelessWidget {
     BorderRadiusGeometry borderRadius = const BorderRadius.all(Radius.circular(16)),
     bool isHighlighted = false,
     Color? highlightColor,
+    double blur = 0.0,
     VoidCallback? onTap,
   }) {
     final activeColor = highlightColor ?? AppColors.primaryNeon;
@@ -57,7 +58,7 @@ class FrostedGlassBox extends StatelessWidget {
       padding: padding,
       margin: margin,
       borderRadius: borderRadius,
-      blur: 12.0,
+      blur: blur,
       backgroundColor: isHighlighted
           ? activeColor.withValues(alpha: 0.12)
           : AppColors.glassFill,
@@ -116,7 +117,21 @@ class FrostedGlassBox extends StatelessWidget {
       width: borderWidth,
     );
 
-    Widget glassWidget = Container(
+    // High-performance path: When blur is 0, completely bypass expensive BackdropFilter & offscreen render passes
+    if (blur <= 0) {
+      return Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          boxShadow: boxShadow,
+          border: border,
+        ),
+        clipBehavior: clipBehavior,
+        child: content,
+      );
+    }
+
+    return Container(
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: borderRadius,
@@ -137,7 +152,5 @@ class FrostedGlassBox extends StatelessWidget {
         ),
       ),
     );
-
-    return glassWidget;
   }
 }

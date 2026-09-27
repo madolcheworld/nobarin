@@ -382,6 +382,22 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 16),
+
+                          // Policy & Community Guidelines disclaimer
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              'Dengan mengetuk Mulai Nonton, kamu menyetujui Ketentuan Layanan & Kebijakan Privasi Nobarin. Pelecehan, ujaran kebencian, dan konten ilegal dilarang keras.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                color: AppColors.textMuted.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),

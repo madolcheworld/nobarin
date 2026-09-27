@@ -401,7 +401,7 @@ class RoomControlsBar extends StatelessWidget {
           final bool hasMedia = player.hasMediaNotifier.value || player.mediaUrl.isNotEmpty;
 
           return SizedBox(
-            height: 44,
+            height: 48,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),

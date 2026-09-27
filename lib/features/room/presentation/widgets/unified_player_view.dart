@@ -526,7 +526,6 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
     return ListenableBuilder(
       listenable: Listenable.merge([
         _showControlsNotifier,
-        _draggingPositionNotifier,
         _leftDoubleTapNotifier,
         _rightDoubleTapNotifier,
         widget.player,
@@ -535,10 +534,9 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
       builder: (context, _) {
         final bool isFs = isFullscreen || widget.player.isFullscreen;
         final bool canControl = widget.syncController.canControl;
-        final double pos = _draggingPosition ?? widget.player.position;
         final double duration = widget.player.duration > 0
             ? widget.player.duration
-            : (pos > 0 ? pos * 1.5 : 100);
+            : (widget.player.position > 0 ? widget.player.position * 1.5 : 100);
 
         return Stack(
           fit: StackFit.expand,
@@ -1272,21 +1270,32 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                                   )
                                 else
                                   Expanded(
-                                    child: Text(
-                                      '${TimeFormatter.formatDuration(pos)} / ${TimeFormatter.formatDuration(duration)}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black,
-                                            blurRadius: 4,
+                                    child: ListenableBuilder(
+                                      listenable: Listenable.merge([
+                                        widget.player.positionNotifier,
+                                        _draggingPositionNotifier,
+                                      ]),
+                                      builder: (context, _) {
+                                        final double currentPos =
+                                            _draggingPosition ??
+                                                widget.player.positionNotifier.value;
+                                        return Text(
+                                          '${TimeFormatter.formatDuration(currentPos)} / ${TimeFormatter.formatDuration(duration)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                            shadows: [
+                                              Shadow(
+                                                color: Colors.black,
+                                                blurRadius: 4,
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        );
+                                      },
                                     ),
                                   ),
                                 if ( duration <= 0 ) const Spacer(),
@@ -1422,53 +1431,63 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
 
                             // 2. Timeline Slider / Scrub Bar (positioned at the very bottom edge)
                             if (duration > 0) ...[
-                              if (canControl)
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 3,
-                                    thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 5,
-                                    ),
-                                    overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 10,
-                                    ),
-                                  ),
-                                  child: SizedBox(
-                                    height: 20,
-                                    child: Slider(
-                                      value: pos.clamp(0.0, duration),
-                                      min: 0.0,
-                                      max: duration,
-                                      onChanged: (val) {
-                                        _hideControlsTimer?.cancel();
-                                        setState(() {
-                                          _draggingPosition = val;
-                                        });
-                                      },
-                                      onChangeEnd: (val) {
-                                        _draggingPosition = null;
-                                        widget.syncController.requestSeek(val);
-                                        _startHideTimerIfNeeded(reset: true);
-                                      },
-                                    ),
-                                  ),
-                                )
-                              else
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 4,
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(2),
-                                    child: LinearProgressIndicator(
-                                      value: (pos / duration).clamp(0.0, 1.0),
-                                      backgroundColor: AppColors.border,
-                                      color: AppColors.primaryNeon,
-                                      minHeight: 3,
-                                    ),
-                                  ),
-                                ),
+                              ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  widget.player.positionNotifier,
+                                  _draggingPositionNotifier,
+                                ]),
+                                builder: (context, _) {
+                                  final double currentPos =
+                                      _draggingPosition ??
+                                          widget.player.positionNotifier.value;
+                                  if (canControl) {
+                                    return SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 3,
+                                        thumbShape: const RoundSliderThumbShape(
+                                          enabledThumbRadius: 5,
+                                        ),
+                                        overlayShape: const RoundSliderOverlayShape(
+                                          overlayRadius: 10,
+                                        ),
+                                      ),
+                                      child: SizedBox(
+                                        height: 20,
+                                        child: Slider(
+                                          value: currentPos.clamp(0.0, duration),
+                                          min: 0.0,
+                                          max: duration,
+                                          onChanged: (val) {
+                                            _hideControlsTimer?.cancel();
+                                            _draggingPosition = val;
+                                          },
+                                          onChangeEnd: (val) {
+                                            _draggingPosition = null;
+                                            widget.syncController.requestSeek(val);
+                                            _startHideTimerIfNeeded(reset: true);
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 4,
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(2),
+                                        child: LinearProgressIndicator(
+                                          value: (currentPos / duration).clamp(0.0, 1.0),
+                                          backgroundColor: AppColors.border,
+                                          color: AppColors.primaryNeon,
+                                          minHeight: 3,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
                             ] else ...[
                               const SizedBox(height: 2),
                             ],

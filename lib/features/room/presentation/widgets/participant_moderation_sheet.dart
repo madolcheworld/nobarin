@@ -90,6 +90,118 @@ class ParticipantModerationSheet extends StatelessWidget {
     );
   }
 
+  static void _showReportDialog(BuildContext context, UserProfile user) {
+    const reasons = [
+      'Pelecehan atau Perundungan (Harassment)',
+      'Ujaran Kebencian (Hate Speech)',
+      'Spam atau Promosi Ilegal',
+      'Konten Seksual atau Pornografi',
+      'Pelanggaran Hak Cipta / Pembajakan',
+      'Lainnya',
+    ];
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.flag_rounded, color: AppColors.accentRed, size: 22),
+            SizedBox(width: 8),
+            Text(
+              'Laporkan Pengguna',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Laporkan ${user.username}. Pilih alasan pelaporan:',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...reasons.map(
+              (reason) => InkWell(
+                onTap: () {
+                  final messenger = ScaffoldMessenger.of(context);
+                  Navigator.of(ctx).pop();
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                  messenger.showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.surfaceElevated,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(
+                          color: AppColors.primaryNeon,
+                          width: 0.8,
+                        ),
+                      ),
+                      content: Text(
+                        'Laporan terhadap ${user.username} telah diterima dan akan ditinjau tim moderator.',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          reason,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Batal',
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = roomController.currentUser;
@@ -277,19 +389,20 @@ class ParticipantModerationSheet extends StatelessWidget {
                 ),
               ),
             )
-          else if (!canModerate)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: Text(
-                'Hanya Host atau Co-Host yang dapat mengelola peserta.',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-            )
           else ...[
-            // Mute participant microphone
+            if (!canModerate)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text(
+                  'Hanya Host atau Co-Host yang dapat mengelola peserta.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              )
+            else ...[
+              // Mute participant microphone
             ListTile(
               enabled: !isMuted,
               leading: Container(
@@ -535,10 +648,108 @@ class ParticipantModerationSheet extends StatelessWidget {
               },
             ),
           ],
+
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+
+          // Local Mute / Unmute (Chat Block)
+          if (chatController != null)
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceHighlight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  chatController!.isUserBlocked(targetUser.id)
+                      ? Icons.volume_up_rounded
+                      : Icons.speaker_notes_off_rounded,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                chatController!.isUserBlocked(targetUser.id)
+                    ? 'Buka Bisukan Peserta (Lokal)'
+                    : 'Bisukan Peserta (Lokal)',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              subtitle: Text(
+                chatController!.isUserBlocked(targetUser.id)
+                    ? 'Tampilkan kembali pesan pengguna ini di chat kamu'
+                    : 'Sembunyikan pesan pengguna ini dari layar chat kamu',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              onTap: () {
+                final isBlocked = chatController!.isUserBlocked(targetUser.id);
+                if (isBlocked) {
+                  chatController!.unblockUser(targetUser.id);
+                } else {
+                  chatController!.blockUser(targetUser.id);
+                }
+                final messenger = ScaffoldMessenger.of(context);
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isBlocked
+                          ? 'Pesan dari ${targetUser.username} kembali ditampilkan.'
+                          : 'Pesan dari ${targetUser.username} telah dibisukan di chat kamu.',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+
+          // Report User
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentRed.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.flag_rounded,
+                color: AppColors.accentRed,
+                size: 20,
+              ),
+            ),
+            title: const Text(
+              'Laporkan Pengguna',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: const Text(
+              'Laporkan ujaran kebencian, pelecehan, atau konten terlarang',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+              ),
+            ),
+            onTap: () {
+              _showReportDialog(context, targetUser);
+            },
+          ),
         ],
-      ),
+      ],
     ),
   ),
+),
 );
   }
 }
