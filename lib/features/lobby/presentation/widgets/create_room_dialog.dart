@@ -12,11 +12,13 @@ import '../../../auth/presentation/auth_controller.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
 import '../../../browser/presentation/google_drive_browser_sheet.dart';
+import '../../../browser/presentation/vimeo_browser_sheet.dart';
 import '../../../browser/presentation/web_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../../room/controllers/dailymotion_player_controller.dart';
 import '../../../room/controllers/google_drive_player_controller.dart';
 import '../../../room/controllers/unified_player_controller.dart';
+import '../../../room/controllers/vimeo_player_controller.dart';
 import '../../../room/models/room_model.dart';
 import '../lobby_controller.dart';
 
@@ -95,6 +97,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         _selectedMediaType = 'dailymotion';
         _selectedVideoId = detected?.mediaId;
         _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Dailymotion';
+      } else if (detected?.mediaType == 'vimeo' || widget.initialMediaType == 'vimeo') {
+        _selectedMediaType = 'vimeo';
+        _selectedVideoId = detected?.mediaId;
+        _selectedVideoTitle = widget.initialTitle ?? detected?.title ?? 'Video Vimeo';
       } else if (detected?.mediaType == 'google_drive' ||
           widget.initialMediaType == 'google_drive' ||
           widget.initialMediaType == 'gdrive') {
@@ -197,6 +203,30 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _titleController.text = title.isNotEmpty && title != 'Video Dailymotion'
                 ? 'Nobar: $title'
                 : 'Nobar: Dailymotion';
+          }
+        });
+      },
+    );
+  }
+
+  void _openVimeoBrowser() {
+    VimeoBrowserSheet.show(
+      context,
+      mode: VimeoBrowserMode.createRoom,
+      onVideoSelected: (type, url, title) {
+        final vId = VimeoPlayerController.extractVideoId(url);
+        setState(() {
+          _selectedMediaType = 'vimeo';
+          _selectedMediaUrl = url;
+          _selectedVideoTitle = title.isNotEmpty ? title : 'Video Vimeo';
+          _selectedVideoId = vId;
+          _currentStep = 1;
+          if (_titleController.text == 'Nonton Bareng' ||
+              _titleController.text.isEmpty ||
+              _titleController.text.startsWith('Nobar:')) {
+            _titleController.text = title.isNotEmpty && title != 'Video Vimeo'
+                ? 'Nobar: $title'
+                : 'Nobar: Vimeo';
           }
         });
       },
@@ -488,7 +518,19 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               onTap: _openDailymotionBrowser,
             ),
 
-            // 6. Local Video File (Direct P2P Streaming) Option Card
+            // 6. Vimeo Option Card
+            VideoSourceCard(
+              title: 'Vimeo',
+              subtitle: 'Kreator & film sinematik',
+              icon: Icons.play_circle_filled_rounded,
+              iconColor: Colors.white,
+              iconBackgroundColor: AppColors.vimeoBlue,
+              accentColor: AppColors.vimeoBlue,
+              badgeText: 'HD',
+              onTap: _openVimeoBrowser,
+            ),
+
+            // 7. Local Video File (Direct P2P Streaming) Option Card
             VideoSourceCard(
               title: 'File Video Lokal (P2P)',
               subtitle: 'Stream video dari memori HP/PC tanpa upload',
@@ -900,6 +942,137 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                     const SizedBox(height: 5),
                     Text(
                       _selectedVideoTitle ?? 'Video Dailymotion',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildChangeVideoButton(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVimeoPreviewCard() {
+    final thumbUrl = _selectedVideoId != null
+        ? 'https://vumbnail.com/$_selectedVideoId.jpg'
+        : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.surfaceHighlight,
+            AppColors.surfaceElevated,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.vimeoBlue.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Video Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: thumbUrl != null
+                    ? Image.network(
+                        thumbUrl,
+                        width: 88,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: 88,
+                          height: 56,
+                          color:
+                              AppColors.vimeoBlue.withValues(alpha: 0.18),
+                          child: const Icon(
+                            Icons.play_circle_filled_rounded,
+                            color: AppColors.vimeoBlue,
+                            size: 28,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: 88,
+                        height: 56,
+                        color:
+                            AppColors.vimeoBlue.withValues(alpha: 0.18),
+                        child: const Icon(
+                          Icons.play_circle_filled_rounded,
+                          color: AppColors.vimeoBlue,
+                          size: 28,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+
+              // Title and Source Badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildSelectedBadge(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.vimeoBlue
+                                .withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.play_circle_filled_rounded,
+                                  size: 12, color: AppColors.vimeoBlue),
+                              SizedBox(width: 4),
+                              Text(
+                                'Vimeo',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.vimeoBlue),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _selectedVideoTitle ?? 'Video Vimeo',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1426,6 +1599,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             _buildBstationPreviewCard(),
           ] else if (_selectedMediaType == 'dailymotion') ...[
             _buildDailymotionPreviewCard(),
+          ] else if (_selectedMediaType == 'vimeo') ...[
+            _buildVimeoPreviewCard(),
           ] else if (_selectedMediaType == 'google_drive') ...[
             _buildGoogleDrivePreviewCard(),
           ] else if (_selectedMediaType == 'web_browser') ...[

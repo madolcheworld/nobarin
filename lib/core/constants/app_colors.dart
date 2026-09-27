@@ -71,6 +71,7 @@ class AppColors {
   // Platform & Source Brand Colors (Optimized for Dark UI Legibility)
   static const Color youtubeRed = Color(0xFFFF4E45);
   static const Color dailymotionBlue = Color(0xFF3B9EFF);
+  static const Color vimeoBlue = Color(0xFF1AB7EA);
   static const Color bstationBlue = Color(0xFF26C6FA);
   static const Color googleDriveGreen = Color(0xFF0F9D58);
   static const Color googleDriveAmber = Color(0xFFF4B400);

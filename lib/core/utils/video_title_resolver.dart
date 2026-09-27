@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../network/app_http_client.dart';
 import '../../features/room/controllers/dailymotion_player_controller.dart';
 import '../../features/room/controllers/unified_player_controller.dart';
+import '../../features/room/controllers/vimeo_player_controller.dart';
 
 /// Centralized utility for extracting, cleaning, and resolving human-readable video titles
 /// from various video platforms (Bstation, YouTube, Dailymotion, Direct URLs)
@@ -26,7 +27,7 @@ class VideoTitleResolver {
 
     // If title is of the form "Video Platform (123456)" or "(12345)", reject it.
     if (RegExp(
-      r'^(Video\s+)?(Bstation|Bilibili|YouTube|Dailymotion)\s*\([^\)]+\)$',
+      r'^(Video\s+)?(Bstation|Bilibili|YouTube|Dailymotion|Vimeo)\s*\([^\)]+\)$',
       caseSensitive: false,
     ).hasMatch(title)) {
       return '';
@@ -43,13 +44,17 @@ class VideoTitleResolver {
         .replaceAll('&gt;', '>')
         .replaceAll('&nbsp;', ' ');
 
-    // Strip common platform suffixes (e.g. " - Bstation", " | YouTube", " HD | bilibili", " - Dailymotion", " - Google Drive")
+    // Strip common platform suffixes (e.g. " - Bstation", " | YouTube", " HD | bilibili", " - Dailymotion", " - Vimeo", " - Google Drive")
     title = title.replaceAll(
-      RegExp(r'\s*(HD\s*)?[-|/–—_]\s*(Bstation|Bilibili|YouTube|Dailymotion|Google Drive|Google Dokumen).*$', caseSensitive: false),
+      RegExp(r'\s*(HD\s*)?[-|/–—_]\s*(Bstation|Bilibili|YouTube|Dailymotion|Vimeo|Google Drive|Google Dokumen).*$', caseSensitive: false),
       '',
     );
     title = title.replaceAll(
       RegExp(r'\s*HD\s*\|\s*bilibili.*$', caseSensitive: false),
+      '',
+    );
+    title = title.replaceAll(
+      RegExp(r'\s*on\s*Vimeo.*$', caseSensitive: false),
       '',
     );
 
@@ -79,6 +84,7 @@ class VideoTitleResolver {
         lower == 'bilibili' ||
         lower == 'youtube' ||
         lower == 'dailymotion' ||
+        lower == 'vimeo' ||
         lower == 'google drive' ||
         lower == 'video') {
       return '';
@@ -129,6 +135,21 @@ class VideoTitleResolver {
         final videoId = DailymotionPlayerController.extractVideoId(trimmed);
         if (videoId != null && videoId.isNotEmpty) {
           final resolved = await _resolveDailymotionTitle(videoId, effectiveClient);
+          if (resolved != null && resolved.isNotEmpty) {
+            _titleCache[trimmed] = resolved;
+            return resolved;
+          }
+        }
+        return null;
+      }
+
+      // 3. Vimeo Detection
+      if (mediaType == 'vimeo' ||
+          trimmed.contains('vimeo.com') ||
+          trimmed.contains('player.vimeo.com')) {
+        final videoId = VimeoPlayerController.extractVideoId(trimmed);
+        if (videoId != null && videoId.isNotEmpty) {
+          final resolved = await _resolveVimeoTitle(videoId, effectiveClient);
           if (resolved != null && resolved.isNotEmpty) {
             _titleCache[trimmed] = resolved;
             return resolved;
@@ -236,6 +257,26 @@ class VideoTitleResolver {
     try {
       final oEmbedUri = Uri.parse(
         'https://www.dailymotion.com/services/oembed?url=https://www.dailymotion.com/video/$videoId',
+      );
+      final res = await client.get(oEmbedUri).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic> && decoded['title'] != null) {
+          final clean = cleanTitle(decoded['title'] as String);
+          if (clean.isNotEmpty) {
+            return clean;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Resolves Vimeo video title via Vimeo official public oEmbed API.
+  static Future<String?> _resolveVimeoTitle(String videoId, http.Client client) async {
+    try {
+      final oEmbedUri = Uri.parse(
+        'https://vimeo.com/api/oembed.json?url=https://vimeo.com/$videoId',
       );
       final res = await client.get(oEmbedUri).timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {

@@ -571,6 +571,7 @@ class VideoQualitySheet extends StatelessWidget {
     if (type == 'youtube') return AppColors.youtubeRed;
     if (type == 'bstation') return AppColors.bstationBlue;
     if (type == 'dailymotion') return AppColors.dailymotionBlue;
+    if (type == 'vimeo') return AppColors.vimeoBlue;
     if (type == 'google_drive' || type == 'gdrive') return AppColors.googleDriveGreen;
     if (type == 'web_browser') return AppColors.webBrowserTeal;
     if (isP2P) return AppColors.p2pPurple;
@@ -587,6 +588,7 @@ class VideoQualitySheet extends StatelessWidget {
     if (type == 'youtube') return 'YouTube';
     if (type == 'bstation') return 'Bstation';
     if (type == 'dailymotion') return 'Dailymotion';
+    if (type == 'vimeo') return 'Vimeo';
     if (type == 'google_drive' || type == 'gdrive') return 'Google Drive';
     if (type == 'web_browser') return 'Web Browser';
     if (isP2P) return 'P2P Video';

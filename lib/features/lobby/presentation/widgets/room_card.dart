@@ -45,6 +45,13 @@ class RoomCard extends StatelessWidget {
         color: AppColors.dailymotionBlue,
       );
     }
+    if (type == 'vimeo') {
+      return (
+        label: 'Vimeo',
+        icon: Icons.play_circle_filled_rounded,
+        color: AppColors.vimeoBlue,
+      );
+    }
     if (type == 'google_drive' || type == 'gdrive') {
       return (
         label: 'Google Drive',

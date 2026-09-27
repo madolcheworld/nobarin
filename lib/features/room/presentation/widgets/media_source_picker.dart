@@ -12,6 +12,7 @@ import '../../../../core/widgets/video_source_card.dart';
 import '../../../browser/presentation/bstation_browser_sheet.dart';
 import '../../../browser/presentation/dailymotion_browser_sheet.dart';
 import '../../../browser/presentation/google_drive_browser_sheet.dart';
+import '../../../browser/presentation/vimeo_browser_sheet.dart';
 import '../../../browser/presentation/web_browser_sheet.dart';
 import '../../../browser/presentation/youtube_browser_sheet.dart';
 import '../../../chat/controllers/chat_controller.dart';
@@ -121,6 +122,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
           currentTitle == 'Video YouTube' ||
           currentTitle == 'Video Bstation' ||
           currentTitle == 'Video Dailymotion' ||
+          currentTitle == 'Video Vimeo' ||
           currentTitle == 'Video Google Drive' ||
           currentTitle == 'Video Web Browser' ||
           currentTitle == 'Video Stream';
@@ -151,12 +153,14 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
             currentTitle == 'Video YouTube' ||
             currentTitle == 'Video Bstation' ||
             currentTitle == 'Video Dailymotion' ||
+            currentTitle == 'Video Vimeo' ||
             currentTitle == 'Video Google Drive' ||
             currentTitle == 'Video Web Browser' ||
             currentTitle == 'Video Stream' ||
             currentTitle.startsWith('Video YouTube (') ||
             currentTitle.startsWith('Video Bstation (') ||
             currentTitle.startsWith('Video Dailymotion (') ||
+            currentTitle.startsWith('Video Vimeo (') ||
             currentTitle.startsWith('Video Google Drive (') ||
             currentTitle.startsWith('Video Web Browser (') ||
             RegExp(r'^\d+$').hasMatch(currentTitle);
@@ -208,6 +212,7 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
         title != 'Video YouTube' &&
         title != 'Video Bstation' &&
         title != 'Video Dailymotion' &&
+        title != 'Video Vimeo' &&
         title != 'Video Google Drive' &&
         title != 'Video Web Browser' &&
         title != 'Video Stream') {
@@ -726,7 +731,34 @@ class _MediaSourcePickerState extends State<MediaSourcePicker> {
                         },
                       ),
 
-                      // 6. Local Video File (Direct P2P Streaming) Option Card
+                      // 6. Vimeo Option Card
+                      VideoSourceCard(
+                        title: widget.isAddingToQueueInitial
+                            ? 'Cari di Vimeo'
+                            : 'Vimeo',
+                        subtitle: widget.isAddingToQueueInitial
+                            ? 'Pilih video untuk antrean'
+                            : 'Jelajahi video di Vimeo',
+                        icon: Icons.play_circle_filled_rounded,
+                        iconColor: Colors.white,
+                        iconBackgroundColor: AppColors.vimeoBlue,
+                        accentColor: AppColors.vimeoBlue,
+                        badgeText: 'HD',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          VimeoBrowserSheet.show(
+                            context,
+                            syncController: widget.syncController,
+                            queueController: widget.queueController,
+                            chatController: widget.chatController,
+                            mode: widget.isAddingToQueueInitial
+                                ? VimeoBrowserMode.queueOnly
+                                : VimeoBrowserMode.watchNow,
+                          );
+                        },
+                      ),
+
+                      // 7. Local Video File (Direct P2P Streaming) Option Card
                       VideoSourceCard(
                         title: widget.isAddingToQueueInitial
                             ? 'File Video Lokal'

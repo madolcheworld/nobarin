@@ -13,12 +13,13 @@ import '../services/hls_manifest_parser.dart';
 import 'bstation_player_controller.dart';
 import 'dailymotion_player_controller.dart';
 import 'google_drive_player_controller.dart';
+import 'vimeo_player_controller.dart';
 import 'web_browser_player_controller.dart';
 import 'web_video_adapter/web_video_adapter.dart';
 
 /// Normalized result of detecting media platform, URLs, and IDs
 class DetectedMedia {
-  final String mediaType; // 'direct_url' | 'youtube' | 'bstation' | 'dailymotion' | 'google_drive' | 'web_browser'
+  final String mediaType; // 'direct_url' | 'youtube' | 'bstation' | 'dailymotion' | 'vimeo' | 'google_drive' | 'web_browser'
   final String mediaUrl;
   final String? mediaId;
   final String title;
@@ -37,6 +38,7 @@ class DetectedMedia {
   bool get isYouTube => isYoutube;
   bool get isBstation => mediaType == 'bstation';
   bool get isDailymotion => mediaType == 'dailymotion';
+  bool get isVimeo => mediaType == 'vimeo';
   bool get isGoogleDrive => mediaType == 'google_drive';
   bool get isWebBrowser => mediaType == 'web_browser';
 }
@@ -87,6 +89,9 @@ class UnifiedPlayerController extends ChangeNotifier {
 
   // Dailymotion Web / Mobile Player Controller
   DailymotionPlayerController? _dailymotionController;
+
+  // Vimeo Web / Mobile Player Controller
+  VimeoPlayerController? _vimeoController;
 
   // Google Drive Web / Mobile Player Controller
   GoogleDrivePlayerController? _googleDriveController;
@@ -145,6 +150,7 @@ class UnifiedPlayerController extends ChangeNotifier {
   YoutubePlayerController? get ytController => _ytController;
   BstationPlayerController? get bstationController => _bstationController;
   DailymotionPlayerController? get dailymotionController => _dailymotionController;
+  VimeoPlayerController? get vimeoController => _vimeoController;
   GoogleDrivePlayerController? get googleDriveController => _googleDriveController;
   WebBrowserPlayerController? get webBrowserController => _webBrowserController;
   Widget? get webVideoWidget => _webVideoAdapter?.buildVideoWidget();
@@ -174,6 +180,9 @@ class UnifiedPlayerController extends ChangeNotifier {
     }
     if (_mediaType == 'dailymotion' && _dailymotionController?.detectedHeight != null) {
       return _dailymotionController!.detectedHeight;
+    }
+    if (_mediaType == 'vimeo' && _vimeoController?.detectedHeight != null) {
+      return _vimeoController!.detectedHeight;
     }
     if (_mediaType == 'google_drive' && _googleDriveController?.detectedHeight != null) {
       return _googleDriveController!.detectedHeight;
@@ -258,6 +267,13 @@ class UnifiedPlayerController extends ChangeNotifier {
         return 'Auto (${_dailymotionController!.detectedHeight}p)';
       }
       return _dailymotionController?.selectedQuality?.shortLabel ?? 'Auto';
+    }
+
+    if (_mediaType == 'vimeo') {
+      if (_vimeoController?.detectedHeight != null) {
+        return 'Auto (${_vimeoController!.detectedHeight}p)';
+      }
+      return _vimeoController?.selectedQuality?.shortLabel ?? 'Auto';
     }
 
     if (_mediaType == 'google_drive') {
@@ -938,6 +954,22 @@ class UnifiedPlayerController extends ChangeNotifier {
       return null;
     }
 
+    if (trimmed.contains('vimeo.com')) {
+      final vId = VimeoPlayerController.extractVideoId(trimmed);
+      if (vId != null && vId.isNotEmpty) {
+        return DetectedMedia(
+          mediaType: 'vimeo',
+          mediaUrl: 'https://vimeo.com/$vId',
+          mediaId: vId,
+          title: 'Video Vimeo',
+          thumbnailUrl: 'https://vumbnail.com/$vId.jpg',
+        );
+      }
+      // If recognized as Vimeo domain but video ID cannot be parsed,
+      // DO NOT fall through to direct_url!
+      return null;
+    }
+
     if (trimmed.startsWith('webbrowser://')) {
       final normalized = WebBrowserPlayerController.normalizeWebUrl(trimmed);
       final uri = Uri.tryParse(normalized);
@@ -1222,6 +1254,63 @@ class UnifiedPlayerController extends ChangeNotifier {
     };
   }
 
+  void _setupVimeoListeners() {
+    if (_vimeoController == null) return;
+    _vimeoController!.onPositionChanged = (pos) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      if ((pos - _position).abs() >= 0.25) {
+        _position = pos;
+        positionNotifier.value = pos;
+        onPositionChanged?.call(_position);
+      }
+    };
+    _vimeoController!.onDurationChanged = (dur) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      if (dur > 0 && dur != _duration) {
+        _duration = dur;
+        notifyListeners();
+      }
+    };
+    _vimeoController!.onPlayingChanged = (playing) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      if (!playing && _isFullscreenTransition && _wasPlayingBeforeFullscreen) {
+        debugPrint('[UnifiedPlayerController] Vimeo spurious pause ignored during fullscreen transition');
+        _vimeoController?.play();
+        return;
+      }
+      if (_isPlaying != playing) {
+        _isPlaying = playing;
+        notifyListeners();
+        onPlaybackStateChanged?.call(playing ? 'playing' : 'paused');
+      }
+    };
+    _vimeoController!.onPlaybackEnded = () {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      onPlaybackEnded?.call();
+    };
+    _vimeoController!.onError = (err) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      _errorMessage = err;
+      _isPlaying = false;
+      notifyListeners();
+    };
+    _vimeoController!.onQualitiesChanged = (qualities) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      _availableQualities = qualities;
+      if (qualities.length > 1) {
+        _isDetectingQualities = false;
+        _qualityDetectTimeoutTimer?.cancel();
+      }
+      notifyListeners();
+      _applySavedQualityPreference();
+    };
+    _vimeoController!.onQualitySelectedChanged = (quality) {
+      if (_isDisposed || _mediaType != 'vimeo') return;
+      _selectedQuality = quality;
+      notifyListeners();
+    };
+  }
+
   void _setupGoogleDriveListeners() {
     if (_googleDriveController == null) return;
     _googleDriveController!.onPositionChanged = (pos) {
@@ -1412,6 +1501,17 @@ class UnifiedPlayerController extends ChangeNotifier {
           startSeconds: _position,
         );
       }
+    } else if (_mediaType == 'vimeo') {
+      final vId = VimeoPlayerController.extractVideoId(_mediaUrl);
+      if (vId != null) {
+        _vimeoController ??= VimeoPlayerController();
+        _setupVimeoListeners();
+        await _vimeoController!.loadUrl(
+          _mediaUrl,
+          autoPlay: _isPlaying,
+          startSeconds: _position,
+        );
+      }
     } else if (_mediaType == 'bstation') {
       _bstationController ??= BstationPlayerController();
       _setupBstationListeners();
@@ -1502,6 +1602,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isPlaying = false;
       await _bstationController?.pause();
       await _dailymotionController?.pause();
+      await _vimeoController?.pause();
       await _googleDriveController?.pause();
       await _webBrowserController?.pause();
       if (_ytController != null) {
@@ -1530,9 +1631,10 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isDetectingQualities = true;
       _startQualityDetectTimeout(const Duration(seconds: 12));
 
-      // Pause direct video player, Bstation, Dailymotion, Google Drive, and Web Browser player if active
+      // Pause direct video player, Bstation, Dailymotion, Vimeo, Google Drive, and Web Browser player if active
       await _bstationController?.pause();
       await _dailymotionController?.pause();
+      await _vimeoController?.pause();
       await _googleDriveController?.pause();
       await _webBrowserController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
@@ -1600,13 +1702,14 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isDetectingQualities = true;
       _startQualityDetectTimeout(const Duration(seconds: 10));
 
-      // Pause YouTube, Dailymotion, Google Drive, Web Browser, and direct video player if active
+      // Pause YouTube, Dailymotion, Vimeo, Google Drive, Web Browser, and direct video player if active
       if (_ytController != null) {
         try {
           await _ytController!.pauseVideo();
         } catch (_) {}
       }
       await _dailymotionController?.pause();
+      await _vimeoController?.pause();
       await _googleDriveController?.pause();
       await _webBrowserController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
@@ -1657,13 +1760,14 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isDetectingQualities = true;
       _startQualityDetectTimeout(const Duration(seconds: 12));
 
-      // Pause YouTube, Bstation, Google Drive, Web Browser, and direct video player if active
+      // Pause YouTube, Bstation, Vimeo, Google Drive, Web Browser, and direct video player if active
       if (_ytController != null) {
         try {
           await _ytController!.pauseVideo();
         } catch (_) {}
       }
       await _bstationController?.pause();
+      await _vimeoController?.pause();
       await _googleDriveController?.pause();
       await _webBrowserController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
@@ -1703,6 +1807,64 @@ class UnifiedPlayerController extends ChangeNotifier {
       return;
     }
 
+    if (type == 'vimeo') {
+      _availableQualities = [
+        const VideoQuality.auto(
+          label: 'Auto (Otomatis Vimeo)',
+          mode: QualityControlMode.webviewBridge,
+        ),
+      ];
+      _selectedQuality = _availableQualities.first;
+      _isDetectingQualities = true;
+      _startQualityDetectTimeout(const Duration(seconds: 12));
+
+      // Pause YouTube, Bstation, Dailymotion, Google Drive, Web Browser, and direct video player if active
+      if (_ytController != null) {
+        try {
+          await _ytController!.pauseVideo();
+        } catch (_) {}
+      }
+      await _bstationController?.pause();
+      await _dailymotionController?.pause();
+      await _googleDriveController?.pause();
+      await _webBrowserController?.pause();
+      if (kIsWeb && _webVideoAdapter != null) {
+        await _webVideoAdapter?.pause();
+      } else if (_mkPlayer != null) {
+        unawaited(_mkPlayer!.stop());
+      }
+
+      try {
+        _vimeoController ??= VimeoPlayerController();
+        _setupVimeoListeners();
+        await _vimeoController!.loadUrl(
+          url,
+          autoPlay: autoPlay,
+          startSeconds: startSeconds,
+        );
+        if (_vimeoController!.availableQualities.isNotEmpty) {
+          _availableQualities = _vimeoController!.availableQualities;
+          _selectedQuality =
+              _vimeoController!.selectedQuality ?? _availableQualities.first;
+          if (_availableQualities.length > 1) {
+            _isDetectingQualities = false;
+            _qualityDetectTimeoutTimer?.cancel();
+          }
+        }
+        _isPlaying = autoPlay;
+        if (!_isMuted) {
+          await _vimeoController!.setVolume(_volume);
+        }
+      } catch (e) {
+        debugPrint('[UnifiedPlayerController] Vimeo load error: $e');
+        _errorMessage = 'Gagal memuat Vimeo video: $e';
+        _isPlaying = false;
+        _isDetectingQualities = false;
+      }
+      notifyListeners();
+      return;
+    }
+
     if (type == 'google_drive') {
       _availableQualities = [
         const VideoQuality.auto(
@@ -1714,7 +1876,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isDetectingQualities = true;
       _startQualityDetectTimeout(const Duration(seconds: 10));
 
-      // Pause YouTube, Bstation, Dailymotion, Web Browser, and direct video player if active
+      // Pause YouTube, Bstation, Dailymotion, Vimeo, Web Browser, and direct video player if active
       if (_ytController != null) {
         try {
           await _ytController!.pauseVideo();
@@ -1722,6 +1884,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
       await _bstationController?.pause();
       await _dailymotionController?.pause();
+      await _vimeoController?.pause();
       await _webBrowserController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
@@ -1771,7 +1934,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       _isDetectingQualities = true;
       _startQualityDetectTimeout(const Duration(seconds: 10));
 
-      // Pause YouTube, Bstation, Dailymotion, Google Drive, and direct video player if active
+      // Pause YouTube, Bstation, Dailymotion, Vimeo, Google Drive, and direct video player if active
       if (_ytController != null) {
         try {
           await _ytController!.pauseVideo();
@@ -1779,6 +1942,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       }
       await _bstationController?.pause();
       await _dailymotionController?.pause();
+      await _vimeoController?.pause();
       await _googleDriveController?.pause();
       if (kIsWeb && _webVideoAdapter != null) {
         await _webVideoAdapter?.pause();
@@ -1817,7 +1981,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       return;
     }
 
-    // Direct URL: pause YouTube, Bstation, Dailymotion, Google Drive, and Web Browser player if active
+    // Direct URL: pause YouTube, Bstation, Dailymotion, Vimeo, Google Drive, and Web Browser player if active
     final bool isHls = !isLocalFile && !isP2PStream && HlsManifestParser.isHlsUrl(url);
     if (isHls) {
       _hlsMasterUrl = url;
@@ -1840,6 +2004,7 @@ class UnifiedPlayerController extends ChangeNotifier {
 
     await _bstationController?.pause();
     await _dailymotionController?.pause();
+    await _vimeoController?.pause();
     await _googleDriveController?.pause();
     await _webBrowserController?.pause();
     if (_ytController != null) {
@@ -1920,6 +2085,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.play();
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.play();
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.play();
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.play();
       } else if (_mediaType == 'web_browser') {
@@ -1956,6 +2123,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     _wasPlayingBeforeFullscreen = false;
     _bstationController?.setFullscreenTransition(false);
     _dailymotionController?.setFullscreenTransition(false);
+    _vimeoController?.setFullscreenTransition(false);
     _googleDriveController?.setFullscreenTransition(false);
     _webBrowserController?.setFullscreenTransition(false);
 
@@ -1969,6 +2137,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.pause();
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.pause();
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.pause();
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.pause();
       } else if (_mediaType == 'web_browser') {
@@ -1995,6 +2165,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.seekTo(seconds);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.seekTo(seconds);
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.seekTo(seconds);
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.seekTo(seconds);
       } else if (_mediaType == 'web_browser') {
@@ -2022,6 +2194,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.setPlaybackSpeed(speed);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.setPlaybackSpeed(speed);
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.setPlaybackSpeed(speed);
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.setPlaybackSpeed(speed);
       } else if (_mediaType == 'web_browser') {
@@ -2053,6 +2227,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.setVolume(_volume);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.setVolume(_volume);
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.setVolume(_volume);
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.setVolume(_volume);
       } else if (_mediaType == 'web_browser') {
@@ -2080,6 +2256,8 @@ class UnifiedPlayerController extends ChangeNotifier {
           await _bstationController?.toggleMute();
         } else if (_mediaType == 'dailymotion') {
           await _dailymotionController?.toggleMute();
+        } else if (_mediaType == 'vimeo') {
+          await _vimeoController?.toggleMute();
         } else if (_mediaType == 'google_drive') {
           await _googleDriveController?.mute();
         } else if (_mediaType == 'web_browser') {
@@ -2109,6 +2287,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.setVolume(_volume);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.setVolume(_volume);
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.setVolume(_volume);
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.unmute();
         await _googleDriveController?.setVolume(_volume);
@@ -2233,6 +2413,8 @@ class UnifiedPlayerController extends ChangeNotifier {
         await _bstationController?.setQuality(quality.id);
       } else if (_mediaType == 'dailymotion') {
         await _dailymotionController?.setQuality(quality.id);
+      } else if (_mediaType == 'vimeo') {
+        await _vimeoController?.setQuality(quality.id);
       } else if (_mediaType == 'google_drive') {
         await _googleDriveController?.setQuality(quality.id);
       } else if (_mediaType == 'web_browser') {
@@ -2481,6 +2663,7 @@ class UnifiedPlayerController extends ChangeNotifier {
       _wasPlayingBeforeFullscreen = false;
       _bstationController?.setFullscreenTransition(false);
       _dailymotionController?.setFullscreenTransition(false);
+      _vimeoController?.setFullscreenTransition(false);
       _webBrowserController?.setFullscreenTransition(false);
       return;
     }
@@ -2488,6 +2671,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     _wasPlayingBeforeFullscreen = true;
     _bstationController?.setFullscreenTransition(true);
     _dailymotionController?.setFullscreenTransition(true);
+    _vimeoController?.setFullscreenTransition(true);
     _webBrowserController?.setFullscreenTransition(true);
 
     _fullscreenTransitionTimer = Timer(const Duration(milliseconds: 1500), () {
@@ -2501,6 +2685,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     _isFullscreenTransition = false;
     _bstationController?.setFullscreenTransition(false);
     _dailymotionController?.setFullscreenTransition(false);
+    _vimeoController?.setFullscreenTransition(false);
     _webBrowserController?.setFullscreenTransition(false);
 
     // If it was playing before entering/exiting fullscreen, ensure playback continues seamlessly
@@ -2562,6 +2747,7 @@ class UnifiedPlayerController extends ChangeNotifier {
     _ytController?.close();
     _bstationController?.dispose();
     _dailymotionController?.dispose();
+    _vimeoController?.dispose();
     _googleDriveController?.dispose();
     _webBrowserController?.dispose();
     _webVideoAdapter?.dispose();

@@ -86,6 +86,21 @@ class RoomModel {
       }
     }
 
+    // Vimeo thumbnail resolution
+    if (type == 'vimeo' || lower.contains('vimeo.com')) {
+      final regExp = RegExp(
+        r'(?:vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|video\/|manage\/videos\/)?|player\.vimeo\.com\/video\/)(\d+)',
+      );
+      final match = regExp.firstMatch(trimmed);
+      final id = match?.group(1);
+      if (id != null && id.isNotEmpty) {
+        return 'https://vumbnail.com/$id.jpg';
+      }
+      if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+        return 'https://vumbnail.com/$trimmed.jpg';
+      }
+    }
+
     return null;
   }
 

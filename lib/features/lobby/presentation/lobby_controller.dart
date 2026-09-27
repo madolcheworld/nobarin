@@ -253,6 +253,7 @@ enum LobbyFilterCategory {
   youtube,
   bstation,
   dailymotion,
+  vimeo,
   googleDrive,
   webBrowser,
   p2pFile,
@@ -293,6 +294,10 @@ final filteredRoomsProvider = Provider<List<RoomModel>>((ref) {
       } else if (category == LobbyFilterCategory.dailymotion) {
         result = result
             .where((r) => r.currentMediaType == 'dailymotion')
+            .toList();
+      } else if (category == LobbyFilterCategory.vimeo) {
+        result = result
+            .where((r) => r.currentMediaType == 'vimeo')
             .toList();
       } else if (category == LobbyFilterCategory.googleDrive) {
         result = result

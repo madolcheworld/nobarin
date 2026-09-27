@@ -24,6 +24,19 @@ void main() {
       expect(UnifiedPlayerController.detectMediaFromUrl('invalid_url'), isNull);
     });
 
+    test('detectMediaFromUrl detects Vimeo URL correctly', () {
+      final detected = UnifiedPlayerController.detectMediaFromUrl(
+        'https://vimeo.com/76979871',
+      );
+      expect(detected, isNotNull);
+      expect(detected!.mediaType, equals('vimeo'));
+      expect(detected.mediaUrl, equals('https://vimeo.com/76979871'));
+      expect(detected.isVimeo, isTrue);
+      expect(detected.mediaId, equals('76979871'));
+      expect(detected.title, equals('Video Vimeo'));
+      expect(detected.thumbnailUrl, equals('https://vumbnail.com/76979871.jpg'));
+    });
+
     test('extractYoutubeId handles standard, shorts, live, embed, and complex query URLs', () {
       expect(UnifiedPlayerController.extractYoutubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
       expect(UnifiedPlayerController.extractYoutubeId('https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ&t=10'), 'dQw4w9WgXcQ');
@@ -213,6 +226,11 @@ void main() {
       expect(dmFhd.height, equals(1080));
       expect(dmFhd.shortLabel, equals('1080p'));
 
+      final vimeoFhd = VideoQuality.vimeo('1080p');
+      expect(vimeoFhd.mode, equals(QualityControlMode.webviewBridge));
+      expect(vimeoFhd.height, equals(1080));
+      expect(vimeoFhd.shortLabel, equals('1080p'));
+
       final fixedOriginal = VideoQuality.fixed(
         height: 1080,
         width: 1920,
@@ -263,6 +281,15 @@ void main() {
         '{"event":"qualities","qualities":["720","480"]}',
       );
       expect(controller.supportsQualitySelection, isTrue);
+
+      // Vimeo -> false initially (only Auto), true once qualities are detected
+      await controller.loadMedia('vimeo', 'https://vimeo.com/76979871');
+      expect(controller.supportsQualitySelection, isFalse);
+      controller.vimeoController?.handleBridgeMessageForTesting(
+        '{"event":"qualities","qualities":["1080p","720p","360p"]}',
+      );
+      expect(controller.supportsQualitySelection, isTrue);
+      expect(controller.explicitQualityCount, equals(3));
 
       // Google Drive -> false initially (only Auto), true once qualities are detected
       await controller.loadMedia('google_drive', 'https://drive.google.com/file/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/view');

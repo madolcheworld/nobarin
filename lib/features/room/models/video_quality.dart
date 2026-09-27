@@ -98,6 +98,30 @@ class VideoQuality {
     );
   }
 
+  /// Factory constructor untuk opsi Vimeo
+  factory VideoQuality.vimeo(
+    String q, {
+    String? label,
+    int? height,
+    String? streamUrl,
+  }) {
+    if (q == 'auto') {
+      return const VideoQuality.auto(
+        label: 'Auto (Otomatis Vimeo)',
+        mode: QualityControlMode.webviewBridge,
+      );
+    }
+    final clean = q.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsedHeight = height ?? (clean.isNotEmpty ? int.tryParse(clean) : null);
+    return VideoQuality(
+      id: q,
+      label: label ?? (parsedHeight != null ? '${parsedHeight}p' : q),
+      height: parsedHeight,
+      streamUrl: streamUrl,
+      mode: QualityControlMode.webviewBridge,
+    );
+  }
+
   /// Factory constructor untuk opsi Bstation
   factory VideoQuality.bstation({
     required String id,

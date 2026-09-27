@@ -629,6 +629,14 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           ),
                           const SizedBox(width: 8),
                           _buildFilterChip(
+                            label: 'Vimeo',
+                            icon: Icons.play_circle_filled_rounded,
+                            iconColor: AppColors.vimeoBlue,
+                            category: LobbyFilterCategory.vimeo,
+                            selectedCategory: selectedCategory,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
                             label: 'Google Drive',
                             icon: Icons.add_to_drive_rounded,
                             iconColor: AppColors.googleDriveGreen,

@@ -18,6 +18,7 @@ import 'bstation_player_widget.dart';
 import 'dailymotion_player_widget.dart';
 import 'google_drive_player_widget.dart';
 import 'video_quality_sheet.dart';
+import 'vimeo_player_widget.dart';
 import 'web_browser_player_widget.dart';
 
 class UnifiedPlayerView extends StatefulWidget {
@@ -341,6 +342,12 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
             controller: widget.player.dailymotionController!,
             aspectRatio: 16 / 9,
           );
+        } else if (widget.player.mediaType == 'vimeo' &&
+            widget.player.vimeoController != null) {
+          playerWidget = VimeoPlayerWidget(
+            controller: widget.player.vimeoController!,
+            aspectRatio: 16 / 9,
+          );
         } else if (widget.player.mediaType == 'google_drive' &&
             widget.player.googleDriveController != null) {
           playerWidget = GoogleDrivePlayerWidget(
@@ -410,11 +417,13 @@ class _UnifiedPlayerViewState extends State<UnifiedPlayerView> {
                       (kIsWeb && widget.player.webVideoWidget != null) ||
                       widget.player.bstationController != null ||
                       widget.player.dailymotionController != null ||
+                      widget.player.vimeoController != null ||
                       widget.player.googleDriveController != null ||
                       widget.player.webBrowserController != null) &&
                   !(kIsWeb &&
                       (widget.player.mediaType == 'bstation' ||
                           widget.player.mediaType == 'dailymotion' ||
+                          widget.player.mediaType == 'vimeo' ||
                           widget.player.mediaType == 'google_drive' ||
                           widget.player.mediaType == 'web_browser')) &&
                   errorMsg == null &&

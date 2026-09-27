@@ -1283,6 +1283,9 @@ class _WebBrowserSheetState extends State<WebBrowserSheet> {
         lower.contains('dailymotion.com/embed')) {
       return 'dailymotion';
     }
+    if (lower.contains('vimeo.com/')) {
+      return 'vimeo';
+    }
     if (lower.contains('drive.google.com/file') ||
         lower.contains('docs.google.com/file')) {
       return 'google_drive';
